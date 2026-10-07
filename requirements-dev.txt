@@ -4,3 +4,7 @@
 # Testing
 pytest==9.1.1
 pytest-cov==7.1.0
+
+# Linting, formatting and type checking
+ruff==0.16.10
+mypy==2.4.0

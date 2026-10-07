@@ -31,11 +31,17 @@ def restore_root_logger() -> Iterator[None]:
     root.handlers, root.level = handlers, level
 
 
-def format_record(message: str, *args: object, level: int = logging.INFO, **extra: Any) -> dict[str, Any]:
+def format_record(
+    message: str,
+    *args: object,
+    level: int = logging.INFO,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     record = logging.LogRecord("app.test", level, __file__, 1, message, args, None)
-    for key, value in extra.items():
+    for key, value in (extra or {}).items():
         setattr(record, key, value)
-    return json.loads(JsonFormatter().format(record))
+    entry: dict[str, Any] = json.loads(JsonFormatter().format(record))
+    return entry
 
 
 def test_line_has_the_basic_fields() -> None:
@@ -48,7 +54,9 @@ def test_line_has_the_basic_fields() -> None:
 
 
 def test_extra_fields_become_top_level_keys() -> None:
-    entry = format_record("search done", chunk_count=4, duration_ms=12.5, user_id=7)
+    entry = format_record(
+        "search done", extra={"chunk_count": 4, "duration_ms": 12.5, "user_id": 7}
+    )
 
     assert entry["chunk_count"] == 4
     assert entry["duration_ms"] == 12.5
@@ -57,20 +65,20 @@ def test_extra_fields_become_top_level_keys() -> None:
 
 @pytest.mark.parametrize("field", sorted(BLOCKED_FIELDS))
 def test_blocked_fields_are_redacted(field: str) -> None:
-    entry = format_record("event", **{field: "executive compensation strategy"})
+    entry = format_record("event", extra={field: "executive compensation strategy"})
 
     assert entry[field] == REDACTED
     assert "executive compensation" not in json.dumps(entry)
 
 
 def test_blocked_field_names_are_matched_without_case() -> None:
-    entry = format_record("event", Question="what do executives earn")
+    entry = format_record("event", extra={"Question": "what do executives earn"})
 
     assert entry["Question"] == REDACTED
 
 
 def test_extra_cannot_overwrite_basic_fields() -> None:
-    entry = format_record("real message", level=logging.ERROR, logger="spoofed")
+    entry = format_record("real message", level=logging.ERROR, extra={"logger": "spoofed"})
 
     assert entry["logger"] == "app.test"
     assert entry["level"] == "ERROR"
@@ -93,7 +101,7 @@ def test_no_request_id_field_outside_a_request() -> None:
 
 
 def test_values_that_are_not_json_do_not_break_logging() -> None:
-    entry = format_record("event", when=object())
+    entry = format_record("event", extra={"when": object()})
 
     assert isinstance(entry["when"], str)
 
@@ -102,7 +110,9 @@ def test_exception_is_included() -> None:
     try:
         raise ValueError("boom")
     except ValueError:
-        record = logging.LogRecord("app.test", logging.ERROR, __file__, 1, "failed", (), sys.exc_info())
+        record = logging.LogRecord(
+            "app.test", logging.ERROR, __file__, 1, "failed", (), sys.exc_info()
+        )
 
     entry = json.loads(JsonFormatter().format(record))
 
