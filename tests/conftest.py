@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-import app.models  # noqa: F401  (registers the tables)
 from app.core.database import Base, create_db_engine, create_session_factory
+from app.models import Department
 
 
 @pytest.fixture
@@ -21,3 +21,11 @@ def engine() -> Iterator[Engine]:
 def db(engine: Engine) -> Iterator[Session]:
     with create_session_factory(engine)() as session:
         yield session
+
+
+@pytest.fixture
+def engineering(db: Session) -> Department:
+    department = Department(code="engineering", name="Engineering")
+    db.add(department)
+    db.commit()
+    return department

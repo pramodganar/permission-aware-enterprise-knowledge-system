@@ -1,5 +1,6 @@
 """Database engine, session factory and the base class for models."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
@@ -11,6 +12,11 @@ IN_MEMORY_SQLITE = ("sqlite://", "sqlite:///:memory:")
 
 class Base(DeclarativeBase):
     pass
+
+
+def utc_now() -> datetime:
+    """Default for timestamp columns."""
+    return datetime.now(UTC)
 
 
 def create_db_engine(database_url: str) -> Engine:
