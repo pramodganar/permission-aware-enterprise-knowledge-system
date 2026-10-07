@@ -1,0 +1,109 @@
+import pytest
+from pydantic import ValidationError
+
+from app.core.config import Settings, get_settings
+
+VALID_SECRET = "x" * 40
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test without APP_ variables from the developer's shell."""
+    for name in (
+        "APP_ENVIRONMENT",
+        "APP_LOG_LEVEL",
+        "APP_DATABASE_URL",
+        "APP_JWT_SECRET_KEY",
+        "APP_ACCESS_TOKEN_EXPIRE_MINUTES",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def load() -> Settings:
+    # _env_file=None keeps the developer's real .env out of the tests
+    return Settings(_env_file=None)
+
+
+def test_defaults_when_only_secret_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+
+    settings = load()
+
+    assert settings.environment == "local"
+    assert settings.log_level == "INFO"
+    assert settings.database_url == "sqlite:///./data/app.db"
+    assert settings.access_token_expire_minutes == 30
+
+
+def test_environment_variable_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    monkeypatch.setenv("APP_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("APP_DATABASE_URL", "postgresql://db/knowledge")
+
+    settings = load()
+
+    assert settings.log_level == "DEBUG"
+    assert settings.database_url == "postgresql://db/knowledge"
+
+
+def test_missing_secret_fails() -> None:
+    with pytest.raises(ValidationError) as error:
+        load()
+
+    assert "jwt_secret_key" in str(error.value)
+
+
+@pytest.mark.parametrize("secret", ["", "short", "x" * 31])
+def test_short_secret_fails(monkeypatch: pytest.MonkeyPatch, secret: str) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", secret)
+
+    with pytest.raises(ValidationError):
+        load()
+
+
+def test_secret_is_not_shown_when_settings_are_printed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+
+    settings = load()
+
+    assert VALID_SECRET not in repr(settings)
+    assert VALID_SECRET not in str(settings)
+    assert VALID_SECRET not in settings.model_dump_json()
+    assert settings.jwt_secret_key.get_secret_value() == VALID_SECRET
+
+
+def test_short_secret_error_does_not_echo_the_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", "leaky-short-secret")
+
+    with pytest.raises(ValidationError) as error:
+        load()
+
+    assert "leaky-short-secret" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("APP_LOG_LEVEL", "VERBOSE"),
+        ("APP_ENVIRONMENT", "staging"),
+        ("APP_ACCESS_TOKEN_EXPIRE_MINUTES", "0"),
+        ("APP_ACCESS_TOKEN_EXPIRE_MINUTES", "-5"),
+        ("APP_ACCESS_TOKEN_EXPIRE_MINUTES", "abc"),
+    ],
+)
+def test_invalid_values_fail(monkeypatch: pytest.MonkeyPatch, name: str, value: str) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValidationError):
+        load()
+
+
+def test_get_settings_reads_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    get_settings.cache_clear()
+
+    try:
+        assert get_settings() is get_settings()
+    finally:
+        get_settings.cache_clear()
