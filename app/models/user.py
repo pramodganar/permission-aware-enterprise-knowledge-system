@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base, utc_now
+from app.models.role import Role, RoleCode, user_roles
 
 if TYPE_CHECKING:
     from app.models.department import Department
@@ -15,6 +16,8 @@ class User(Base):
 
     ``is_active`` is checked on every request, so setting it to False cuts off
     access immediately, even for a token that hasn't expired.
+
+    A user starts with no roles, and a user with no roles can read nothing.
     """
 
     __tablename__ = "users"
@@ -31,6 +34,10 @@ class User(Base):
     )
 
     department: Mapped["Department"] = relationship(back_populates="users")
+    roles: Mapped[list[Role]] = relationship(secondary=user_roles)
+
+    def has_role(self, code: RoleCode) -> bool:
+        return any(role.code == code for role in self.roles)
 
     @validates("email")
     def normalise_email(self, _: str, value: str) -> str:

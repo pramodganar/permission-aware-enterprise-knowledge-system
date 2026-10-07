@@ -2,6 +2,8 @@
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--strict-markers"
+# A warning usually means a test is doing something it shouldn't.
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 source = ["app"]
