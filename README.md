@@ -12,12 +12,12 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. The design is written down and the project foundation is in place. There is no API or retrieval yet.
+Work in progress. Identity and authorization are built and tested. There is no document ingestion, retrieval or API yet, so the rules are enforced on document records but nothing is searchable.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
-- [ ] Users, departments, roles and authentication
-- [ ] Authorization
+- [x] Users, departments, roles and authentication
+- [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [ ] Document ingestion
 - [ ] Chunking, embeddings and the vector index
 - [ ] Permission-aware retrieval
@@ -86,8 +86,14 @@ mypy
 pytest --cov
 ```
 
+To run only the security tests:
+
+```
+pytest tests/security
+```
+
 ## Stack
 
-In use now: Python 3.11, pydantic-settings, pytest, ruff, mypy.
+In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pydantic-settings, pytest, ruff, mypy.
 
-Planned: FastAPI, SQLAlchemy (SQLite locally, PostgreSQL as the target), FAISS, sentence-transformers, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.
+Planned: PostgreSQL as the target database, FAISS, sentence-transformers, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.
