@@ -81,3 +81,72 @@ def build_world(db: Session) -> World:
     db.add_all([*users.values(), *documents.values()])
     db.commit()
     return World(db, users, documents)
+
+
+# The full company from docs/personas.md: seven departments, one employee in
+# each, and the three accounts that are not ordinary readers.
+
+DEPARTMENTS = ("engineering", "finance", "hr", "sales", "legal", "operations", "executive")
+
+PERSONAS = {
+    "alice": "engineering",
+    "bob": "finance",
+    "carol": "hr",
+    "david": "sales",
+    "emma": "legal",
+    "frank": "operations",
+    "grace": "executive",
+}
+
+# name: (title, owning department, classification)
+COMPANY_DOCUMENTS = {
+    "leave_policy": ("Leave Policy", "hr", Classification.GENERAL),
+    "code_of_conduct": ("Code of Conduct", "legal", Classification.GENERAL),
+    "travel_policy": ("Travel and Expense Policy", "finance", Classification.GENERAL),
+    "runbook": ("Deployment Runbook", "engineering", Classification.DEPARTMENTAL),
+    "postmortem": ("Payments Outage Postmortem", "engineering", Classification.DEPARTMENTAL),
+    "payment_limits": ("Vendor Payment Approval Limits", "finance", Classification.DEPARTMENTAL),
+    "headcount_budget": ("Headcount Budget", "finance", Classification.DEPARTMENTAL),
+    "pip_process": ("Performance Improvement Plan Process", "hr", Classification.DEPARTMENTAL),
+    "salary_bands": ("Salary Bands", "hr", Classification.DEPARTMENTAL),
+    "discount_policy": ("Discount Approval Policy", "sales", Classification.DEPARTMENTAL),
+    "retention": ("Contract Data Retention Obligations", "legal", Classification.DEPARTMENTAL),
+    "supplier_dispute": ("Supplier Dispute Status", "legal", Classification.DEPARTMENTAL),
+    "warehouse_sop": ("Warehouse Incident SOP", "operations", Classification.DEPARTMENTAL),
+    "exec_comp": ("Executive Compensation Strategy", "executive", Classification.DEPARTMENTAL),
+    "strategy": ("Three-Year Strategy", "executive", Classification.DEPARTMENTAL),
+    "case_file": ("HR Case File 2026-014", "hr", Classification.RESTRICTED),
+    "acquisition": ("Project Falcon Acquisition Paper", "executive", Classification.RESTRICTED),
+}
+
+
+def build_company(db: Session) -> World:
+    departments = {code: Department(code=code, name=code.title()) for code in DEPARTMENTS}
+    roles = {code: Role(code=code) for code in RoleCode}
+    db.add_all([*departments.values(), *roles.values()])
+
+    def user(name: str, department: str, *role_codes: RoleCode) -> User:
+        return User(
+            email=f"{name}@acmecorp.example",
+            full_name=name.title(),
+            hashed_password="x",
+            department=departments[department],
+            roles=[roles[code] for code in role_codes],
+        )
+
+    users = {
+        name: user(name, department, RoleCode.EXECUTIVE if name == "grace" else RoleCode.EMPLOYEE)
+        for name, department in PERSONAS.items()
+    }
+    users["admin"] = user("admin", "engineering", RoleCode.KNOWLEDGE_ADMIN)
+    users["reviewer"] = user("reviewer", "legal", RoleCode.SECURITY_REVIEWER)
+    users["nobody"] = user("nobody", "sales")
+
+    documents = {
+        name: Document(title=title, department=departments[department], classification=level)
+        for name, (title, department, level) in COMPANY_DOCUMENTS.items()
+    }
+
+    db.add_all([*users.values(), *documents.values()])
+    db.commit()
+    return World(db, users, documents)

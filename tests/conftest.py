@@ -5,7 +5,7 @@ from pydantic import SecretStr
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from acmecorp import World, build_world
+from acmecorp import World, build_company, build_world
 from app.core.config import Settings
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.models import Department
@@ -42,3 +42,8 @@ def settings() -> Settings:
 @pytest.fixture
 def world(db: Session) -> World:
     return build_world(db)
+
+
+@pytest.fixture
+def company(db: Session) -> World:
+    return build_company(db)
