@@ -22,6 +22,7 @@ class Permission(StrEnum):
     READ_GENERAL_DOCUMENTS = "documents:read:general"
     READ_OWN_DEPARTMENT_DOCUMENTS = "documents:read:own_department"
     READ_ALL_DEPARTMENT_DOCUMENTS = "documents:read:all_departments"
+    READ_GRANTED_DOCUMENTS = "documents:read:granted"
     MANAGE_DOCUMENTS = "documents:manage"
     READ_AUDIT_LOG = "audit:read"
 
@@ -32,12 +33,14 @@ ROLE_PERMISSIONS: Mapping[RoleCode, frozenset[Permission]] = MappingProxyType(
             {
                 Permission.READ_GENERAL_DOCUMENTS,
                 Permission.READ_OWN_DEPARTMENT_DOCUMENTS,
+                Permission.READ_GRANTED_DOCUMENTS,
             }
         ),
         RoleCode.EXECUTIVE: frozenset(
             {
                 Permission.READ_GENERAL_DOCUMENTS,
                 Permission.READ_OWN_DEPARTMENT_DOCUMENTS,
+                Permission.READ_GRANTED_DOCUMENTS,
                 Permission.READ_ALL_DEPARTMENT_DOCUMENTS,
             }
         ),

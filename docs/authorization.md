@@ -1,6 +1,6 @@
 # Authorization
 
-Status: Draft. This covers the role model. The rules for individual documents (classification and per-document grants) are added to this document next.
+Status: Draft. The role model and the document rules are designed. The service that applies them is built next.
 Date: October 2026
 
 Authentication answers "who is this?". This document is about the next question: "what may they do?". The requirements it implements are in [requirements.md](requirements.md), and the reasons for the wider design are in [architecture.md](architecture.md).
@@ -37,6 +37,7 @@ A user can hold several roles. A new user holds none.
 | `documents:read:general` | Reading company-wide documents |
 | `documents:read:own_department` | Reading documents owned by the user's own department |
 | `documents:read:all_departments` | Reading documents owned by any department |
+| `documents:read:granted` | Reading documents the user has been individually granted |
 | `documents:manage` | Ingesting documents, changing their permissions, replacing and deleting them |
 | `audit:read` | Reading the audit log |
 
@@ -47,6 +48,7 @@ A user can hold several roles. A new user holds none.
 | `documents:read:general` | yes | yes | | |
 | `documents:read:own_department` | yes | yes | | |
 | `documents:read:all_departments` | | yes | | |
+| `documents:read:granted` | yes | yes | | |
 | `documents:manage` | | | yes | |
 | `audit:read` | | | | yes |
 
@@ -81,8 +83,10 @@ A person can be given a reading role as well, for example an HR employee who is 
 | David | Sales | `employee` | General + Sales |
 | Emma | Legal | `employee` | General + Legal |
 | Frank | Operations | `employee` | General + Operations |
-| Grace | Executive | `executive` | Everything |
+| Grace | Executive | `executive` | General + every department |
 | An IT administrator | any | `knowledge_admin` | Nothing through search |
+
+This table is about `general` and `departmental` documents. `restricted` documents are a separate case, described under Documents below.
 
 Grace's access comes from her role, not from being in the Executive department. Someone else in that department with only the `employee` role would read General and Executive documents and nothing more.
 
@@ -108,8 +112,89 @@ Deny rules ("everyone in Finance except contractors") are expressive but make ou
 
 Tying "reads everything" to the department name would hide a powerful rule inside a string comparison. As a role it can be granted, removed and audited like any other.
 
+## Documents
+
+The permissions above say what a user may do in general. Whether a user can read one particular document also depends on two things stored on the document.
+
+### What a document carries
+
+| Field | Meaning |
+|---|---|
+| Owning department | The department responsible for the document. Required. |
+| Classification | Who the document is for. Required, with no default. |
+
+A document can't be stored without both. There is deliberately no default classification: a default of "general" would make every unlabelled document public, and a default of "restricted" would hide mistakes. An unlabelled document is rejected instead.
+
+### Classifications
+
+| Classification | Who it is for | Example |
+|---|---|---|
+| `general` | Everyone who can use the assistant | Leave policy, code of conduct |
+| `departmental` | Members of the owning department, and executives | Deployment runbook, vendor payment limits |
+| `restricted` | Only people named in a grant | An individual HR case file, an acquisition paper |
+
+### Grants
+
+A grant gives one named user access to one document. It records who gave it and can have an expiry date.
+
+Grants do two jobs:
+
+- They are the only way anyone reads a `restricted` document.
+- They let someone from outside a department read one of its documents, for example for a cross-team project, without changing their department or roles.
+
+A grant only adds access. There is no "deny" grant.
+
+### The decision
+
+A user can read a document if any one of these is true:
+
+| # | The document is | and the user has | and |
+|---|---|---|---|
+| 1 | `general` | `documents:read:general` | |
+| 2 | `departmental` | `documents:read:own_department` | the document belongs to the user's department |
+| 3 | `departmental` | `documents:read:all_departments` | |
+| 4 | any classification | `documents:read:granted` | the user holds a grant for it that hasn't expired |
+
+If none is true, the answer is no. That includes every case the table doesn't mention: an unrecognised classification, a user with no roles, an inactive user.
+
+### What follows from this
+
+- `restricted` documents are not covered by rows 1 to 3, so no role reads them. Not the owning department, and not executives. Only row 4 applies.
+- A grant is not enough without a reading role. A knowledge admin who is given a grant still can't read the document, because the admin role doesn't include `documents:read:granted`.
+- An expired grant is the same as no grant. Nothing has to be cleaned up for access to end.
+- Moving a document between classifications changes who can read it on the next request. Nothing is re-indexed.
+
+### Examples
+
+| Document | Alice (Engineering, employee) | Carol (HR, employee) | Grace (Executive, executive) |
+|---|---|---|---|
+| Leave policy: HR, `general` | yes (1) | yes (1) | yes (1) |
+| Deployment runbook: Engineering, `departmental` | yes (2) | no | yes (3) |
+| Salary bands: HR, `departmental` | no | yes (2) | yes (3) |
+| Executive compensation strategy: Executive, `departmental` | no | no | yes (2) |
+| HR case file: HR, `restricted`, granted to Carol | no | yes (4) | no |
+| Runbook, with a 30-day grant to Carol | yes (2) | yes (4), then no | yes (3) |
+
+### Chunks
+
+A chunk has no classification, department or grants of its own. It points to its document, and the decision is always made on the document. A chunk therefore can't be more open than the document it came from, and a change to the document applies to all its chunks at once.
+
+## More decisions
+
+### Restricted documents need a named grant, even for executives
+
+The original assumption was that executives read everything. I narrowed it: executives read every `general` and `departmental` document in every department, but a `restricted` document is for the people named on it and nobody else. The reasoning and the alternatives are in [decision record 0010](adr/0010-restricted-documents-need-a-grant.md).
+
+### No per-document role lists
+
+A document could carry a list of allowed roles as well as a classification. I left that out. Classification already expresses "which kind of user", and a second list that says the same thing in a different way is a place for the two to disagree. Exceptions go through grants, which name a person and can expire.
+
+### No default classification
+
+Covered above. A missing label is an error at ingestion, not a silent choice.
+
 ## Not covered yet
 
-- How a document's classification and owning department combine with these permissions into a yes or no for one document.
-- Per-document grants for individuals.
-- Temporary access.
+- Granting on behalf of a group or a project team. Grants are per person.
+- An approval step before a grant takes effect.
+- Automatic review of grants that never expire.

@@ -49,7 +49,7 @@ The first two points are the condition for Security to approve a rollout. Answer
 
 ## Users
 
-Each employee can read their own department's documents plus general company documents. Executives can read everything. The full personas, with the questions each one should and should not get answered, are in [personas.md](personas.md).
+Each employee can read their own department's documents plus general company documents. Executives can read those of every department. Restricted documents are the exception: they need a named grant, for executives too. The full personas, with the questions each one should and should not get answered, are in [personas.md](personas.md).
 
 | User | Department | Example question |
 |---|---|---|
@@ -266,8 +266,8 @@ In a real rollout you'd also track time saved and how many repeat questions stop
 - All data is synthetic.
 - Users, departments and roles are seeded locally. In production they'd come from the identity provider.
 - Permissions are set at ingestion. In production they'd be synced from the source systems' ACLs.
-- Access depends on department and classification.
-- Executives can read everything. A real company would probably still restrict some things (individual HR case files, for example), so I may revisit this.
+- Access depends on department, classification and individual grants. The rules are in [authorization.md](authorization.md).
+- Executives read general and departmental documents of every department. Restricted documents, such as an individual HR case file, need a named grant even for executives.
 - Small corpus (tens of documents), English, text only.
 - Ingestion is a batch job run by an admin.
 - Single company, no multi-tenancy.

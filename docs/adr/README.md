@@ -15,3 +15,4 @@ A decision is not edited after it is accepted. If it changes, a new record repla
 | [0007](0007-faiss-and-sqlite-locally.md) | FAISS and SQLite locally, behind interfaces | Accepted |
 | [0008](0008-single-service.md) | One service with separate modules | Accepted |
 | [0009](0009-local-embeddings-configurable-llm.md) | Local embeddings, configurable LLM provider | Accepted |
+| [0010](0010-restricted-documents-need-a-grant.md) | Restricted documents need a named grant, even for executives | Accepted |

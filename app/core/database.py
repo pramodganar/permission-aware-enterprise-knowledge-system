@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import DateTime, Dialect, Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.types import TypeDecorator
 
 IN_MEMORY_SQLITE = ("sqlite://", "sqlite:///:memory:")
 
@@ -17,6 +18,33 @@ class Base(DeclarativeBase):
 def utc_now() -> datetime:
     """Default for timestamp columns."""
     return datetime.now(UTC)
+
+
+class UtcDateTime(TypeDecorator[datetime]):
+    """A timestamp column that is timezone-aware UTC on every database.
+
+    SQLite stores datetimes without a timezone and returns them naive, which
+    makes comparisons such as "has this grant expired?" fail or, worse, give
+    the wrong answer. This type refuses naive values on the way in and always
+    returns UTC on the way out.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 def create_db_engine(database_url: str) -> Engine:

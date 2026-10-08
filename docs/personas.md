@@ -80,7 +80,7 @@ Uses it to pull facts from across departments before a decision.
 - Should get an answer: "What is the executive compensation strategy?"
 - Should get an answer: any of the questions above.
 
-Grace is never refused on permission grounds, but her queries are cited and audited like everyone else's. She is also the control case: if Grace gets an answer and Alice does not, for the same question, the filter is doing the work and not a gap in the documents.
+Grace is not refused any general or departmental document, but her queries are cited and audited like everyone else's. Restricted documents are different: she needs a grant for those like anyone else. She is also the control case: if Grace gets an answer and Alice does not, for the same question, the filter is doing the work and not a gap in the documents.
 
 ## A refusal looks the same as "not found"
 
@@ -100,8 +100,10 @@ These are roles, not extra people. Any employee could hold one in addition to th
 - Security tests: every "must be refused" line becomes a test that checks the retriever returns zero chunks from the forbidden department.
 - Evaluation: retrieval quality is scored per persona, against only the documents that persona can read.
 
-## Open questions
+## Questions answered in the authorization design
 
-- Does every member of a department see every document in it? HR case files suggest no. For now the answer is yes, and it gets revisited in the authorization design.
-- Can someone belong to two departments, or get temporary access for a cross-team project?
-- Should executives really see everything, including individual HR cases?
+These were open when the personas were written. The answers are in [authorization.md](authorization.md).
+
+- Does every member of a department see every document in it? No. A document can be classified as restricted, and then only people named in a grant can read it.
+- Can someone get temporary access for a cross-team project? Yes, through a grant with an expiry date. A user still belongs to one department.
+- Should executives see everything, including individual HR cases? No. Executives read general and departmental documents of every department, but restricted documents need a grant for them too.

@@ -9,6 +9,7 @@ from app.models.role import user_roles
 READ_PERMISSIONS = {
     Permission.READ_GENERAL_DOCUMENTS,
     Permission.READ_OWN_DEPARTMENT_DOCUMENTS,
+    Permission.READ_GRANTED_DOCUMENTS,
     Permission.READ_ALL_DEPARTMENT_DOCUMENTS,
 }
 
@@ -18,10 +19,12 @@ EXPECTED = {
     RoleCode.EMPLOYEE: {
         Permission.READ_GENERAL_DOCUMENTS,
         Permission.READ_OWN_DEPARTMENT_DOCUMENTS,
+        Permission.READ_GRANTED_DOCUMENTS,
     },
     RoleCode.EXECUTIVE: {
         Permission.READ_GENERAL_DOCUMENTS,
         Permission.READ_OWN_DEPARTMENT_DOCUMENTS,
+        Permission.READ_GRANTED_DOCUMENTS,
         Permission.READ_ALL_DEPARTMENT_DOCUMENTS,
     },
     RoleCode.KNOWLEDGE_ADMIN: {Permission.MANAGE_DOCUMENTS},
@@ -72,6 +75,7 @@ def test_permissions_of_several_roles_add_up(db: Session, engineering: Departmen
     assert permissions_for(user) == {
         Permission.READ_GENERAL_DOCUMENTS,
         Permission.READ_OWN_DEPARTMENT_DOCUMENTS,
+        Permission.READ_GRANTED_DOCUMENTS,
         Permission.READ_AUDIT_LOG,
     }
 
