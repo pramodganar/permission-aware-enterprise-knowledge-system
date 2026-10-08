@@ -1,6 +1,6 @@
 # Authorization
 
-Status: Draft. The role model and the document rules are designed. The service that applies them is built next.
+Status: Draft. The role model and the document rules are designed and implemented in the authorization service. Nothing calls the service yet; retrieval and the API come later.
 Date: October 2026
 
 Authentication answers "who is this?". This document is about the next question: "what may they do?". The requirements it implements are in [requirements.md](requirements.md), and the reasons for the wider design are in [architecture.md](architecture.md).
@@ -155,7 +155,18 @@ A user can read a document if any one of these is true:
 | 3 | `departmental` | `documents:read:all_departments` | |
 | 4 | any classification | `documents:read:granted` | the user holds a grant for it that hasn't expired |
 
-If none is true, the answer is no. That includes every case the table doesn't mention: an unrecognised classification, a user with no roles, an inactive user.
+If none is true, the answer is no. That includes every case the table doesn't mention: a user with no roles, an inactive user.
+
+One check comes before all four rows: the document's classification must be one of the three known values. If it isn't, the label can't be trusted and nobody can read the document, even with a grant.
+
+### Where this is enforced
+
+`app/authorization/service.py` is the only place that decides read access. It answers in two forms:
+
+- `can_read(user, document)` for one document that is already loaded.
+- `readable_documents(user)`, a database query for every document the user may read. Retrieval and the document list filter by this, so unauthorized documents are never fetched.
+
+Having the same rule in two forms is a risk, because they could drift apart. A test runs both over every user and document and requires the same answer.
 
 ### What follows from this
 
