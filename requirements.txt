@@ -13,3 +13,6 @@ argon2-cffi==25.1.0
 
 # Access tokens
 PyJWT==2.15.1
+
+# API framework
+fastapi==0.142.4

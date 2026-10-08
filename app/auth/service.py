@@ -1,4 +1,4 @@
-"""Checking an email and password against the users table."""
+"""Working out who is calling: from an email and password, or from a token."""
 
 import logging
 import secrets
@@ -7,6 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.passwords import hash_password, verify_password
+from app.auth.tokens import decode_access_token
+from app.core.config import Settings
 from app.core.exceptions import AuthenticationError
 from app.models import User
 
@@ -42,6 +44,23 @@ def authenticate(db: Session, email: str, password: str) -> User:
         raise _failed("inactive account", user.id)
 
     logger.info("login succeeded", extra={"user_id": user.id})
+    return user
+
+
+def user_from_token(db: Session, token: str, settings: Settings) -> User:
+    """Return the active user a token belongs to, or raise AuthenticationError.
+
+    The user is loaded from the database every time. A token that is still
+    valid stops working as soon as its user is deactivated, and the roles and
+    department on the returned user are the current ones.
+    """
+    user_id = decode_access_token(token, settings)
+    user = db.get(User, user_id)
+
+    if user is None:
+        raise AuthenticationError("token for a user that does not exist", user_id=user_id)
+    if not user.is_active:
+        raise AuthenticationError("token for an inactive account", user_id=user_id)
     return user
 
 
