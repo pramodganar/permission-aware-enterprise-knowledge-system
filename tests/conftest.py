@@ -5,6 +5,7 @@ from pydantic import SecretStr
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
+from acmecorp import World, build_world
 from app.core.config import Settings
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.models import Department
@@ -36,3 +37,8 @@ def engineering(db: Session) -> Department:
 @pytest.fixture
 def settings() -> Settings:
     return Settings(_env_file=None, jwt_secret_key=SecretStr("conftest-secret-" + "x" * 60))
+
+
+@pytest.fixture
+def world(db: Session) -> World:
+    return build_world(db)

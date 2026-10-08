@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "tests"]
 addopts = "--strict-markers"
 # A warning usually means a test is doing something it shouldn't.
 filterwarnings = ["error"]
@@ -39,5 +39,9 @@ select = [
 [tool.mypy]
 python_version = "3.11"
 files = ["app", "tests"]
+mypy_path = "tests"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "acmecorp"]
