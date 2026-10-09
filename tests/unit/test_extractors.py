@@ -36,8 +36,8 @@ def upload(filename: str, data: bytes) -> Upload:
         ("Zürich café".encode("cp1252"), "Zürich café"),
         (
             # Curly quotes and a dash on purpose: Windows-1252 stores them differently.
-            "Price: 50€ – “quoted”".encode("cp1252"),  # noqa: RUF001
-            "Price: 50€ – “quoted”",  # noqa: RUF001
+            "Price: 50€ – “quoted”".encode("cp1252"),
+            "Price: 50€ – “quoted”",
         ),
     ],
     ids=["utf-8", "utf-8 mark", "utf-16 le", "utf-16 be", "cp1252", "cp1252 punctuation"],

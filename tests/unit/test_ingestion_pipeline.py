@@ -281,3 +281,34 @@ def test_extractor_lookup_rejects_an_unsupported_type_by_itself() -> None:
     # The pipeline checks the type first, but the lookup must not rely on that.
     with pytest.raises(InvalidInputError, match="unsupported file type"):
         extractors.extract_text("payload.exe", b"MZ")
+
+
+# Cleaning
+
+
+def test_stored_text_is_cleaned(world: World, settings: Settings) -> None:
+    raw = "\ufeffRollback  Guide\r\n\r\n\r\n\r\nApprov\u200bal is by on-call.\t \r\n"
+
+    document = ingest(world.db, world.users["admin"], upload(data=raw.encode()), settings)
+
+    assert document.content == "Rollback Guide\n\nApproval is by on-call."
+
+
+def test_file_of_only_invisible_characters_is_rejected(world: World, settings: Settings) -> None:
+    before = document_count(world)
+    hidden = "\u200b\u200b\ufeff\u00a0" + "".join(chr(0xE0000 + ord(c)) for c in "hidden text")
+
+    with pytest.raises(InvalidInputError, match="no text could be extracted"):
+        ingest(world.db, world.users["admin"], upload(data=hidden.encode()), settings)
+
+    assert document_count(world) == before
+
+
+def test_size_limit_applies_to_the_text_as_extracted_not_as_cleaned(
+    world: World, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline, "MAX_EXTRACTED_CHARACTERS", 50)
+
+    # Mostly spaces: it would shrink below the limit if cleaned first.
+    with pytest.raises(InvalidInputError, match="more than 50 characters"):
+        ingest(world.db, world.users["admin"], upload(data=b"a" + b" " * 100 + b"b"), settings)

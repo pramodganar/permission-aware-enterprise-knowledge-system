@@ -1,6 +1,6 @@
 """The ingestion pipeline: from an uploaded file to a stored document.
 
-    check permission -> validate -> extract text -> store
+    check permission -> validate -> extract text -> clean -> store
 
 Everything is checked before anything is written. If any step fails, the
 database is left exactly as it was.
@@ -16,6 +16,7 @@ from app.authorization.checks import ensure_permission
 from app.authorization.permissions import Permission
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
+from app.ingestion.cleaning import clean_text
 from app.ingestion.extractors import EXTRACTORS, extension_of, extract_text
 from app.models import Classification, Department, Document, User
 
@@ -52,13 +53,16 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
     _check_file(upload, settings.max_upload_bytes)
     department = _find_department(db, upload.department_code)
 
-    content = extract_text(upload.filename, upload.data)
-    if not content.strip():
-        raise InvalidInputError("no text could be extracted from the file")
-    if len(content) > MAX_EXTRACTED_CHARACTERS:
+    extracted = extract_text(upload.filename, upload.data)
+    if len(extracted) > MAX_EXTRACTED_CHARACTERS:
         raise InvalidInputError(
             f"the file contains more than {MAX_EXTRACTED_CHARACTERS} characters of text"
         )
+    # Checked after cleaning, so a file of nothing but invisible characters
+    # counts as empty.
+    content = clean_text(extracted)
+    if not content:
+        raise InvalidInputError("no text could be extracted from the file")
 
     document = Document(
         title=title,
