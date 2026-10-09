@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 MAX_TITLE_LENGTH = 255
 
+# A compressed file can hold far more text than its size suggests. This bounds
+# what one document can add to the database and to every later stage.
+MAX_EXTRACTED_CHARACTERS = 2_000_000
+
 
 @dataclass(frozen=True)
 class Upload:
@@ -51,6 +55,10 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
     content = extract_text(upload.filename, upload.data)
     if not content.strip():
         raise InvalidInputError("no text could be extracted from the file")
+    if len(content) > MAX_EXTRACTED_CHARACTERS:
+        raise InvalidInputError(
+            f"the file contains more than {MAX_EXTRACTED_CHARACTERS} characters of text"
+        )
 
     document = Document(
         title=title,

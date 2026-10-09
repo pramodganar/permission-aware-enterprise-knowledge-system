@@ -6,6 +6,7 @@ InvalidInputError, and never let a parser error escape.
 """
 
 import io
+import logging
 import zipfile
 from collections.abc import Callable, Mapping
 from pathlib import PurePosixPath, PureWindowsPath
@@ -19,6 +20,13 @@ from app.core.exceptions import InvalidInputError
 
 Extractor = Callable[[bytes], str]
 
+logger = logging.getLogger(__name__)
+
+NOT_TEXT = "the file is not a readable text file"
+_UTF16_MARKS = (b"\xff\xfe", b"\xfe\xff")
+# Every control character except tab, line feed, form feed and carriage return.
+_CONTROL_CHARACTERS = frozenset(map(chr, range(32))) - frozenset("\t\n\f\r")
+
 MAX_PDF_PAGES = 500
 
 # A .docx file is a zip archive. These limits stop a small upload from
@@ -28,11 +36,39 @@ MAX_DOCX_ENTRIES = 2000
 
 
 def extract_txt(data: bytes) -> str:
+    """Decode a text file.
+
+    UTF-8 is tried first. UTF-16 is accepted when the file says so with a byte
+    order mark. Anything else is read as Windows-1252, which is what older
+    Windows tools write. A file in some other legacy encoding will decode
+    without error but with wrong characters, so the fallback is logged.
+    """
+    text = _decode(data)
+    if any(character in text for character in _CONTROL_CHARACTERS):
+        # Real text doesn't contain these. A binary file almost always does.
+        raise InvalidInputError(NOT_TEXT)
+    return text
+
+
+def _decode(data: bytes) -> str:
+    if data.startswith(_UTF16_MARKS):
+        try:
+            return data.decode("utf-16")
+        except UnicodeDecodeError:
+            raise InvalidInputError(NOT_TEXT) from None
+
     try:
         # utf-8-sig also accepts plain UTF-8 and drops a leading byte order mark.
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
-        raise InvalidInputError("the file is not valid UTF-8 text") from None
+        pass
+
+    try:
+        text = data.decode("cp1252")
+    except UnicodeDecodeError:
+        raise InvalidInputError(NOT_TEXT) from None
+    logger.warning("text file was not UTF-8, read as Windows-1252", extra={"bytes": len(data)})
+    return text
 
 
 def extract_pdf(data: bytes) -> str:

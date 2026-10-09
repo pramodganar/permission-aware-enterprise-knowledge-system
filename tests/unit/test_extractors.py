@@ -1,10 +1,12 @@
+import logging
+
 import pytest
 
 from acmecorp import World
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
 from app.ingestion import extractors
-from app.ingestion.extractors import extract_docx, extract_pdf, extract_text
+from app.ingestion.extractors import extract_docx, extract_pdf, extract_text, extract_txt
 from app.ingestion.pipeline import Upload, ingest
 from files import make_docx, make_encrypted_pdf, make_pdf, make_zip
 
@@ -19,6 +21,74 @@ def upload(filename: str, data: bytes) -> Upload:
         department_code="engineering",
         classification="departmental",
     )
+
+
+# Text
+
+
+@pytest.mark.parametrize(
+    ("data", "text"),
+    [
+        ("Zürich café".encode(), "Zürich café"),
+        (b"\xef\xbb\xbfHello", "Hello"),
+        ("Zürich café".encode("utf-16"), "Zürich café"),
+        (b"\xfe\xff" + "Zürich café".encode("utf-16-be"), "Zürich café"),
+        ("Zürich café".encode("cp1252"), "Zürich café"),
+        (
+            # Curly quotes and a dash on purpose: Windows-1252 stores them differently.
+            "Price: 50€ – “quoted”".encode("cp1252"),  # noqa: RUF001
+            "Price: 50€ – “quoted”",  # noqa: RUF001
+        ),
+    ],
+    ids=["utf-8", "utf-8 mark", "utf-16 le", "utf-16 be", "cp1252", "cp1252 punctuation"],
+)
+def test_text_file_encodings(data: bytes, text: str) -> None:
+    assert extract_txt(data) == text
+
+
+def test_tabs_and_line_breaks_are_ordinary_text() -> None:
+    text = "Role\tLimit\r\nAnalyst\t5,000\n\x0cNext page"
+
+    assert extract_txt(text.encode()) == text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"abc\x00def",
+        b"\x01\x02\x03",
+        b"bell \x07",
+        b"escape \x1b[31m",
+        EXE_HEADER,
+        b"\x81\x8d\x8f",
+        b"\xff\xfe\x00",
+        "zero\x00inside".encode("utf-16"),
+    ],
+    ids=[
+        "zero byte",
+        "control bytes",
+        "bell",
+        "escape code",
+        "executable",
+        "undefined in cp1252",
+        "odd-length utf-16",
+        "utf-16 with zero",
+    ],
+)
+def test_binary_content_is_not_accepted_as_text(data: bytes) -> None:
+    with pytest.raises(InvalidInputError, match="not a readable text file"):
+        extract_txt(data)
+
+
+def test_fallback_encoding_is_logged_but_utf8_is_not(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING, logger="app.ingestion.extractors")
+
+    extract_txt("café".encode())
+    assert caplog.records == []
+
+    extract_txt("café".encode("cp1252"))
+    assert caplog.records[-1].getMessage() == "text file was not UTF-8, read as Windows-1252"
+    assert "caf" not in str(vars(caplog.records[-1]))
 
 
 # PDF
@@ -190,8 +260,10 @@ def test_extension_decides_the_extractor_and_content_must_match() -> None:
         extract_text("renamed.pdf", docx)
     with pytest.raises(InvalidInputError, match="not a Word document"):
         extract_text("renamed.docx", pdf)
-    with pytest.raises(InvalidInputError, match="not valid UTF-8"):
+    with pytest.raises(InvalidInputError, match="not a readable text file"):
         extract_text("renamed.txt", docx)
+    with pytest.raises(InvalidInputError, match="not a readable text file"):
+        extract_text("renamed.txt", pdf + b"\x00")
 
 
 @pytest.mark.parametrize("filename", ["program.pdf", "program.docx", "program.txt"])

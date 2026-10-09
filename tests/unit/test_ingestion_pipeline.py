@@ -175,10 +175,31 @@ def test_file_with_no_real_text_is_rejected(world: World, settings: Settings, da
     assert document_count(world) == before
 
 
-@pytest.mark.parametrize("data", [b"\xff\xfe\x00\x01", b"caf\xe9", b"\x80\x81\x82"])
-def test_file_that_is_not_utf8_is_rejected(world: World, settings: Settings, data: bytes) -> None:
-    with pytest.raises(InvalidInputError, match="not valid UTF-8"):
+@pytest.mark.parametrize(
+    "data",
+    [b"\x80\x81\x82", b"MZ\x90\x00\x03", b"plain text \x00 with a zero byte", b"\xff\xfe\x00"],
+    ids=["undefined bytes", "executable header", "zero byte", "broken utf-16"],
+)
+def test_file_that_is_not_text_is_rejected(world: World, settings: Settings, data: bytes) -> None:
+    before = document_count(world)
+
+    with pytest.raises(InvalidInputError, match="not a readable text file"):
         ingest(world.db, world.users["admin"], upload(data=data), settings)
+
+    assert document_count(world) == before
+
+
+def test_text_over_the_character_limit_is_rejected(
+    world: World, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline, "MAX_EXTRACTED_CHARACTERS", 50)
+    before = document_count(world)
+
+    assert ingest(world.db, world.users["admin"], upload(data=b"x" * 50), settings).id
+    with pytest.raises(InvalidInputError, match="more than 50 characters"):
+        ingest(world.db, world.users["admin"], upload(data=b"x" * 51), settings)
+
+    assert document_count(world) == before + 1
 
 
 def test_file_over_the_size_limit_is_rejected_without_being_parsed(
