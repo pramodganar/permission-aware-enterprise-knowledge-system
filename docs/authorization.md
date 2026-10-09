@@ -186,6 +186,24 @@ Having the same rule in two forms is a risk, because they could drift apart. A t
 | HR case file: HR, `restricted`, granted to Carol | no | yes (4) | no |
 | Runbook, with a 30-day grant to Carol | yes (2) | yes (4), then no | yes (3) |
 
+### Setting and changing access
+
+Access is set when a document is ingested and can be changed afterwards. All of it needs the `documents:manage` permission, and all of it takes effect on the next request.
+
+| Action | Rules |
+|---|---|
+| Ingest with labels | Department and classification are required. A `restricted` document must name at least one reader, otherwise it would be stored and readable by nobody. |
+| Grant access | The user must be active and hold a role that can read documents. An expiry must be in the future. Granting again replaces the expiry. |
+| Revoke access | Removes the grant. |
+| Change labels | Classification, owning department, or both. |
+
+Two rules are worth calling out:
+
+- Nobody can grant access to themselves. Someone who is both a knowledge admin and an employee could otherwise open any restricted document alone. It now takes a second person. Two admins can still do it for each other, which only the audit trail shows.
+- A grant to someone who can't read documents is refused. It would be stored and never honoured, and the admin would believe access had been given.
+
+Managing a document does not require being able to read it. An admin looks a document up by its ID to change its audience, without that giving them its content.
+
 ### Chunks
 
 A chunk has no classification, department or grants of its own. It points to its document, and the decision is always made on the document. A chunk therefore can't be more open than the document it came from, and a change to the document applies to all its chunks at once.

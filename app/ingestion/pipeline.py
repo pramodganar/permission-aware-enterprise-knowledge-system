@@ -1,6 +1,6 @@
 """The ingestion pipeline: from an uploaded file to a stored document.
 
-    check permission -> validate -> extract text -> clean -> store
+    check permission -> validate -> extract text -> clean -> store with its permissions
 
 Everything is checked before anything is written. If any step fails, the
 database is left exactly as it was.
@@ -10,16 +10,21 @@ import hashlib
 import logging
 from dataclasses import dataclass
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.authorization.checks import ensure_permission
+from app.authorization.document_access import (
+    GrantRequest,
+    find_department,
+    parse_classification,
+    resolve_grants,
+)
 from app.authorization.permissions import Permission
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
 from app.ingestion.cleaning import clean_text
 from app.ingestion.extractors import EXTRACTORS, base_name, extension_of, extract_text
-from app.models import Classification, Department, Document, User
+from app.models import Classification, Document, DocumentGrant, User
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +38,14 @@ MAX_EXTRACTED_CHARACTERS = 2_000_000
 
 @dataclass(frozen=True)
 class Upload:
-    """A file and the labels its uploader gave it."""
+    """A file, the labels its uploader gave it, and any named readers."""
 
     filename: str
     data: bytes
     title: str
     department_code: str
     classification: str
+    grants: tuple[GrantRequest, ...] = ()
 
 
 def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Document:
@@ -51,9 +57,13 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
     ensure_permission(user, Permission.MANAGE_DOCUMENTS)
 
     title = _valid_title(upload.title)
-    classification = _valid_classification(upload.classification)
+    classification = parse_classification(upload.classification)
     _check_file(upload, settings.max_upload_bytes)
-    department = _find_department(db, upload.department_code)
+    department = find_department(db, upload.department_code)
+    readers = resolve_grants(db, user, upload.grants)
+    if classification is Classification.RESTRICTED and not readers:
+        # It would be stored but readable by nobody, which looks like a lost document.
+        raise InvalidInputError("a restricted document needs at least one named reader")
 
     extracted = extract_text(upload.filename, upload.data)
     if len(extracted) > MAX_EXTRACTED_CHARACTERS:
@@ -76,6 +86,10 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
         size_bytes=len(upload.data),
         sha256=hashlib.sha256(upload.data).hexdigest(),
         uploaded_by=user,
+        grants=[
+            DocumentGrant(user_id=reader.id, granted_by_id=user.id, expires_at=expires_at)
+            for reader, expires_at in readers
+        ],
     )
     db.add(document)
     db.commit()
@@ -88,6 +102,7 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
             "department": department.code,
             "classification": classification.value,
             "characters": len(content),
+            "grants": len(readers),
         },
     )
     return document
@@ -108,15 +123,6 @@ def _valid_title(title: str) -> str:
     return title
 
 
-def _valid_classification(value: str) -> Classification:
-    # No fallback: a missing or unknown classification stops the ingestion.
-    try:
-        return Classification(value.strip().lower())
-    except ValueError:
-        allowed = ", ".join(level.value for level in Classification)
-        raise InvalidInputError(f"classification must be one of: {allowed}") from None
-
-
 def _check_file(upload: Upload, max_bytes: int) -> None:
     if extension_of(upload.filename) not in EXTRACTORS:
         supported = ", ".join(sorted(EXTRACTORS))
@@ -125,12 +131,3 @@ def _check_file(upload: Upload, max_bytes: int) -> None:
         raise InvalidInputError("the file is empty")
     if len(upload.data) > max_bytes:
         raise InvalidInputError(f"the file is larger than the limit of {max_bytes} bytes")
-
-
-def _find_department(db: Session, code: str) -> Department:
-    department = db.scalars(
-        select(Department).where(Department.code == code.strip().lower())
-    ).one_or_none()
-    if department is None:
-        raise InvalidInputError("unknown department")
-    return department

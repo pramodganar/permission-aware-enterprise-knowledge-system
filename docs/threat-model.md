@@ -74,7 +74,7 @@ This lists what could go wrong, what the design does about it, how I intend to c
 | ID | Threat | Mitigation | Check | Left over |
 |---|---|---|---|---|
 | T17 | A document is uploaded with the wrong department or classification | Upload is rejected if either is missing | Test for missing fields | A wrong but valid label is enforced faithfully. See residual risks. |
-| T18 | An admin changes permissions to give themselves or someone else access | Admin rights do not include read rights. Permission changes are audited. | Test that an admin without department access gets no content. Audit record on change. | An admin can still widen a document's audience. Only the audit log shows it. |
+| T18 | An admin changes permissions to give themselves or someone else access | Admin rights do not include read rights. Nobody can grant access to themselves. Permission changes are logged, and will be audited. | Tests that an admin gets no content, and that an admin who is also a reader can't grant to themselves. | An admin can still widen a document's audience for someone else, and two admins can grant to each other. Only the record of the change shows it. |
 
 ### Storage, logs and secrets
 
