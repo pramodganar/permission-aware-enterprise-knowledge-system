@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr = Field(min_length=32)
     access_token_expire_minutes: int = Field(default=30, gt=0, le=1440)
 
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+
 
 @lru_cache
 def get_settings() -> Settings:

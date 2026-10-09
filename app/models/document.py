@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base, UtcDateTime, utc_now
@@ -38,6 +38,9 @@ class Document(Base):
     title: Mapped[str] = mapped_column(String(255))
     department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"), index=True)
     classification: Mapped[str] = mapped_column(String(20), index=True)
+    # The extracted text. Chunks are cut from this, so a document can be
+    # re-chunked without going back to the original file.
+    content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
     department: Mapped["Department"] = relationship()
