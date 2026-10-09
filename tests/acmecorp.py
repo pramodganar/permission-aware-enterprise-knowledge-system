@@ -2,11 +2,24 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.authorization.service import can_read, readable_documents
 from app.models import Classification, Department, Document, DocumentGrant, Role, RoleCode, User
+
+
+def file_details(uploaded_by: User) -> dict[str, Any]:
+    """The file fields a document needs, for tests that aren't about files."""
+    return {
+        "source_filename": "document.txt",
+        "file_type": ".txt",
+        "size_bytes": 1,
+        "sha256": "0" * 64,
+        "uploaded_by": uploaded_by,
+    }
+
 
 # Tests that depend on time use this fixed moment instead of the clock.
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
@@ -65,7 +78,10 @@ def build_world(db: Session) -> World:
 
     def document(title: str, department: str, classification: Classification) -> Document:
         return Document(
-            title=title, department=departments[department], classification=classification
+            title=title,
+            department=departments[department],
+            classification=classification,
+            **file_details(users["admin"]),
         )
 
     documents = {
@@ -143,7 +159,12 @@ def build_company(db: Session) -> World:
     users["nobody"] = user("nobody", "sales")
 
     documents = {
-        name: Document(title=title, department=departments[department], classification=level)
+        name: Document(
+            title=title,
+            department=departments[department],
+            classification=level,
+            **file_details(users["admin"]),
+        )
         for name, (title, department, level) in COMPANY_DOCUMENTS.items()
     }
 

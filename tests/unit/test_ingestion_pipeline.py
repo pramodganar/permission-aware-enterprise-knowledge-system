@@ -1,3 +1,4 @@
+import hashlib
 import logging
 
 import pytest
@@ -312,3 +313,87 @@ def test_size_limit_applies_to_the_text_as_extracted_not_as_cleaned(
     # Mostly spaces: it would shrink below the limit if cleaned first.
     with pytest.raises(InvalidInputError, match="more than 50 characters"):
         ingest(world.db, world.users["admin"], upload(data=b"a" + b" " * 100 + b"b"), settings)
+
+
+# File details
+
+
+def test_file_details_are_recorded(world: World, settings: Settings) -> None:
+    data = RUNBOOK_TEXT.encode()
+
+    document = ingest(world.db, world.users["admin"], upload(data=data), settings)
+    world.db.expire_all()
+
+    assert document.source_filename == "rollback-guide.txt"
+    assert document.file_type == ".txt"
+    assert document.size_bytes == len(data)
+    assert document.sha256 == hashlib.sha256(data).hexdigest()
+    assert document.uploaded_by.id == world.users["admin"].id
+    assert document.version == 1
+    assert document.created_at.tzinfo is not None
+
+
+def test_checksum_is_of_the_file_as_uploaded_not_the_cleaned_text(
+    world: World, settings: Settings
+) -> None:
+    tidy, messy = b"Same words.", b"\xef\xbb\xbfSame   words.\r\n"
+
+    first = ingest(world.db, world.users["admin"], upload(data=tidy), settings)
+    second = ingest(world.db, world.users["admin"], upload(data=messy), settings)
+
+    assert first.content == second.content
+    assert first.sha256 != second.sha256
+    assert second.size_bytes == len(messy)
+
+
+def test_same_file_gives_the_same_checksum(world: World, settings: Settings) -> None:
+    first = ingest(world.db, world.users["admin"], upload(), settings)
+    second = ingest(world.db, world.users["admin"], upload(filename="copy.txt"), settings)
+
+    assert first.sha256 == second.sha256
+    assert first.id != second.id
+
+
+@pytest.mark.parametrize(
+    ("filename", "stored"),
+    [
+        ("../../etc/passwd.txt", "passwd.txt"),
+        ("C:\\Users\\bob\\Desktop\\Q3 Report.TXT", "Q3 Report.TXT"),
+        ("  spaced   name .txt", "spaced name .txt"),
+        ("zero\u200bwidth.txt", "zerowidth.txt"),
+        ("right\u202eto-left.txt", "rightto-left.txt"),
+        ("tab\tname.txt", "tab name.txt"),
+    ],
+)
+def test_stored_file_name_is_made_safe(
+    world: World, settings: Settings, filename: str, stored: str
+) -> None:
+    document = ingest(world.db, world.users["admin"], upload(filename=filename), settings)
+
+    assert document.source_filename == stored
+
+
+def test_file_type_is_stored_in_lower_case(world: World, settings: Settings) -> None:
+    document = ingest(world.db, world.users["admin"], upload(filename="REPORT.TXT"), settings)
+
+    assert document.file_type == ".txt"
+    assert document.source_filename == "REPORT.TXT"
+
+
+def test_very_long_file_name_is_shortened_but_keeps_its_extension(
+    world: World, settings: Settings
+) -> None:
+    document = ingest(world.db, world.users["admin"], upload(filename="x" * 400 + ".txt"), settings)
+
+    assert len(document.source_filename) == 255
+    assert document.source_filename.endswith(".txt")
+
+
+def test_file_name_does_not_appear_in_the_log(
+    world: World, settings: Settings, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger="app.ingestion.pipeline")
+
+    ingest(world.db, world.users["admin"], upload(filename="project-falcon-offer.txt"), settings)
+
+    assert "falcon" not in str(vars(caplog.records[-1]))

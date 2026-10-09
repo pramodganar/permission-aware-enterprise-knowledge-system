@@ -9,6 +9,7 @@ from app.core.database import Base, UtcDateTime, utc_now
 
 if TYPE_CHECKING:
     from app.models.department import Department
+    from app.models.user import User
 
 
 class Classification(StrEnum):
@@ -25,11 +26,14 @@ class Classification(StrEnum):
 
 
 class Document(Base):
-    """The part of a document that access decisions depend on.
+    """A document: its access labels, its text and where it came from.
 
     Every document has an owning department and a classification, and neither
     has a default. A document that arrives without them can't be stored, so
     nothing becomes readable by accident.
+
+    The file details and the title are part of the document. They are shown
+    only to people who may read it, like the text.
     """
 
     __tablename__ = "documents"
@@ -41,9 +45,21 @@ class Document(Base):
     # The extracted text. Chunks are cut from this, so a document can be
     # re-chunked without going back to the original file.
     content: Mapped[str] = mapped_column(Text, default="")
+
+    # Where the document came from. Recorded once at ingestion.
+    source_filename: Mapped[str] = mapped_column(String(255))
+    file_type: Mapped[str] = mapped_column(String(10))
+    size_bytes: Mapped[int] = mapped_column()
+    # SHA-256 of the uploaded file, as 64 hex characters.
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(default=1)
+
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
 
     department: Mapped["Department"] = relationship()
+    uploaded_by: Mapped["User"] = relationship()
     grants: Mapped[list["DocumentGrant"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )

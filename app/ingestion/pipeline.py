@@ -6,6 +6,7 @@ Everything is checked before anything is written. If any step fails, the
 database is left exactly as it was.
 """
 
+import hashlib
 import logging
 from dataclasses import dataclass
 
@@ -17,12 +18,13 @@ from app.authorization.permissions import Permission
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
 from app.ingestion.cleaning import clean_text
-from app.ingestion.extractors import EXTRACTORS, extension_of, extract_text
+from app.ingestion.extractors import EXTRACTORS, base_name, extension_of, extract_text
 from app.models import Classification, Department, Document, User
 
 logger = logging.getLogger(__name__)
 
 MAX_TITLE_LENGTH = 255
+MAX_FILENAME_LENGTH = 255
 
 # A compressed file can hold far more text than its size suggests. This bounds
 # what one document can add to the database and to every later stage.
@@ -69,6 +71,11 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
         department=department,
         classification=classification,
         content=content,
+        source_filename=_stored_filename(upload.filename),
+        file_type=extension_of(upload.filename),
+        size_bytes=len(upload.data),
+        sha256=hashlib.sha256(upload.data).hexdigest(),
+        uploaded_by=user,
     )
     db.add(document)
     db.commit()
@@ -84,6 +91,12 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
         },
     )
     return document
+
+
+def _stored_filename(filename: str) -> str:
+    """The name to keep: no directory part, no invisible characters, bounded length."""
+    name = clean_text(base_name(filename)).replace("\n", " ")
+    return name[-MAX_FILENAME_LENGTH:]
 
 
 def _valid_title(title: str) -> str:

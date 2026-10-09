@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
+from acmecorp import file_details
 from app.models import Classification, Department, Document, DocumentGrant, User
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
@@ -24,11 +25,12 @@ def alice(db: Session, engineering: Department) -> User:
 
 
 @pytest.fixture
-def runbook(db: Session, engineering: Department) -> Document:
+def runbook(db: Session, engineering: Department, alice: User) -> Document:
     document = Document(
         title="Deployment Runbook",
         department=engineering,
         classification=Classification.DEPARTMENTAL,
+        **file_details(alice),
     )
     db.add(document)
     db.commit()
@@ -48,31 +50,43 @@ def test_document_is_saved_and_read_back(db: Session, runbook: Document) -> None
 
 @pytest.mark.parametrize("classification", list(Classification))
 def test_every_classification_can_be_stored(
-    db: Session, engineering: Department, classification: Classification
+    db: Session, engineering: Department, alice: User, classification: Classification
 ) -> None:
-    document = Document(title="Doc", department=engineering, classification=classification)
+    document = Document(
+        title="Doc",
+        department=engineering,
+        classification=classification,
+        **file_details(alice),
+    )
     db.add(document)
     db.commit()
 
     assert document.classification == classification
 
 
-def test_classification_has_no_default(db: Session, engineering: Department) -> None:
-    db.add(Document(title="Unlabelled", department=engineering))
+def test_classification_has_no_default(db: Session, engineering: Department, alice: User) -> None:
+    db.add(Document(title="Unlabelled", department=engineering, **file_details(alice)))
 
     with pytest.raises(IntegrityError):
         db.commit()
 
 
-def test_owning_department_is_required(db: Session) -> None:
-    db.add(Document(title="Orphan", classification=Classification.GENERAL))
+def test_owning_department_is_required(db: Session, alice: User) -> None:
+    db.add(Document(title="Orphan", classification=Classification.GENERAL, **file_details(alice)))
 
     with pytest.raises(IntegrityError):
         db.commit()
 
 
-def test_owning_department_must_exist(db: Session) -> None:
-    db.add(Document(title="Ghost", department_id=999, classification=Classification.GENERAL))
+def test_owning_department_must_exist(db: Session, alice: User) -> None:
+    db.add(
+        Document(
+            title="Ghost",
+            department_id=999,
+            classification=Classification.GENERAL,
+            **file_details(alice),
+        )
+    )
 
     with pytest.raises(IntegrityError):
         db.commit()
@@ -214,3 +228,58 @@ def test_model_timestamps_are_timezone_aware(db: Session, runbook: Document, ali
     assert db.scalars(select(Document)).one().created_at.tzinfo is not None
     assert db.scalars(select(User)).one().created_at.tzinfo is not None
     assert db.scalars(select(Department)).one().created_at.tzinfo is not None
+
+
+# File details
+
+
+def test_file_details_are_saved(db: Session, runbook: Document, alice: User) -> None:
+    db.expire_all()
+
+    document = db.scalars(select(Document)).one()
+
+    assert document.source_filename == "document.txt"
+    assert document.file_type == ".txt"
+    assert document.size_bytes == 1
+    assert document.sha256 == "0" * 64
+    assert document.uploaded_by.id == alice.id
+    assert document.version == 1
+    assert document.updated_at.tzinfo is not None
+
+
+@pytest.mark.parametrize(
+    "field", ["source_filename", "file_type", "size_bytes", "sha256", "uploaded_by"]
+)
+def test_file_details_are_required(
+    db: Session, engineering: Department, alice: User, field: str
+) -> None:
+    fields = file_details(alice)
+    del fields[field]
+
+    db.add(
+        Document(
+            title="Doc",
+            department=engineering,
+            classification=Classification.GENERAL,
+            **fields,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+
+def test_uploader_must_be_a_real_user(db: Session, engineering: Department, alice: User) -> None:
+    fields = file_details(alice)
+    del fields["uploaded_by"]
+
+    db.add(
+        Document(
+            title="Doc",
+            department=engineering,
+            classification=Classification.GENERAL,
+            uploaded_by_id=999,
+            **fields,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db.commit()
