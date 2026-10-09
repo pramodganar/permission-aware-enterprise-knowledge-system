@@ -44,4 +44,4 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "acmecorp", "testapp"]
+known-first-party = ["app", "acmecorp", "testapp", "files"]
