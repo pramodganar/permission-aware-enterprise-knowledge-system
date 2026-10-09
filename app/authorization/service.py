@@ -18,7 +18,7 @@ from sqlalchemy import Select, and_, false, or_, select
 
 from app.authorization.permissions import Permission, permissions_for
 from app.core.database import utc_now
-from app.models import Classification, Document, DocumentGrant, User
+from app.models import Classification, Document, DocumentGrant, DocumentStatus, User
 
 KNOWN_CLASSIFICATIONS = frozenset(classification.value for classification in Classification)
 
@@ -28,7 +28,10 @@ def can_read(user: User, document: Document, now: datetime | None = None) -> boo
     permissions = permissions_for(user)
     moment = now or utc_now()
 
-    # A document whose label can't be trusted is readable by nobody, grant or not.
+    # A replaced or deleted document is readable by nobody, and so is one
+    # whose label can't be trusted. No grant overrides either.
+    if document.status != DocumentStatus.ACTIVE:
+        return False
     if document.classification not in KNOWN_CLASSIFICATIONS:
         return False
 
@@ -80,4 +83,8 @@ def readable_documents(user: User, now: datetime | None = None) -> Select[Docume
 
     if not allowed:
         return select(Document).where(false())
-    return select(Document).where(Document.classification.in_(KNOWN_CLASSIFICATIONS), or_(*allowed))
+    return select(Document).where(
+        Document.status == DocumentStatus.ACTIVE,
+        Document.classification.in_(KNOWN_CLASSIFICATIONS),
+        or_(*allowed),
+    )

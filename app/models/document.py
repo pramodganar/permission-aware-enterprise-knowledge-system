@@ -25,6 +25,18 @@ class Classification(StrEnum):
     RESTRICTED = "restricted"
 
 
+class DocumentStatus(StrEnum):
+    """Only an ACTIVE document can be read.
+
+    SUPERSEDED  a newer version has replaced it
+    DELETED     it was withdrawn
+    """
+
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+    DELETED = "deleted"
+
+
 class Document(Base):
     """A document: its access labels, its text and where it came from.
 
@@ -54,6 +66,9 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     version: Mapped[int] = mapped_column(default=1)
+    status: Mapped[str] = mapped_column(String(20), default=DocumentStatus.ACTIVE, index=True)
+    # The version this one replaced, if any.
+    supersedes_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"), default=None)
 
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now, onupdate=utc_now)
@@ -67,6 +82,10 @@ class Document(Base):
     @validates("classification")
     def check_classification(self, _: str, value: str) -> str:
         return Classification(value.strip().lower()).value
+
+    @validates("status")
+    def check_status(self, _: str, value: str) -> str:
+        return DocumentStatus(value).value
 
     def __repr__(self) -> str:
         return f"Document(id={self.id!r}, classification={self.classification!r})"

@@ -22,7 +22,14 @@ from app.authorization.checks import ensure_permission
 from app.authorization.permissions import Permission, permissions_for
 from app.core.database import utc_now
 from app.core.exceptions import InvalidInputError, NotFoundError, PermissionDeniedError
-from app.models import Classification, Department, Document, DocumentGrant, User
+from app.models import (
+    Classification,
+    Department,
+    Document,
+    DocumentGrant,
+    DocumentStatus,
+    User,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +96,7 @@ def grant_access(
 ) -> DocumentGrant:
     """Let a user read a document. Granting again replaces the expiry."""
     ensure_permission(admin, Permission.MANAGE_DOCUMENTS)
-    document = _find_document(db, document_id)
+    document = find_current_document(db, document_id)
     ((grantee, expires_at),) = resolve_grants(db, admin, [request], now)
 
     grant = next((grant for grant in document.grants if grant.user_id == grantee.id), None)
@@ -115,7 +122,7 @@ def grant_access(
 def revoke_access(db: Session, admin: User, document_id: int, email: str) -> None:
     """Remove a user's grant for a document."""
     ensure_permission(admin, Permission.MANAGE_DOCUMENTS)
-    document = _find_document(db, document_id)
+    document = find_current_document(db, document_id)
     grantee = db.scalars(select(User).where(User.email == email.strip().lower())).one_or_none()
 
     grant = next(
@@ -148,7 +155,7 @@ def change_labels(
     if classification is None and department_code is None:
         raise InvalidInputError("nothing to change")
 
-    document = _find_document(db, document_id)
+    document = find_current_document(db, document_id)
     new_classification = parse_classification(classification) if classification else None
     new_department = find_department(db, department_code) if department_code else None
     before = {"classification": document.classification, "department": document.department.code}
@@ -173,10 +180,13 @@ def change_labels(
     return document
 
 
-def _find_document(db: Session, document_id: int) -> Document:
+def find_current_document(db: Session, document_id: int) -> Document:
+    """Return a document that can still be managed: it exists and is the current version."""
     document = db.get(Document, document_id)
     if document is None:
         raise NotFoundError(f"document {document_id} does not exist")
+    if document.status != DocumentStatus.ACTIVE:
+        raise InvalidInputError("the document has been replaced or deleted")
     return document
 
 

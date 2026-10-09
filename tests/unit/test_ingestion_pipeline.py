@@ -346,14 +346,6 @@ def test_checksum_is_of_the_file_as_uploaded_not_the_cleaned_text(
     assert second.size_bytes == len(messy)
 
 
-def test_same_file_gives_the_same_checksum(world: World, settings: Settings) -> None:
-    first = ingest(world.db, world.users["admin"], upload(), settings)
-    second = ingest(world.db, world.users["admin"], upload(filename="copy.txt"), settings)
-
-    assert first.sha256 == second.sha256
-    assert first.id != second.id
-
-
 @pytest.mark.parametrize(
     ("filename", "stored"),
     [

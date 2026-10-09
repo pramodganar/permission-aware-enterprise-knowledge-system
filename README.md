@@ -12,13 +12,13 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity and authorization are built and tested. There is no document ingestion, retrieval or API yet, so the rules are enforced on document records but nothing is searchable.
+Work in progress. Identity, authorization and document ingestion are built and tested. There is no chunking, retrieval or API yet, so documents can be stored with their permissions but nothing is searchable.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
 - [x] Users, departments, roles and authentication
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
-- [ ] Document ingestion
+- [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
 - [ ] Chunking, embeddings and the vector index
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
@@ -94,6 +94,6 @@ pytest tests/security
 
 ## Stack
 
-In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pydantic-settings, pytest, ruff, mypy.
+In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, pydantic-settings, pytest, ruff, mypy.
 
 Planned: PostgreSQL as the target database, FAISS, sentence-transformers, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.

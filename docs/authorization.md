@@ -157,7 +157,20 @@ A user can read a document if any one of these is true:
 
 If none is true, the answer is no. That includes every case the table doesn't mention: a user with no roles, an inactive user.
 
-One check comes before all four rows: the document's classification must be one of the three known values. If it isn't, the label can't be trusted and nobody can read the document, even with a grant.
+Two checks come before all four rows, and no grant overrides either:
+
+- The document must be active. A document that has been replaced by a newer version, or deleted, is readable by nobody.
+- Its classification must be one of the three known values. If it isn't, the label can't be trusted.
+
+### Versions and deletion
+
+A document is never edited in place.
+
+- Replacing a document stores the new text as a new row with the next version number and marks the old row as superseded. The new version keeps the department, the classification and the grants that are still valid, so replacing the text can't change who may read it. Changing labels is a separate action.
+- Deleting marks the row as deleted. The row and its text are kept, so an answer given before the deletion can still be explained from the audit trail. This is withdrawal, not erasure.
+- The same file can't be stored twice while a copy is active.
+
+In both cases the old row stops being readable on the next request.
 
 ### Where this is enforced
 
