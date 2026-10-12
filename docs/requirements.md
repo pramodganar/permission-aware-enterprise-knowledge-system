@@ -96,7 +96,7 @@ Answers come with citations, and every query goes into an audit log.
 
 ### Indexing
 
-- FR-6: Documents are split into chunks, and each chunk has enough metadata to decide access by itself.
+- FR-6: Documents are split into chunks, and each chunk points to the document it came from, which is where access is decided.
 - FR-7: Chunks are embedded and stored in a vector index that can be saved, reloaded and versioned.
 
 ### Search and answers

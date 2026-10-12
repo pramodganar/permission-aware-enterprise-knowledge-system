@@ -47,6 +47,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Personas](docs/personas.md): who uses the system and what each person can and cannot see
 - [Architecture](docs/architecture.md): components, request flow and repository layout
 - [Authorization](docs/authorization.md): roles, permissions and the rules that combine them
+- [Chunking](docs/chunking.md): how documents are split, with the measurements behind it
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made
 
