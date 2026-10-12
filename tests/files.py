@@ -8,7 +8,10 @@ from pypdf import PdfWriter
 
 
 def make_pdf(pages: list[str]) -> bytes:
-    """A minimal valid PDF with one line of text per page. Empty string = blank page."""
+    """A minimal valid PDF. A page is one string; line breaks in it become lines.
+
+    An empty string gives a blank page.
+    """
     objects: list[bytes] = []
     kids = " ".join(f"{4 + 2 * index} 0 R" for index in range(len(pages)))
     objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
@@ -17,7 +20,11 @@ def make_pdf(pages: list[str]) -> bytes:
 
     for index, text in enumerate(pages):
         escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-        stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET".encode("latin-1") if text else b""
+        shown = " ".join(
+            f"1 0 0 1 72 {720 - 16 * row} Tm ({line}) Tj"
+            for row, line in enumerate(escaped.split("\n"))
+        )
+        stream = f"BT /F1 12 Tf {shown} ET".encode("latin-1") if text else b""
         objects.append(
             (
                 "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "

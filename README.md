@@ -20,7 +20,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
-- [ ] Chunking, embeddings and the vector index
+- [ ] Chunking, embeddings and the vector index (the chunker is written; chunks are not stored or embedded yet)
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
 - [ ] API

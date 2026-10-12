@@ -1,6 +1,6 @@
 # Chunking
 
-Status: Draft. This is the design. Nothing here is implemented yet.
+Status: Draft. The chunker and the removal of page headers and footers are implemented and tested. Chunks are not stored or embedded yet.
 Date: October 2026
 
 A document is too long to embed or to hand to the LLM as one piece, so it is split into chunks. This document says how, and why. The decision itself is recorded in [decision record 0011](adr/0011-pack-lines-into-bounded-chunks.md).
@@ -17,7 +17,7 @@ It also has to be safe, which here means one thing: a chunk never contains text 
 
 ## What the stored text looks like
 
-I measured the text the ingestion pipeline stores for the 17 AcmeCorp documents. The three file formats give three different shapes of text.
+I measured the text the ingestion pipeline stored for the 17 AcmeCorp documents before designing anything. The three file formats give three different shapes of text. The figures in this section are from that first measurement, when page headers and footers were still in the PDF text.
 
 | | Text files (3) | Word files (8) | PDF files (6) |
 |---|---|---|---|
@@ -61,7 +61,9 @@ A line is removed when it is among the first two or the last two lines of a page
 
 It only applies to documents of two pages or more. On a one-page document nothing repeats, so nothing is removed.
 
-The risk is removing real content, for example a table whose first row is repeated on each page. Keeping the rule to the outer two lines, and requiring a match on every page, keeps that unlikely. It is not zero.
+The risk is removing real content, for example a table whose first row is repeated on each page. Ignoring digits adds to it: a real line at the edge of every page that differs only in its numbers is taken for a header. Keeping the rule to the outer two lines, and requiring a match on every page, keeps that unlikely. It is not zero.
+
+If the rule would remove every line of the document, nothing is removed.
 
 ### 2. Split the text into lines, and pack lines into chunks
 
@@ -71,13 +73,16 @@ Lines are added to a chunk in order until the next line would take it over the s
 
 A chunk should not end in a bad place. Naive packing at 800 characters ended 27 of 43 chunks on a line that did not finish a sentence: a heading cut off from its section, or half a sentence from a PDF. So before closing a chunk, the packer looks back over its last few lines for a better place to stop, in this order:
 
-1. before a blank line,
-2. after a line that ends a sentence (`.`, `?`, `!`),
-3. after any line.
+1. after a line that ends a sentence (`.`, `?`, `!`) and is followed by a blank line,
+2. after any line that ends a sentence,
+3. before a blank line,
+4. after any line.
 
 It looks back over at most the last quarter of the chunk, so a chunk can't shrink to almost nothing.
 
-A single line longer than the limit is split at sentence ends, and if a sentence is still too long, between words. On this corpus that never happens: the longest line is 458 characters.
+My first version of this list put "before a blank line" first. That was wrong, and the tests on the company documents showed it: in a text file a heading is followed by a blank line too, so the rule chose to end a chunk on `5. Database changes`. A blank line only counts as a good place when the line before it finishes a sentence.
+
+A single line longer than the limit is split at sentence ends, and if a sentence is still too long, between words, and if a word is still too long, inside it. On this corpus that never happens: the longest line is 458 characters.
 
 ### 3. Overlap
 
@@ -100,15 +105,17 @@ Four characters per token is a rule of thumb, and I have not measured it on this
 
 **Why characters and not tokens.** Counting tokens needs the embedding model's tokenizer, which would tie the chunker to one model and make it slow to test. Characters are exact, fast and model-independent. The price is the approximation above, covered by the check at embedding time.
 
-**What these values give on the corpus.** A rough simulation of plain line packing, before the boundary rule and before headers and footers are removed:
+**What these values give on the corpus.** Measured with the implemented chunker on the 17 documents, 35,844 characters once page headers and footers are gone:
 
-| Maximum size / overlap | Chunks | Per document |
-|---|---|---|
-| 400 / 60 | 121 | 5 to 9 |
-| 800 / 120 | 60 | 3 to 4 |
-| 1,200 / 180 | 42 | 2 to 3 |
+| Maximum size / overlap | Chunks | Per document | Median chunk | Chunks that end mid-sentence |
+|---|---|---|---|---|
+| 400 / 60 | 118 | 5 to 9 | 334 characters | 13 of 101 |
+| 800 / 120 | 57 | 3 to 4 | 724 characters | 2 of 40 |
+| 1,200 / 180 | 41 | 2 to 3 | 1,027 characters | 1 of 24 |
 
-The real chunker will give slightly different numbers.
+The last column counts chunks, other than the last of a document, whose final line does not end with `.`, `?` or `!`. With the look-back switched off, the figure at 800 / 120 is 23 of 40.
+
+The two that remain at 800 / 120 are a PDF sentence spread over more wrapped lines than the look-back reaches, and a list item ending in a semicolon.
 
 I have no measurement yet that says 800 retrieves better than 400 or 1,200. That needs the evaluation set. 800 is the starting point because it fits the model limit and holds about three sections of a typical document.
 
@@ -143,6 +150,7 @@ These become tests.
 4. **Bounded.** No chunk is longer than the maximum size.
 5. **Deterministic.** The same text and settings always give the same chunks.
 6. **Terminates.** The overlap is always smaller than the chunk size, so each chunk moves forward.
+7. **Every chunk adds something.** A chunk ends later than the one before it. Looking back for a better ending may never give up the first new line of a chunk, or the chunk would be nothing but overlap.
 
 Rule 1 is the security rule. If overlap or batching ever joined the end of one document to the start of the next, a chunk could hold text from an HR case file inside a chunk that belongs to the leave policy, and the permission check on the leave policy would let it through.
 

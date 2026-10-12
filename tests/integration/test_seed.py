@@ -208,6 +208,14 @@ def test_the_key_fact_survives_extraction(seeded: Session, title: str) -> None:
     assert FACTS[title] in " ".join(content.split())
 
 
+def test_page_headers_and_footers_are_not_in_the_stored_text(seeded: Session) -> None:
+    for content in seeded.scalars(select(Document.content)):
+        assert "Uncontrolled when printed" not in content
+        assert "ACMECORP" not in content
+        assert "Page 1 of" not in content
+        assert "Confidential - " not in content
+
+
 def test_there_is_a_fact_for_every_document(seeded: Session) -> None:
     assert set(FACTS) == set(seeded.scalars(select(Document.title)))
 

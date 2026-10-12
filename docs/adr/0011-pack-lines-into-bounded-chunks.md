@@ -13,7 +13,7 @@ The embedding model reads a limited number of tokens and ignores the rest withou
 
 ## Decision
 
-Split the stored text into lines and pack consecutive lines into chunks of at most 800 characters. Close a chunk at the best nearby boundary: a blank line, then the end of a sentence, then any line. Start each chunk with up to 120 characters of whole lines from the one before.
+Split the stored text into lines and pack consecutive lines into chunks of at most 800 characters. Close a chunk at the best nearby boundary: the end of a sentence before a blank line, then the end of any sentence, then a blank line, then any line. Start each chunk with up to 120 characters of whole lines from the one before.
 
 Page headers and footers are removed from PDF text at extraction, before chunking.
 
@@ -22,6 +22,8 @@ Chunking is done per document version. A chunk never holds text from two documen
 The sizes are settings and are recorded in the index manifest. The real token count is checked against the model's limit when a chunk is embedded.
 
 The measurements and the full reasoning are in [chunking.md](../chunking.md).
+
+Amended during implementation, October 2026: the order of boundaries first read "a blank line, then the end of a sentence, then any line". That ended chunks on headings, because a heading is followed by a blank line too. The decision itself is unchanged.
 
 ## Alternatives
 

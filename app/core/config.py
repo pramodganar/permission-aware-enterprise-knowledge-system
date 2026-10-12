@@ -7,7 +7,7 @@ in the project root. Environment variables win over the file.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30, gt=0, le=1440)
 
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+
+    # How documents are split. Changing either means re-chunking and
+    # re-embedding every document. See docs/chunking.md.
+    chunk_max_characters: int = Field(default=800, ge=100, le=8000)
+    chunk_overlap_characters: int = Field(default=120, ge=0)
+
+    @model_validator(mode="after")
+    def check_overlap(self) -> "Settings":
+        # More than half would put most of every chunk into the next one.
+        if self.chunk_overlap_characters * 2 > self.chunk_max_characters:
+            raise ValueError(
+                "chunk_overlap_characters must be at most half of chunk_max_characters"
+            )
+        return self
 
 
 @lru_cache

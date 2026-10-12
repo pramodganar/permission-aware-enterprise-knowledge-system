@@ -7,6 +7,7 @@ InvalidInputError, and never let a parser error escape.
 
 import io
 import logging
+import re
 import zipfile
 from collections.abc import Callable, Mapping
 from pathlib import PurePosixPath, PureWindowsPath
@@ -28,6 +29,10 @@ _UTF16_MARKS = (b"\xff\xfe", b"\xfe\xff")
 _CONTROL_CHARACTERS = frozenset(map(chr, range(32))) - frozenset("\t\n\f\r")
 
 MAX_PDF_PAGES = 500
+
+# A page header or footer is looked for in this many lines at each end of a page.
+PAGE_EDGE_LINES = 2
+_DIGITS = re.compile(r"\d+")
 
 # A .docx file is a zip archive. These limits stop a small upload from
 # unpacking into something enormous.
@@ -75,6 +80,7 @@ def extract_pdf(data: bytes) -> str:
     """Return the text layer of a PDF, page by page.
 
     A scanned PDF has no text layer and comes back empty. There is no OCR.
+    Lines that repeat at the top or bottom of every page are left out.
     """
     if not data.startswith(b"%PDF-"):
         raise InvalidInputError("the file is not a PDF")
@@ -93,7 +99,57 @@ def extract_pdf(data: bytes) -> str:
         # file was not usable.
         raise InvalidInputError("the PDF could not be read") from None
 
-    return "\n\n".join(page.strip() for page in pages if page.strip())
+    pages = _without_page_furniture([page.strip() for page in pages if page.strip()])
+    return "\n\n".join(pages)
+
+
+def _without_page_furniture(pages: list[str]) -> list[str]:
+    """Drop headers and footers: lines that repeat at the same edge of every page.
+
+    A line counts as repeated when it is the same on every page once digits
+    are ignored, so "Page 1 of 3" and "Page 2 of 3" match. Left in, such lines
+    end up in the middle of sentences that run over a page break, and a
+    marking like "Confidential" becomes text a search can match.
+
+    Only the outer lines of a page are looked at, and nothing is removed from
+    a document of one page. If every line would go, the text is left alone.
+    """
+    if len(pages) < 2:
+        return pages
+
+    lines = [[line for line in page.split("\n") if line.strip()] for page in pages]
+    repeated = [
+        position
+        for position in (*range(PAGE_EDGE_LINES), *range(-PAGE_EDGE_LINES, 0))
+        if len({_furniture_key(page, position) for page in lines}) == 1
+        and _furniture_key(lines[0], position) is not None
+    ]
+    if not repeated:
+        return pages
+
+    kept = [
+        "\n".join(
+            line
+            for index, line in enumerate(page)
+            if index not in repeated and index - len(page) not in repeated
+        )
+        for page in lines
+    ]
+    if not any(kept):
+        return pages
+
+    logger.info(
+        "removed repeated page lines from PDF text",
+        extra={"pages": len(pages), "lines_per_page": len(repeated)},
+    )
+    return [page for page in kept if page]
+
+
+def _furniture_key(page_lines: list[str], position: int) -> str | None:
+    """The line at a position with digits masked, or None if the page is too short."""
+    if not -len(page_lines) <= position < len(page_lines):
+        return None
+    return _DIGITS.sub("#", " ".join(page_lines[position].split()))
 
 
 def extract_docx(data: bytes) -> str:

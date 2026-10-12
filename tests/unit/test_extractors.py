@@ -301,3 +301,99 @@ def test_document_with_no_extractable_text_is_not_stored(
 ) -> None:
     with pytest.raises(InvalidInputError, match="no text could be extracted"):
         ingest(world.db, world.users["admin"], upload(filename, data), settings)
+
+
+# --- page headers and footers in PDF text ---------------------------------------------
+
+
+def page(number: int, body: str, total: int = 3) -> str:
+    return "\n".join(
+        [
+            "ACMECORP Finance",
+            body,
+            f"Confidential - Finance Page {number} of {total}",
+            "Uncontrolled when printed.",
+        ]
+    )
+
+
+def test_pdf_lines_repeated_on_every_page_are_left_out() -> None:
+    data = make_pdf(
+        [page(1, "Payments need approval."), page(2, "Limits apply."), page(3, "Ask Finance.")]
+    )
+
+    assert extract_pdf(data) == "Payments need approval.\n\nLimits apply.\n\nAsk Finance."
+
+
+def test_pdf_sentence_across_a_page_break_is_no_longer_interrupted() -> None:
+    data = make_pdf(
+        [page(1, "The operator does not drive again until", 2), page(2, "it is recorded.", 2)]
+    )
+
+    assert extract_pdf(data) == "The operator does not drive again until\n\nit is recorded."
+
+
+def test_pdf_page_numbers_match_whatever_the_digits() -> None:
+    bodies = {1: "Payments need approval.", 2: "Limits apply to invoices.", 11: "Ask Finance."}
+    pages = [f"{body}\nPage {number}" for number, body in bodies.items()]
+
+    text = extract_pdf(make_pdf(pages))
+
+    assert text == "Payments need approval.\n\nLimits apply to invoices.\n\nAsk Finance."
+
+
+def test_pdf_lines_that_differ_only_in_digits_count_as_repeated() -> None:
+    # The cost of ignoring digits: a real line at the edge of every page that
+    # changes only in its numbers is taken for a header.
+    years = ((2025, "before"), (2026, "after"))
+    pages = [
+        f"Total for {year}: {year - 2000} items\nNotes on the year {word}." for year, word in years
+    ]
+
+    assert extract_pdf(make_pdf(pages)) == "Notes on the year before.\n\nNotes on the year after."
+
+
+def test_pdf_with_one_page_keeps_every_line() -> None:
+    assert extract_pdf(make_pdf([page(1, "Only page.", 1)])) == page(1, "Only page.", 1)
+
+
+def test_pdf_line_missing_from_one_page_is_kept_everywhere() -> None:
+    # A marking on the first page only is content, not a header.
+    pages = ["DRAFT\nFirst page text.\nMore text.", "Second page text.\nMore words.\nAnd more."]
+
+    assert "DRAFT" in extract_pdf(make_pdf(pages))
+
+
+def test_pdf_repeated_line_in_the_middle_of_a_page_is_kept() -> None:
+    body = "First line {n}.\nSecond line {n}.\nSee the policy.\nFourth line {n}.\nFifth line {n}."
+    pages = [body.replace("{n}", word) for word in ("one", "two", "three")]
+
+    assert extract_pdf(make_pdf(pages)).count("See the policy.") == 3
+
+
+def test_pdf_whose_pages_are_all_the_same_is_left_alone() -> None:
+    # Removing every repeated line would leave nothing, so nothing is removed.
+    assert extract_pdf(make_pdf(["Notice", "Notice"])) == "Notice\n\nNotice"
+
+
+def test_pdf_only_the_outer_two_lines_of_a_page_are_considered() -> None:
+    pages = [
+        f"Header\nSubheader\nThird line\nBody {word}.\nMore {word}.\nEnd {word}."
+        for word in ("a", "b")
+    ]
+
+    text = extract_pdf(make_pdf(pages))
+
+    assert "Header" not in text
+    assert "Subheader" not in text
+    assert text.count("Third line") == 2
+
+
+def test_pdf_removal_is_logged_without_the_text(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        extract_pdf(make_pdf([page(1, "Secret limit one.", 2), page(2, "Secret limit two.", 2)]))
+
+    record = next(r for r in caplog.records if "repeated page lines" in r.message)
+    assert (record.pages, record.lines_per_page) == (2, 3)  # type: ignore[attr-defined]
+    assert "Secret" not in caplog.text
+    assert "Confidential" not in caplog.text
