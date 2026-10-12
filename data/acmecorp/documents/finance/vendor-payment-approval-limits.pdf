@@ -1,0 +1,121 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Title (Vendor Payment Approval Limits) /Author (AcmeCorp Finance) >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 3428 >>
+stream
+0.09 0.26 0.49 rg 72 786 16 16 re f
+1 1 1 rg 76 790 8 8 re f
+0.09 0.26 0.49 rg 78 792 4 4 re f
+BT 0.09 0.26 0.49 rg
+/F2 13 Tf 1 0 0 1 94 789 Tm (ACMECORP) Tj
+0.35 0.35 0.35 rg
+/F1 9 Tf 1 0 0 1 491 790 Tm (Finance) Tj
+ET
+0.09 0.26 0.49 RG 0.8 w 72 778 m 523 778 l S
+BT 0 0 0 rg
+/F2 17 Tf 1 0 0 1 72 742 Tm (Vendor Payment Approval Limits) Tj
+/F1 10 Tf 1 0 0 1 72 714 Tm (Owner: Finance, Accounts Payable) Tj
+/F1 10 Tf 1 0 0 1 72 700 Tm (Version 5, effective 1 April 2026) Tj
+/F1 10 Tf 1 0 0 1 72 686 Tm (Audience: Finance) Tj
+/F2 12 Tf 1 0 0 1 72 658 Tm (1. Purpose) Tj
+/F1 10 Tf 1 0 0 1 72 640 Tm (This document sets out who may approve a payment to a vendor, depending on the amount.) Tj
+/F1 10 Tf 1 0 0 1 72 626 Tm (It applies to all invoices and all payment methods.) Tj
+/F2 12 Tf 1 0 0 1 72 598 Tm (2. Approval limits) Tj
+/F1 10 Tf 1 0 0 1 72 580 Tm (The limit applies to the total value of the invoice, including tax.) Tj
+/F1 10 Tf 1 0 0 1 84 560 Tm (- Up to 5,000 EUR: Finance Analyst.) Tj
+/F1 10 Tf 1 0 0 1 84 546 Tm (- Above 5,000 EUR and up to 25,000 EUR: Finance Manager.) Tj
+/F1 10 Tf 1 0 0 1 84 532 Tm (- Above 25,000 EUR and up to 100,000 EUR: Finance Director.) Tj
+/F1 10 Tf 1 0 0 1 84 518 Tm (- Above 100,000 EUR: Chief Financial Officer.) Tj
+/F1 10 Tf 1 0 0 1 84 504 Tm (- Above 500,000 EUR: Chief Financial Officer and Chief Operating Officer together.) Tj
+/F1 10 Tf 1 0 0 1 72 484 Tm (An invoice must not be split into smaller invoices to stay under a limit. Accounts) Tj
+/F1 10 Tf 1 0 0 1 72 470 Tm (Payable checks for split invoices from the same vendor within 30 days.) Tj
+/F2 12 Tf 1 0 0 1 72 442 Tm (3. Separation of duties) Tj
+/F1 10 Tf 1 0 0 1 72 424 Tm (The person who approves a payment must not be the person who raised the purchase order) Tj
+/F1 10 Tf 1 0 0 1 72 410 Tm (or the person who added the vendor to the system. The payment run is released by a) Tj
+/F1 10 Tf 1 0 0 1 72 396 Tm (second member of Accounts Payable.) Tj
+/F2 12 Tf 1 0 0 1 72 368 Tm (4. New vendors) Tj
+/F1 10 Tf 1 0 0 1 72 350 Tm (A vendor's first payment needs two approvals whatever the amount: the normal approver) Tj
+/F1 10 Tf 1 0 0 1 72 336 Tm (for that amount, and the Finance Manager. Bank details for a new vendor are confirmed by) Tj
+/F1 10 Tf 1 0 0 1 72 322 Tm (calling a phone number taken from the contract, not from the invoice.) Tj
+/F2 12 Tf 1 0 0 1 72 294 Tm (5. Changes to bank details) Tj
+/F1 10 Tf 1 0 0 1 72 276 Tm (A request to change a vendor's bank details is treated as suspicious until confirmed. It) Tj
+/F1 10 Tf 1 0 0 1 72 262 Tm (is confirmed by phone using the number already on file, and payments to that vendor are) Tj
+/F1 10 Tf 1 0 0 1 72 248 Tm (held for 5 working days after the change.) Tj
+/F2 12 Tf 1 0 0 1 72 220 Tm (6. Urgent payments) Tj
+/F1 10 Tf 1 0 0 1 72 202 Tm (A payment outside the weekly payment run needs approval one level above the normal) Tj
+/F1 10 Tf 1 0 0 1 72 188 Tm (approver.) Tj
+/F2 12 Tf 1 0 0 1 72 160 Tm (7. Month-end) Tj
+/F1 10 Tf 1 0 0 1 72 142 Tm (No vendor payments are released during the last 2 working days of the month, except) Tj
+/F1 10 Tf 1 0 0 1 72 128 Tm (payroll-related and tax payments.) Tj
+ET
+0.6 0.6 0.6 RG 0.5 w 72 58 m 523 58 l S
+BT 0.35 0.35 0.35 rg
+/F1 8 Tf 1 0 0 1 72 46 Tm (Confidential - Finance) Tj
+/F1 8 Tf 1 0 0 1 478 46 Tm (Page 1 of 2) Tj
+/F1 8 Tf 1 0 0 1 72 35 Tm (Uncontrolled when printed. The current version is on the intranet.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 768 >>
+stream
+0.09 0.26 0.49 rg 72 786 16 16 re f
+1 1 1 rg 76 790 8 8 re f
+0.09 0.26 0.49 rg 78 792 4 4 re f
+BT 0.09 0.26 0.49 rg
+/F2 13 Tf 1 0 0 1 94 789 Tm (ACMECORP) Tj
+0.35 0.35 0.35 rg
+/F1 9 Tf 1 0 0 1 491 790 Tm (Finance) Tj
+ET
+0.09 0.26 0.49 RG 0.8 w 72 778 m 523 778 l S
+BT 0 0 0 rg
+/F2 12 Tf 1 0 0 1 72 742 Tm (8. Exceptions) Tj
+/F1 10 Tf 1 0 0 1 72 724 Tm (Exceptions to these limits are approved by the Chief Financial Officer in writing and) Tj
+/F1 10 Tf 1 0 0 1 72 710 Tm (kept with the payment record.) Tj
+ET
+0.6 0.6 0.6 RG 0.5 w 72 58 m 523 58 l S
+BT 0.35 0.35 0.35 rg
+/F1 8 Tf 1 0 0 1 72 46 Tm (Confidential - Finance) Tj
+/F1 8 Tf 1 0 0 1 478 46 Tm (Page 2 of 2) Tj
+/F1 8 Tf 1 0 0 1 72 35 Tm (Uncontrolled when printed. The current version is on the intranet.) Tj
+ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000224 00000 n 
+0000000326 00000 n 
+0000000414 00000 n 
+0000000550 00000 n 
+0000004030 00000 n 
+0000004166 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R /Info 5 0 R >>
+startxref
+4985
+%%EOF

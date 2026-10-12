@@ -1,0 +1,131 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Title (Warehouse Incident SOP) /Author (AcmeCorp Operations) >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 3729 >>
+stream
+0.09 0.26 0.49 rg 72 786 16 16 re f
+1 1 1 rg 76 790 8 8 re f
+0.09 0.26 0.49 rg 78 792 4 4 re f
+BT 0.09 0.26 0.49 rg
+/F2 13 Tf 1 0 0 1 94 789 Tm (ACMECORP) Tj
+0.35 0.35 0.35 rg
+/F1 9 Tf 1 0 0 1 477 790 Tm (Operations) Tj
+ET
+0.09 0.26 0.49 RG 0.8 w 72 778 m 523 778 l S
+BT 0 0 0 rg
+/F2 17 Tf 1 0 0 1 72 742 Tm (Warehouse Incident SOP) Tj
+/F1 10 Tf 1 0 0 1 72 714 Tm (Document number: OPS-SOP-014) Tj
+/F1 10 Tf 1 0 0 1 72 700 Tm (Owner: Operations) Tj
+/F1 10 Tf 1 0 0 1 72 686 Tm (Version 7, effective 1 June 2026) Tj
+/F1 10 Tf 1 0 0 1 72 672 Tm (Audience: Operations) Tj
+/F2 12 Tf 1 0 0 1 72 644 Tm (1. Scope) Tj
+/F1 10 Tf 1 0 0 1 72 626 Tm (This procedure applies to every AcmeCorp warehouse. An incident is any event that) Tj
+/F1 10 Tf 1 0 0 1 72 612 Tm (injures a person, damages goods or equipment, or could have done so. Near misses are) Tj
+/F1 10 Tf 1 0 0 1 72 598 Tm (incidents.) Tj
+/F2 12 Tf 1 0 0 1 72 570 Tm (2. Immediate actions) Tj
+/F1 10 Tf 1 0 0 1 72 552 Tm (Section 2 is for the first person on the scene.) Tj
+/F1 10 Tf 1 0 0 1 72 532 Tm (1. Make the area safe. Stop nearby equipment and keep people away.) Tj
+/F1 10 Tf 1 0 0 1 72 518 Tm (2. If anyone is injured, call the site first aider on the internal emergency number 555.) Tj
+/F1 10 Tf 1 0 0 1 72 504 Tm (For a serious injury call the public emergency number first.) Tj
+/F1 10 Tf 1 0 0 1 72 490 Tm (3. Tell the shift supervisor at once.) Tj
+/F1 10 Tf 1 0 0 1 72 476 Tm (4. Do not move damaged goods or equipment unless they are a danger, so the scene can be) Tj
+/F1 10 Tf 1 0 0 1 72 462 Tm (recorded.) Tj
+/F2 12 Tf 1 0 0 1 72 434 Tm (3. Supervisor actions) Tj
+/F1 10 Tf 1 0 0 1 72 416 Tm (1. Take charge of the scene and confirm that Section 2 has been done.) Tj
+/F1 10 Tf 1 0 0 1 72 402 Tm (2. Take photographs of the area, the goods and any equipment involved.) Tj
+/F1 10 Tf 1 0 0 1 72 388 Tm (3. Collect the names of everyone who was present.) Tj
+/F1 10 Tf 1 0 0 1 72 374 Tm (4. Move damaged goods to the quarantine area and label them with the incident number.) Tj
+/F1 10 Tf 1 0 0 1 72 360 Tm (5. Decide the severity level using Section 4.) Tj
+/F2 12 Tf 1 0 0 1 72 332 Tm (4. Severity levels) Tj
+/F1 10 Tf 1 0 0 1 84 314 Tm (- Level 1: near miss, or damage under 1,000 EUR, with no injury.) Tj
+/F1 10 Tf 1 0 0 1 84 300 Tm (- Level 2: damage of 1,000 EUR or more, or an injury needing first aid only.) Tj
+/F1 10 Tf 1 0 0 1 84 286 Tm (- Level 3: an injury needing medical treatment, a fire, a chemical spill, or damage) Tj
+/F1 10 Tf 1 0 0 1 93 272 Tm (above 25,000 EUR.) Tj
+/F2 12 Tf 1 0 0 1 72 244 Tm (5. Reporting times) Tj
+/F1 10 Tf 1 0 0 1 84 226 Tm (- All levels: the supervisor files an incident report in the operations system within) Tj
+/F1 10 Tf 1 0 0 1 93 212 Tm (24 hours.) Tj
+/F1 10 Tf 1 0 0 1 84 198 Tm (- Level 2: the site manager is told before the end of the shift.) Tj
+/F1 10 Tf 1 0 0 1 84 184 Tm (- Level 3: the site manager and the Head of Operations are told within 1 hour, by) Tj
+/F1 10 Tf 1 0 0 1 93 170 Tm (phone. The area stays closed until the site manager reopens it.) Tj
+/F2 12 Tf 1 0 0 1 72 142 Tm (6. Forklift and equipment incidents) Tj
+/F1 10 Tf 1 0 0 1 72 124 Tm (Any equipment involved in an incident is taken out of service and tagged. It returns to) Tj
+/F1 10 Tf 1 0 0 1 72 110 Tm (service only after an inspection by maintenance. The operator does not drive again until) Tj
+/F1 10 Tf 1 0 0 1 72 96 Tm (the supervisor has spoken to them and recorded it.) Tj
+ET
+0.6 0.6 0.6 RG 0.5 w 72 58 m 523 58 l S
+BT 0.35 0.35 0.35 rg
+/F1 8 Tf 1 0 0 1 72 46 Tm (Confidential - Operations) Tj
+/F1 8 Tf 1 0 0 1 478 46 Tm (Page 1 of 2) Tj
+/F1 8 Tf 1 0 0 1 72 35 Tm (Uncontrolled when printed. The current version is on the intranet.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1286 >>
+stream
+0.09 0.26 0.49 rg 72 786 16 16 re f
+1 1 1 rg 76 790 8 8 re f
+0.09 0.26 0.49 rg 78 792 4 4 re f
+BT 0.09 0.26 0.49 rg
+/F2 13 Tf 1 0 0 1 94 789 Tm (ACMECORP) Tj
+0.35 0.35 0.35 rg
+/F1 9 Tf 1 0 0 1 477 790 Tm (Operations) Tj
+ET
+0.09 0.26 0.49 RG 0.8 w 72 778 m 523 778 l S
+BT 0 0 0 rg
+/F2 12 Tf 1 0 0 1 72 742 Tm (7. Damaged customer goods) Tj
+/F1 10 Tf 1 0 0 1 72 724 Tm (The supervisor records the order numbers of damaged goods in the incident report.) Tj
+/F1 10 Tf 1 0 0 1 72 710 Tm (Customer service is told the same day so that replacements can be arranged.) Tj
+/F2 12 Tf 1 0 0 1 72 682 Tm (8. Follow-up) Tj
+/F1 10 Tf 1 0 0 1 72 664 Tm (For Level 2 and Level 3 incidents the site manager holds a review within 5 working days) Tj
+/F1 10 Tf 1 0 0 1 72 650 Tm (and records the cause and the corrective actions. Actions are tracked in the operations) Tj
+/F1 10 Tf 1 0 0 1 72 636 Tm (system until closed.) Tj
+/F2 12 Tf 1 0 0 1 72 608 Tm (9. Records) Tj
+/F1 10 Tf 1 0 0 1 72 590 Tm (Incident reports are kept for 5 years.) Tj
+ET
+0.6 0.6 0.6 RG 0.5 w 72 58 m 523 58 l S
+BT 0.35 0.35 0.35 rg
+/F1 8 Tf 1 0 0 1 72 46 Tm (Confidential - Operations) Tj
+/F1 8 Tf 1 0 0 1 478 46 Tm (Page 2 of 2) Tj
+/F1 8 Tf 1 0 0 1 72 35 Tm (Uncontrolled when printed. The current version is on the intranet.) Tj
+ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000224 00000 n 
+0000000326 00000 n 
+0000000409 00000 n 
+0000000545 00000 n 
+0000004326 00000 n 
+0000004462 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R /Info 5 0 R >>
+startxref
+5800
+%%EOF

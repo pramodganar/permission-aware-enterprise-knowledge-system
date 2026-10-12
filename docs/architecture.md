@@ -152,7 +152,7 @@ The audit log is a table that the service only ever inserts into.
 
 ## Scale
 
-Not tested beyond the sample corpus. What I expect to change:
+Not tested beyond the AcmeCorp corpus. What I expect to change:
 
 - Allowed-ID lists get large. Passing tens of thousands of IDs per query stops being reasonable. At that point the filter should run inside the vector store: pgvector (permission join and vector search in one SQL query) or a vector database with metadata filtering.
 - Exact search becomes slow. A flat FAISS index compares against every vector. Larger corpora need an approximate index, and approximate search combined with filtering needs care so that filtered queries still return enough results.
@@ -178,7 +178,7 @@ tests/
   integration/
   security/       permission boundary and leakage tests
 data/
-  sample/         synthetic AcmeCorp documents (committed)
+  acmecorp/       the AcmeCorp documents and manifest (committed)
   uploads/        ingested files (not committed)
   index/          vector index and manifest (not committed)
 scripts/          seeding, index build, evaluation runs

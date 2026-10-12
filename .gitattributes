@@ -1,2 +1,6 @@
 # Store and check out text files with LF line endings on every platform.
 * text=auto eol=lf
+
+# Company documents in binary formats are stored as they are.
+*.pdf binary
+*.docx binary

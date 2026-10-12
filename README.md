@@ -12,13 +12,14 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization and document ingestion are built and tested. There is no chunking, retrieval or API yet, so documents can be stored with their permissions but nothing is searchable.
+Work in progress. Identity, authorization and document ingestion are built and tested, and the AcmeCorp company data can be loaded with one command. There is no chunking, retrieval or API yet, so documents can be stored with their permissions but nothing is searchable.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
 - [x] Users, departments, roles and authentication
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
+- [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
 - [ ] Chunking, embeddings and the vector index
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
@@ -76,6 +77,34 @@ Then set `APP_JWT_SECRET_KEY` in `.env`. It has no default and must be at least 
 ```
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
+
+## Company data
+
+`data/acmecorp` holds the company: 7 departments, 9 users and 17 documents. The documents are kept the way a company would have them: published policies and procedures as PDF, working papers as Word files, and engineering notes and a case system export as plain text. `manifest.json` lists them with each document's department, classification and named readers.
+
+AcmeCorp is fictional. I wrote every document for this project, and none of the people or figures are real.
+
+```
+python -m scripts.seed
+```
+
+This creates the tables and loads everything. Documents go through the normal ingestion pipeline, uploaded by the knowledge admin, so labels and grants are checked by the same code as any other upload. Running it again adds nothing and does not reset passwords.
+
+All seeded users share one password. Pass it with `--password`, or set `SEED_PASSWORD`; otherwise one is generated and printed once. The script refuses to run when `APP_ENVIRONMENT` is `production`.
+
+| User | Department | Role |
+|---|---|---|
+| alice@acmecorp.example | Engineering | employee |
+| bob@acmecorp.example | Finance | employee |
+| carol@acmecorp.example | HR | employee |
+| david@acmecorp.example | Sales | employee |
+| emma@acmecorp.example | Legal | employee |
+| frank@acmecorp.example | Operations | employee |
+| grace@acmecorp.example | Executive | executive |
+| henry@acmecorp.example | Engineering | knowledge admin |
+| irene@acmecorp.example | Legal | security reviewer |
+
+Three documents are company-wide, twelve belong to a department, and two are restricted: an HR case file that only Carol can read, and an acquisition paper readable by Grace and, for 60 days, by Emma.
 
 ## Checks
 

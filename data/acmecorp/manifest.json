@@ -1,0 +1,134 @@
+{
+  "departments": [
+    {"code": "engineering", "name": "Engineering"},
+    {"code": "finance", "name": "Finance"},
+    {"code": "hr", "name": "Human Resources"},
+    {"code": "sales", "name": "Sales"},
+    {"code": "legal", "name": "Legal"},
+    {"code": "operations", "name": "Operations"},
+    {"code": "executive", "name": "Executive"}
+  ],
+  "users": [
+    {"email": "alice@acmecorp.example", "full_name": "Alice Chen", "department": "engineering", "roles": ["employee"]},
+    {"email": "bob@acmecorp.example", "full_name": "Bob Martin", "department": "finance", "roles": ["employee"]},
+    {"email": "carol@acmecorp.example", "full_name": "Carol Nguyen", "department": "hr", "roles": ["employee"]},
+    {"email": "david@acmecorp.example", "full_name": "David Okafor", "department": "sales", "roles": ["employee"]},
+    {"email": "emma@acmecorp.example", "full_name": "Emma Rossi", "department": "legal", "roles": ["employee"]},
+    {"email": "frank@acmecorp.example", "full_name": "Frank Weber", "department": "operations", "roles": ["employee"]},
+    {"email": "grace@acmecorp.example", "full_name": "Grace Patel", "department": "executive", "roles": ["executive"]},
+    {"email": "henry@acmecorp.example", "full_name": "Henry Brooks", "department": "engineering", "roles": ["knowledge_admin"]},
+    {"email": "irene@acmecorp.example", "full_name": "Irene Shah", "department": "legal", "roles": ["security_reviewer"]}
+  ],
+  "uploaded_by": "henry@acmecorp.example",
+  "documents": [
+    {
+      "file": "documents/hr/leave-policy.pdf",
+      "title": "Leave Policy",
+      "department": "hr",
+      "classification": "general"
+    },
+    {
+      "file": "documents/legal/code-of-conduct.pdf",
+      "title": "Code of Conduct",
+      "department": "legal",
+      "classification": "general"
+    },
+    {
+      "file": "documents/finance/travel-and-expense-policy.pdf",
+      "title": "Travel and Expense Policy",
+      "department": "finance",
+      "classification": "general"
+    },
+    {
+      "file": "documents/engineering/deployment-runbook.txt",
+      "title": "Deployment Runbook",
+      "department": "engineering",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/engineering/payments-outage-postmortem.txt",
+      "title": "Payments Outage Postmortem",
+      "department": "engineering",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/finance/vendor-payment-approval-limits.pdf",
+      "title": "Vendor Payment Approval Limits",
+      "department": "finance",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/finance/headcount-budget-2027.docx",
+      "title": "Headcount Budget 2027",
+      "department": "finance",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/hr/performance-improvement-plan-process.docx",
+      "title": "Performance Improvement Plan Process",
+      "department": "hr",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/hr/salary-bands-2026.docx",
+      "title": "Salary Bands 2026",
+      "department": "hr",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/sales/discount-approval-policy.pdf",
+      "title": "Discount Approval Policy",
+      "department": "sales",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/legal/contract-data-retention-obligations.docx",
+      "title": "Contract Data Retention Obligations",
+      "department": "legal",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/legal/supplier-dispute-status.docx",
+      "title": "Supplier Dispute Status",
+      "department": "legal",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/operations/warehouse-incident-sop.pdf",
+      "title": "Warehouse Incident SOP",
+      "department": "operations",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/executive/executive-compensation-strategy.docx",
+      "title": "Executive Compensation Strategy 2027",
+      "department": "executive",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/executive/three-year-strategy.docx",
+      "title": "Three-Year Strategy 2027 to 2029",
+      "department": "executive",
+      "classification": "departmental"
+    },
+    {
+      "file": "documents/hr/case-file-2026-014.txt",
+      "title": "HR Case File 2026-014",
+      "department": "hr",
+      "classification": "restricted",
+      "grants": [
+        {"email": "carol@acmecorp.example"}
+      ]
+    },
+    {
+      "file": "documents/executive/project-falcon-acquisition-paper.docx",
+      "title": "Project Falcon Acquisition Paper",
+      "department": "executive",
+      "classification": "restricted",
+      "grants": [
+        {"email": "grace@acmecorp.example"},
+        {"email": "emma@acmecorp.example", "expires_in_days": 60}
+      ]
+    }
+  ]
+}

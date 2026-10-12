@@ -1,0 +1,51 @@
+Postmortem: Payments Outage of 18 August 2026
+Owner: Engineering, Payments team
+Status: Final
+Audience: Engineering
+
+1. Summary
+
+On 18 August 2026 the payments service rejected or timed out on most requests for 47 minutes, from 10:42 to 11:29 CET. About 3,900 customer payments failed during that time. No payment was charged twice and no data was lost.
+
+2. Impact
+
+- 47 minutes of degraded service.
+- Roughly 3,900 failed payment attempts. About 70 percent were retried successfully by customers within the hour.
+- 212 support tickets.
+
+3. Root cause
+
+The root cause was connection pool exhaustion in the payments service.
+
+A release at 10:31 changed the fraud scoring call from asynchronous to synchronous. Each payment request now held a database connection while it waited for the fraud scoring service. Under normal load this added about 40 ms and went unnoticed. At 10:42 the fraud scoring service slowed down, the waiting requests held their connections for several seconds each, and the pool of 50 connections ran out. New requests waited for a connection and then timed out.
+
+4. Why it was not caught
+
+- The canary stage passed, because the fraud scoring service was fast during those 15 minutes.
+- There was no alert on connection pool usage, only on error rate.
+- The load test in staging uses a stub for fraud scoring that always answers in 5 ms.
+
+5. Timeline (CET)
+
+10:31  Release reaches full rollout.
+10:42  Fraud scoring latency rises. Payment error rate starts to climb.
+10:46  Error rate alert pages the on-call engineer.
+10:58  On-call engineer suspects the database and fails over to the replica. No improvement.
+11:17  Connection pool exhaustion identified from service metrics.
+11:24  Manual rollback of the 10:31 release started.
+11:29  Error rate back to normal.
+
+6. What went well
+
+The rollback itself took 5 minutes. No duplicate charges occurred, because payment requests carry an idempotency key.
+
+7. What went badly
+
+It took 31 minutes from the page to the right diagnosis. The failover to the replica cost time and was not needed.
+
+8. Actions
+
+- Release the database connection before calling fraud scoring. Owner: Payments team. Done 20 August.
+- Add an alert when connection pool usage is above 80 percent for 2 minutes. Owner: Platform team. Done 25 August.
+- Add a 300 ms timeout and a fallback to the fraud scoring call. Owner: Payments team. Due 30 September.
+- Make the staging stub for fraud scoring return realistic latency. Owner: Platform team. Due 15 October.

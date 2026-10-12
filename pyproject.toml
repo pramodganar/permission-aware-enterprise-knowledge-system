@@ -39,10 +39,10 @@ select = [
 
 [tool.mypy]
 python_version = "3.11"
-files = ["app", "tests"]
+files = ["app", "scripts", "tests"]
 mypy_path = "tests"
 strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "acmecorp", "testapp", "files"]
+known-first-party = ["app", "scripts", "acmecorp", "testapp", "files"]

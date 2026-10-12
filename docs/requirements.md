@@ -122,7 +122,7 @@ Answers come with citations, and every query goes into an audit log.
 
 ### Performance and cost
 
-- NFR-1 Latency: aiming for p95 under 5 s end to end and under 500 ms for retrieval, on the sample data on my own machine. End to end mostly depends on the LLM provider, so the retrieval number is the one I control. First guess, not measured yet.
+- NFR-1 Latency: aiming for p95 under 5 s end to end and under 500 ms for retrieval, on the AcmeCorp data on my own machine. End to end mostly depends on the LLM provider, so the retrieval number is the one I control. First guess, not measured yet.
 - NFR-2 Filter overhead: the time added by the permission filter is measured separately, so I can say what the security costs in latency.
 - NFR-3 Cost per query: the context sent to the LLM is capped (number of chunks and total tokens), so one question can't run up an unbounded bill.
 
@@ -148,7 +148,7 @@ Answers come with citations, and every query goes into an audit log.
 
 ### Scale
 
-- NFR-15 The sample corpus is small. I'll note what would have to change at larger scale but I'm not claiming to have tested it.
+- NFR-15 The AcmeCorp corpus is small. I'll note what would have to change at larger scale but I'm not claiming to have tested it.
 
 ## Security requirements
 

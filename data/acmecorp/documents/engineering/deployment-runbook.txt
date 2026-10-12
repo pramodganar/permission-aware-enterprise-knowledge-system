@@ -1,0 +1,49 @@
+Deployment Runbook
+Owner: Engineering, Platform team
+Last reviewed: 14 September 2026
+Audience: Engineering
+
+1. Scope
+
+This runbook covers how a change reaches production for the services on the shared platform: orders, payments, catalogue and notifications. It also covers how a release is rolled back.
+
+2. Pipeline stages
+
+Every merge to the main branch starts the pipeline.
+
+1. Build: the service image is built and tagged with the commit hash.
+2. Test: unit and integration tests run. A failure stops the pipeline.
+3. Staging: the image is deployed to the staging environment and the smoke tests run against it.
+4. Canary: the image is deployed to production for 5 percent of traffic and observed for 15 minutes.
+5. Full rollout: traffic is moved to the new version in steps of 25 percent, with 5 minutes between steps.
+
+3. Deployment windows
+
+Production deployments run Monday to Thursday between 09:00 and 16:00 CET. There is a freeze on Fridays, at weekends and during the last 3 working days of each month, because of the finance month-end close. An emergency fix outside the window needs approval from the on-call engineering manager.
+
+4. How rollbacks work
+
+The pipeline rolls back automatically during the canary stage when either of these is true for 2 minutes:
+
+- the error rate of the new version is above 2 percent, or
+- the 95th percentile latency is more than 1.5 times that of the previous version.
+
+An automatic rollback moves all traffic back to the previous image and marks the release as failed. The previous image is always kept warm for 24 hours after a release, so moving traffic back takes under a minute.
+
+A manual rollback is started by the on-call engineer with:
+
+    deployctl rollback <service> --to previous
+
+Any engineer on the on-call rota may start a manual rollback without further approval. The reason must be recorded in the release channel afterwards.
+
+5. Database changes
+
+Schema migrations must be backward compatible with the previous application version, because a rollback does not undo a migration. A change that removes or renames a column is split over two releases: first stop using the column, then drop it in a later release.
+
+6. After a failed release
+
+The author opens an incident ticket, links the failed release, and does not redeploy until the cause is understood. Three failed releases of the same service in one week need a review with the platform team.
+
+7. Contacts
+
+On-call engineer: pager rotation "platform-primary". Questions: #platform-help.
