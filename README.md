@@ -20,7 +20,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
-- [ ] Chunking, embeddings and the vector index (documents are chunked and chunks can be embedded; there is no index yet)
+- [ ] Chunking, embeddings and the vector index (an index can be built in memory and searched within a list of allowed chunks; it is not saved yet)
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
 - [ ] API
@@ -130,6 +130,6 @@ pytest -m model
 
 ## Stack
 
-In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` model, NumPy, pydantic-settings, pytest, ruff, mypy.
+In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` model, FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
 
-Planned: PostgreSQL as the target database, FAISS, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.
+Planned: PostgreSQL as the target database, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.

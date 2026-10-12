@@ -78,7 +78,9 @@ The alternative was to copy permission metadata next to each vector. That is how
 
 ### Filter before the search, then check again after
 
-The retriever first gets the allowed chunk IDs for the user, then runs the similarity search only over those IDs. FAISS supports restricting a search to a set of IDs.
+The retriever first gets the allowed chunk IDs for the user, then runs the similarity search only over those IDs. FAISS supports restricting a search to a set of IDs, and the index is built so that this is the only way to search it: the list of allowed IDs is a required argument, and an empty list finds nothing.
+
+This part is built and tested at the level of the index. In 300 random trials no search returned an ID outside its list, and in 200 more the results matched a calculation done by hand. On the company data, 9 people asking 17 questions gives 153 searches, 107 of which ask for a document the person may not read. None returned a chunk of that document. The full retriever, with the second check against the authorization service, comes later.
 
 The simpler option is to search everything and drop unauthorized results afterwards. I didn't choose it for two reasons. Unauthorized chunks would take up places in the top K, so a user with narrow access gets fewer or worse results. And it puts unauthorized content one bug away from the context.
 

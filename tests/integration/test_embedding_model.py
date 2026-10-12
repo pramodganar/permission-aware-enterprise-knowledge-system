@@ -6,8 +6,9 @@ from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.authorization.service import readable_chunks
 from app.core.config import Settings
-from app.models import Chunk
+from app.models import Chunk, User
 from app.retrieval.embeddings import (
     Embedder,
     EmbeddingError,
@@ -16,6 +17,7 @@ from app.retrieval.embeddings import (
     embedding_text,
     load_embedder,
 )
+from app.retrieval.index import build_index
 from scripts.seed import seed
 
 pytestmark = pytest.mark.model
@@ -145,3 +147,30 @@ def test_each_question_finds_its_document_in_the_top_three(
         top_one += best[0] == expected
 
     assert top_one >= 15
+
+
+def test_the_bonus_question_with_the_real_model_and_a_restricted_search(
+    embedder: Embedder, db: Session, chunks: list[Chunk]
+) -> None:
+    # The incident the project starts from, end to end except for the LLM:
+    # the real model, the real index, and each person's own list of chunks.
+    index = build_index(db, embedder)
+    by_id = {chunk.id: chunk for chunk in chunks}
+    question = embed_question("How are executive bonuses calculated?", embedder)
+
+    def titles(name: str) -> list[str]:
+        user = db.scalars(select(User).where(User.email == f"{name}@acmecorp.example")).one()
+        allowed = set(db.scalars(readable_chunks(user).with_only_columns(Chunk.id)))
+        return [by_id[hit.chunk_id].document.title for hit in index.search(question, 5, allowed)]
+
+    david, grace = titles("david"), titles("grace")
+
+    assert grace[0] == "Executive Compensation Strategy 2027"
+    assert "Executive Compensation Strategy 2027" not in david
+    assert len(david) == 5
+    assert set(david) <= {
+        "Leave Policy",
+        "Code of Conduct",
+        "Travel and Expense Policy",
+        "Discount Approval Policy",
+    }

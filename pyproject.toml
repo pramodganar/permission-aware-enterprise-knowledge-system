@@ -47,5 +47,10 @@ mypy_path = "tests"
 strict = true
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+# FAISS ships no type information.
+module = ["faiss"]
+ignore_missing_imports = true
+
 [tool.ruff.lint.isort]
 known-first-party = ["app", "scripts", "acmecorp", "testapp", "files", "fakes"]
