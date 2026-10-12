@@ -34,6 +34,8 @@ def test_defaults_when_only_secret_is_set(monkeypatch: pytest.MonkeyPatch) -> No
     assert settings.database_url == "sqlite:///./data/app.db"
     assert settings.access_token_expire_minutes == 30
     assert (settings.chunk_max_characters, settings.chunk_overlap_characters) == (800, 120)
+    assert settings.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
+    assert (settings.embedding_batch_size, settings.embedding_offline) == (32, False)
 
 
 def test_environment_variable_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,6 +96,9 @@ def test_short_secret_error_does_not_echo_the_value(monkeypatch: pytest.MonkeyPa
         ("APP_CHUNK_MAX_CHARACTERS", "100000"),
         ("APP_CHUNK_OVERLAP_CHARACTERS", "-1"),
         ("APP_CHUNK_OVERLAP_CHARACTERS", "401"),
+        ("APP_EMBEDDING_MODEL", ""),
+        ("APP_EMBEDDING_BATCH_SIZE", "0"),
+        ("APP_EMBEDDING_OFFLINE", "sometimes"),
     ],
 )
 def test_invalid_values_fail(monkeypatch: pytest.MonkeyPatch, name: str, value: str) -> None:

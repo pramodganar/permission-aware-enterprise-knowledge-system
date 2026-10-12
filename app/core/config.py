@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     chunk_max_characters: int = Field(default=800, ge=100, le=8000)
     chunk_overlap_characters: int = Field(default=120, ge=0)
 
+    # The model that embeds chunks and questions. It runs locally. Changing it
+    # means embedding every chunk again.
+    embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2", min_length=1)
+    embedding_batch_size: int = Field(default=32, gt=0, le=1024)
+    # True loads the model from the local cache only and makes no network call.
+    embedding_offline: bool = False
+
     @model_validator(mode="after")
     def check_overlap(self) -> "Settings":
         # More than half would put most of every chunk into the next one.

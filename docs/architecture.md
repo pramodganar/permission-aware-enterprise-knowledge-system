@@ -167,8 +167,8 @@ app/
   core/           config, logging, exceptions, database session
   auth/           login, tokens, current user
   authorization/  access scope and permission checks
-  ingestion/      file validation, text extraction, chunking, embedding
-  retrieval/      scope query, vector search, reranking
+  ingestion/      file validation, text extraction, cleaning, chunking
+  retrieval/      embedding model, vector search, reranking
   rag/            context builder, prompt, LLM providers
   audit/          audit writer and reader
   models/         database models

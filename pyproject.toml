@@ -1,7 +1,10 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "tests"]
-addopts = "--strict-markers"
+# Tests marked "model" load the real embedding model, which takes about half a
+# minute. They are left out of a normal run. Run them with: pytest -m model
+addopts = "--strict-markers -m 'not model'"
+markers = ["model: loads the real embedding model (slow, needs the model downloaded)"]
 # A warning usually means a test is doing something it shouldn't.
 filterwarnings = ["error"]
 
@@ -45,4 +48,4 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "scripts", "acmecorp", "testapp", "files"]
+known-first-party = ["app", "scripts", "acmecorp", "testapp", "files", "fakes"]

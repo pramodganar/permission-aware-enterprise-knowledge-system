@@ -1,6 +1,6 @@
 # Chunking
 
-Status: Draft. The chunker and the removal of page headers and footers are implemented, and ingestion stores chunks with each document. Nothing is embedded yet.
+Status: Draft. The chunker and the removal of page headers and footers are implemented, ingestion stores chunks with each document, and chunks can be embedded. There is no vector index yet.
 Date: October 2026
 
 A document is too long to embed or to hand to the LLM as one piece, so it is split into chunks. This document says how, and why. The decision itself is recorded in [decision record 0011](adr/0011-pack-lines-into-bounded-chunks.md).
@@ -101,7 +101,18 @@ These are settings, not constants in the code, and the index manifest records th
 
 **Why 800.** The limit that matters is the embedding model's. Small sentence-transformers models read 256 to 512 tokens and silently ignore the rest, so text beyond the limit is in the chunk but not in the vector. At roughly four characters per token for English, 800 characters is about 200 tokens, which leaves room for the document title (see below) under a 256-token limit.
 
-Four characters per token is a rule of thumb, and I have not measured it on this text. Tables and numbers tokenize worse than prose. So the size is checked again where it matters: when a chunk is embedded, its real token count is compared with the model's limit, and a chunk over the limit is an error, not a silent truncation.
+Four characters per token is a rule of thumb. Tables and numbers tokenize worse than prose. So the size is checked again where it matters: when a chunk is embedded, its real token count is compared with the model's limit, and a chunk over the limit is an error, not a silent truncation.
+
+Measured later with the chosen model, `all-MiniLM-L6-v2`, on the 57 company chunks:
+
+| | Value |
+|---|---|
+| Characters per token, median | 4.73 |
+| Characters per token, lowest chunk | 3.88 (a Word table of salary figures) |
+| Tokens per chunk with its title, median | 156 |
+| Tokens per chunk with its title, largest | 196 of the 256 the model reads |
+
+So the rule of thumb was on the safe side for this text, and the largest chunk uses about three quarters of the limit. A test with the real model confirms the truncation: a text over the limit and the same text with one more sentence added at the end give the same vector.
 
 **Why characters and not tokens.** Counting tokens needs the embedding model's tokenizer, which would tie the chunker to one model and make it slow to test. Characters are exact, fast and model-independent. The price is the approximation above, covered by the check at embedding time.
 
@@ -198,5 +209,4 @@ A re-chunked document gets new chunk IDs. Once there is a vector index, its vect
 ## Open until measured
 
 - Whether 800 and 120 are good values.
-- Whether putting the title in front of the embedded text helps.
-- The real characters-per-token ratio for this corpus and the chosen model.
+- Whether putting the title in front of the embedded text helps. A first check says no difference: for 17 questions over the 57 chunks, the right document came first for 16 with the title and for 16 without. That set is far too small and too easy to decide it.
