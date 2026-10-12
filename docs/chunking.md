@@ -1,6 +1,6 @@
 # Chunking
 
-Status: Draft. The chunker and the removal of page headers and footers are implemented and tested. Chunks are not stored or embedded yet.
+Status: Draft. The chunker and the removal of page headers and footers are implemented, and ingestion stores chunks with each document. Nothing is embedded yet.
 Date: October 2026
 
 A document is too long to embed or to hand to the LLM as one piece, so it is split into chunks. This document says how, and why. The decision itself is recorded in [decision record 0011](adr/0011-pack-lines-into-bounded-chunks.md).
@@ -131,14 +131,17 @@ The title comes from the same document as the chunk, so it has the same audience
 
 | Field | Meaning |
 |---|---|
-| Document | The document version this chunk came from |
-| Position | 0, 1, 2 ... in reading order |
-| Text | The chunk's text |
-| Start and end | Character offsets into the document's stored text |
+| `document_id` | The document version this chunk came from |
+| `position` | 0, 1, 2 ... in reading order. Used once per document. |
+| `text` | The chunk's text |
+| `start_offset`, `end_offset` | Character offsets into the document's stored text |
+| `created_at` | When the chunk was written |
 
 The offsets make a chunk checkable: the document text from start to end must equal the chunk text. They also let a citation point at the exact passage.
 
-There is no department, classification or grant on a chunk. Those are read from the document ([decision record 0002](adr/0002-permissions-in-the-database.md)).
+There is no department, classification or grant on a chunk. Those are read from the document ([decision record 0002](adr/0002-permissions-in-the-database.md)). A test lists the columns of the table, so adding one is a deliberate act.
+
+Chunks are written in the same transaction as their document. A document is never stored without them, and a refused upload stores neither.
 
 ## Rules the chunker must keep
 
@@ -162,7 +165,9 @@ Chunks belong to one document version and are never edited.
 - The old chunks stop being searchable at once, because their document is no longer active and the access query only returns active documents. Nothing has to be cleaned up for that to be true.
 - Their vectors are removed at the next index rebuild.
 
-Chunking is deterministic, so chunks can be rebuilt from the stored document text at any time, for example after changing the size.
+Chunking is deterministic, so chunks can be rebuilt from the stored document text at any time, for example after changing the size. `rechunk_documents` does this for every active document. It compares the stored chunks with what the current settings give and only rewrites a document where they differ, so the chunk IDs of everything else stay the same. The seed script runs it, which also covers a database filled before chunking existed.
+
+A re-chunked document gets new chunk IDs. Once there is a vector index, its vectors for that document are stale and the index has to be rebuilt.
 
 ## What I considered and didn't choose
 

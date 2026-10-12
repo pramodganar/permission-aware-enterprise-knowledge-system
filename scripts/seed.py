@@ -34,7 +34,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import Base, create_db_engine, create_session_factory, utc_now
 from app.core.exceptions import AppError
 from app.core.logging_setup import configure_logging
-from app.ingestion.pipeline import Upload, ingest
+from app.ingestion.pipeline import Upload, ingest, rechunk_documents
 from app.models import Department, Document, DocumentStatus, Role, RoleCode, User
 
 COMPANY_DIR = Path(__file__).resolve().parent.parent / "data" / "acmecorp"
@@ -90,6 +90,7 @@ class SeedResult:
     users_created: int = 0
     documents_ingested: int = 0
     documents_skipped: int = 0
+    documents_rechunked: int = 0
 
 
 def load_manifest(company_dir: Path) -> Manifest:
@@ -121,6 +122,8 @@ def seed(
 
     for entry in manifest.documents:
         _seed_document(db, settings, uploader, entry, company_dir, result)
+    # Covers documents stored before chunking existed, or with other chunk settings.
+    result.documents_rechunked = rechunk_documents(db, uploader, settings)
     return result
 
 
@@ -258,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"users created:       {result.users_created}")
     print(f"documents ingested:  {result.documents_ingested}")
     print(f"documents skipped:   {result.documents_skipped} (already stored)")
+    print(f"documents rechunked: {result.documents_rechunked}")
     if generated and result.users_created:
         # Shown once and stored nowhere. It is not written to the logs.
         print(f"password for the new users: {password}")

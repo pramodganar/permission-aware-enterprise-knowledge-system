@@ -8,6 +8,9 @@ answer in two forms:
   what retrieval and the document list filter by, so unauthorized documents
   are never fetched in the first place.
 
+``readable_chunks`` is the second form again, one level down: the chunks of
+the documents a user may read. It has no rules of its own.
+
 The rules are the table in docs/authorization.md. Both functions start from
 "no" and only add access, so anything the rules don't mention is denied.
 """
@@ -18,7 +21,7 @@ from sqlalchemy import Select, and_, false, or_, select
 
 from app.authorization.permissions import Permission, permissions_for
 from app.core.database import utc_now
-from app.models import Classification, Document, DocumentGrant, DocumentStatus, User
+from app.models import Chunk, Classification, Document, DocumentGrant, DocumentStatus, User
 
 KNOWN_CLASSIFICATIONS = frozenset(classification.value for classification in Classification)
 
@@ -88,3 +91,13 @@ def readable_documents(user: User, now: datetime | None = None) -> Select[Docume
         Document.classification.in_(KNOWN_CLASSIFICATIONS),
         or_(*allowed),
     )
+
+
+def readable_chunks(user: User, now: datetime | None = None) -> Select[Chunk]:
+    """Return a query for every chunk this user may read.
+
+    A chunk is readable exactly when its document is. The decision is made by
+    ``readable_documents`` and nothing is added here, so the two can't drift.
+    """
+    documents = readable_documents(user, now).with_only_columns(Document.id)
+    return select(Chunk).where(Chunk.document_id.in_(documents))

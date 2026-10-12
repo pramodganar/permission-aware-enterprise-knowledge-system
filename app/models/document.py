@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.core.database import Base, UtcDateTime, utc_now
 
 if TYPE_CHECKING:
+    from app.models.chunk import Chunk
     from app.models.department import Department
     from app.models.user import User
 
@@ -77,6 +78,9 @@ class Document(Base):
     uploaded_by: Mapped["User"] = relationship()
     grants: Mapped[list["DocumentGrant"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
+    )
+    chunks: Mapped[list["Chunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="Chunk.position"
     )
 
     @validates("classification")

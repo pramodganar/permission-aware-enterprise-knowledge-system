@@ -1,6 +1,6 @@
 # Authorization
 
-Status: Draft. The role model and the document rules are designed and implemented in the authorization service. Nothing calls the service yet; retrieval and the API come later.
+Status: Draft. The role model and the document rules are designed and implemented in the authorization service. Ingestion uses it. Retrieval and the API come later.
 Date: October 2026
 
 Authentication answers "who is this?". This document is about the next question: "what may they do?". The requirements it implements are in [requirements.md](requirements.md), and the reasons for the wider design are in [architecture.md](architecture.md).
@@ -179,6 +179,8 @@ In both cases the old row stops being readable on the next request.
 - `can_read(user, document)` for one document that is already loaded.
 - `readable_documents(user)`, a database query for every document the user may read. Retrieval and the document list filter by this, so unauthorized documents are never fetched.
 
+`readable_chunks(user)` is built on the second form: the chunks whose document is in `readable_documents(user)`. It adds no rule of its own.
+
 Having the same rule in two forms is a risk, because they could drift apart. A test runs both over every user and document and requires the same answer.
 
 ### What follows from this
@@ -220,6 +222,8 @@ Managing a document does not require being able to read it. An admin looks a doc
 ### Chunks
 
 A chunk has no classification, department or grants of its own. It points to its document, and the decision is always made on the document. A chunk therefore can't be more open than the document it came from, and a change to the document applies to all its chunks at once.
+
+The chunks of a replaced or deleted document are kept, and are readable by nobody, because their document is no longer active. Tests cover each case on the chunk query: every persona, an expired grant, a retired document, a broken label and an inactive user.
 
 ## More decisions
 

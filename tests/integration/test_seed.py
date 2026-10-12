@@ -9,15 +9,15 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr, ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.auth.service import authenticate
-from app.authorization.service import can_read, readable_documents
+from app.authorization.service import can_read, readable_chunks, readable_documents
 from app.core.config import Settings
 from app.core.database import create_db_engine, create_session_factory, utc_now
 from app.core.exceptions import AuthenticationError
-from app.models import Classification, Department, Document, DocumentGrant, Role, User
+from app.models import Chunk, Classification, Department, Document, DocumentGrant, Role, User
 from scripts.seed import COMPANY_DIR, SeedError, load_manifest, main, seed
 
 PASSWORD = "seed-password-for-tests"
@@ -407,3 +407,41 @@ def test_command_reports_an_error_without_a_traceback(
     captured = capsys.readouterr()
     assert captured.err.startswith("error: the password must be")
     assert "Traceback" not in captured.err
+
+
+def test_every_document_is_stored_with_its_chunks(seeded: Session) -> None:
+    assert count(seeded, Chunk) == 57
+    for document in seeded.scalars(select(Document)):
+        assert 3 <= len(document.chunks) <= 4
+        for chunk in document.chunks:
+            assert chunk.text == document.content[chunk.start_offset : chunk.end_offset]
+
+
+def test_running_it_again_keeps_the_same_chunks(seeded: Session, settings: Settings) -> None:
+    before = seeded.scalars(select(Chunk.id).order_by(Chunk.id)).all()
+
+    result = seed(seeded, settings, PASSWORD)
+
+    assert result.documents_rechunked == 0
+    assert seeded.scalars(select(Chunk.id).order_by(Chunk.id)).all() == before
+
+
+def test_running_it_again_chunks_documents_that_have_none(
+    seeded: Session, settings: Settings
+) -> None:
+    # A database filled before chunking existed.
+    seeded.execute(delete(Chunk))
+    seeded.commit()
+    seeded.expire_all()
+
+    result = seed(seeded, settings, PASSWORD)
+
+    assert (result.documents_ingested, result.documents_rechunked) == (0, 17)
+    assert count(seeded, Chunk) == 57
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_READING))
+def test_each_person_reads_the_chunks_of_their_documents_only(seeded: Session, name: str) -> None:
+    chunks = seeded.scalars(readable_chunks(find_user(seeded, name))).all()
+
+    assert {chunk.document.title for chunk in chunks} == EXPECTED_READING[name]

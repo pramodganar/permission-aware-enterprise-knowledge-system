@@ -9,6 +9,10 @@ A document is never edited in place. Replacing one stores a new version as a
 new row and marks the old row as superseded, so what an earlier answer was
 based on can still be looked up. Deleting marks the row as deleted. In both
 cases the old row stops being readable at once.
+
+A document's chunks are written in the same transaction as the document, so a
+document is never stored without them. Chunks belong to one version and are
+kept when it is replaced or deleted. They stop being readable with it.
 """
 
 import hashlib
@@ -30,9 +34,10 @@ from app.authorization.permissions import Permission
 from app.core.config import Settings
 from app.core.database import utc_now
 from app.core.exceptions import InvalidInputError
+from app.ingestion.chunking import chunk_text
 from app.ingestion.cleaning import clean_text
 from app.ingestion.extractors import EXTRACTORS, base_name, extension_of, extract_text
-from app.models import Classification, Document, DocumentGrant, DocumentStatus, User
+from app.models import Chunk, Classification, Document, DocumentGrant, DocumentStatus, User
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +93,7 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
             DocumentGrant(user_id=reader.id, granted_by_id=user.id, expires_at=expires_at)
             for reader, expires_at in readers
         ],
+        chunks=_chunks_of(content, settings),
     )
     db.add(document)
     db.commit()
@@ -100,6 +106,7 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
             "department": department.code,
             "classification": classification.value,
             "characters": len(content),
+            "chunks": len(document.chunks),
             "grants": len(readers),
         },
     )
@@ -149,6 +156,7 @@ def replace_document(
             for grant in current.grants
             if grant.is_valid_at(moment)
         ],
+        chunks=_chunks_of(content, settings),
     )
     current.status = DocumentStatus.SUPERSEDED
     db.add(new_version)
@@ -162,6 +170,7 @@ def replace_document(
             "version": new_version.version,
             "user_id": user.id,
             "characters": len(content),
+            "chunks": len(new_version.chunks),
         },
     )
     return new_version
@@ -179,6 +188,48 @@ def delete_document(db: Session, user: User, document_id: int) -> None:
     document.status = DocumentStatus.DELETED
     db.commit()
     logger.info("document deleted", extra={"document_id": document.id, "user_id": user.id})
+
+
+def rechunk_documents(db: Session, user: User, settings: Settings) -> int:
+    """Bring the chunks of every active document in line with the current settings.
+
+    Needed after the chunk size or overlap is changed, and for documents stored
+    before chunking existed. A document whose chunks are already right is not
+    touched, so its chunk IDs stay the same. Returns how many were re-chunked.
+    """
+    ensure_permission(user, Permission.MANAGE_DOCUMENTS)
+
+    changed = 0
+    documents = db.scalars(select(Document).where(Document.status == DocumentStatus.ACTIVE))
+    for document in documents:
+        wanted = _chunks_of(document.content, settings)
+        if [_shape(chunk) for chunk in document.chunks] == [_shape(chunk) for chunk in wanted]:
+            continue
+        # Flushed in between: the old rows must be gone before new ones take
+        # the same positions.
+        document.chunks.clear()
+        db.flush()
+        document.chunks = wanted
+        changed += 1
+    db.commit()
+
+    logger.info("documents re-chunked", extra={"documents": changed, "user_id": user.id})
+    return changed
+
+
+def _chunks_of(content: str, settings: Settings) -> list[Chunk]:
+    return [
+        Chunk(
+            position=piece.position, start_offset=piece.start, end_offset=piece.end, text=piece.text
+        )
+        for piece in chunk_text(
+            content, settings.chunk_max_characters, settings.chunk_overlap_characters
+        )
+    ]
+
+
+def _shape(chunk: Chunk) -> tuple[int, int, int, str]:
+    return chunk.position, chunk.start_offset, chunk.end_offset, chunk.text
 
 
 def _read_file(db: Session, filename: str, data: bytes, settings: Settings) -> tuple[str, str]:

@@ -20,7 +20,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
-- [ ] Chunking, embeddings and the vector index (the chunker is written; chunks are not stored or embedded yet)
+- [ ] Chunking, embeddings and the vector index (documents are chunked and the chunks stored; nothing is embedded yet)
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
 - [ ] API
@@ -89,7 +89,7 @@ AcmeCorp is fictional. I wrote every document for this project, and none of the 
 python -m scripts.seed
 ```
 
-This creates the tables and loads everything. Documents go through the normal ingestion pipeline, uploaded by the knowledge admin, so labels and grants are checked by the same code as any other upload. Running it again adds nothing and does not reset passwords.
+This creates the tables and loads everything, 57 chunks included. Documents go through the normal ingestion pipeline, uploaded by the knowledge admin, so labels and grants are checked by the same code as any other upload. Running it again adds nothing and does not reset passwords.
 
 All seeded users share one password. Pass it with `--password`, or set `SEED_PASSWORD`; otherwise one is generated and printed once. The script refuses to run when `APP_ENVIRONMENT` is `production`.
 
