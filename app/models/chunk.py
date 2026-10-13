@@ -27,6 +27,9 @@ class Chunk(Base):
         CheckConstraint("position >= 0", name="position_not_negative"),
         CheckConstraint("start_offset >= 0", name="start_not_negative"),
         CheckConstraint("end_offset > start_offset", name="end_after_start"),
+        # A chunk ID is the key of its vector in the index. If SQLite reused the
+        # ID of a deleted chunk, an old vector would point at new text.
+        {"sqlite_autoincrement": True},
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

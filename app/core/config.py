@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # vectors of every document, restricted ones included, so this folder
     # needs the same protection as the database.
     index_directory: Path = Path("data/index")
+    # How many index versions to keep, the current one included, so a bad
+    # build can be rolled back.
+    index_keep_versions: int = Field(default=3, ge=1, le=100)
 
     @model_validator(mode="after")
     def check_overlap(self) -> "Settings":

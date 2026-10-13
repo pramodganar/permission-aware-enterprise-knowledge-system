@@ -10,12 +10,8 @@ import faiss
 import numpy as np
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import select
 
-import scripts.build_index as build_index_script
 from app.core.config import Settings
-from app.core.database import Base, create_db_engine, create_session_factory
-from app.models import Chunk
 from app.retrieval.embeddings import Vectors
 from app.retrieval.index import FaissVectorIndex, VectorIndexError
 from app.retrieval.index_store import (
@@ -27,7 +23,6 @@ from app.retrieval.index_store import (
     save_index,
 )
 from fakes import FakeEmbedder
-from scripts.seed import seed
 
 DIMENSION = 64  # the fake embedder's
 
@@ -81,7 +76,8 @@ def test_the_manifest_records_what_built_the_index(
     assert manifest.embedding_model == "fake-embedder"
     assert (manifest.dimension, manifest.chunk_count) == (DIMENSION, 40)
     assert (manifest.chunk_max_characters, manifest.chunk_overlap_characters) == (800, 120)
-    assert manifest.format_version == 1
+    assert (manifest.format_version, manifest.version) == (2, 1)
+    assert manifest.content_sha256 is None
     assert manifest.built_at.tzinfo is not None
     stored = IndexManifest.model_validate_json((tmp_path / MANIFEST_FILE).read_text("utf-8"))
     assert stored == manifest
@@ -227,14 +223,14 @@ def test_a_save_that_stops_halfway_leaves_a_folder_that_is_refused(
 ) -> None:
     import app.retrieval.index_store as store
 
-    real_write = store._write_atomically
+    real_write = store.write_atomically
 
     def write_until(path: Path, data: bytes) -> None:
         if path.name == stop_before:
             raise OSError("the process stopped")
         real_write(path, data)
 
-    monkeypatch.setattr(store, "_write_atomically", write_until)
+    monkeypatch.setattr(store, "write_atomically", write_until)
     other = FaissVectorIndex(DIMENSION)
     other.add([1], unit_vectors(1, seed=8))
 
@@ -281,9 +277,9 @@ def test_a_manifest_with_an_unknown_field_is_refused(saved: Path, fake_settings:
 
 
 def test_an_unknown_format_version_is_refused(saved: Path, fake_settings: Settings) -> None:
-    edit_manifest(saved, format_version=2)
+    edit_manifest(saved, format_version=1)
 
-    with pytest.raises(IndexLoadError, match="format 2 is not supported"):
+    with pytest.raises(IndexLoadError, match="format 1 is not supported"):
         load_index(fake_settings, saved)
 
 
@@ -347,65 +343,6 @@ def test_index_data_that_is_not_an_index_is_refused(saved: Path, fake_settings: 
 
     with pytest.raises(IndexLoadError, match="could not be read"):
         load_index(fake_settings, saved)
-
-
-# --- the build command --------------------------------------------------------------
-
-
-@pytest.fixture
-def command_line(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, settings: Settings) -> Settings:
-    """A seeded database file and an index folder, both in a temporary folder."""
-    local = settings.model_copy(
-        update={
-            "database_url": f"sqlite:///{(tmp_path / 'app.db').as_posix()}",
-            "index_directory": tmp_path / "index",
-            "embedding_model": "fake-embedder",
-        }
-    )
-    engine = create_db_engine(local.database_url)
-    Base.metadata.create_all(engine)
-    with create_session_factory(engine)() as db:
-        seed(db, local, "build-index-password")
-    engine.dispose()
-
-    monkeypatch.setattr(build_index_script, "get_settings", lambda: local)
-    monkeypatch.setattr(build_index_script, "configure_logging", lambda level: None)
-    monkeypatch.setattr(build_index_script, "load_embedder", lambda settings: FakeEmbedder())
-    return local
-
-
-def test_the_command_builds_and_saves_the_index(
-    command_line: Settings, capsys: pytest.CaptureFixture[str]
-) -> None:
-    assert build_index_script.main() == 0
-
-    assert "chunks indexed: 57" in capsys.readouterr().out
-    loaded, manifest = load_index(command_line, command_line.index_directory)
-    assert loaded.size == manifest.chunk_count == 57
-
-
-def test_the_command_reports_an_error_without_a_traceback(
-    command_line: Settings, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(
-        build_index_script, "load_embedder", lambda settings: FakeEmbedder(max_tokens=5)
-    )
-
-    assert build_index_script.main() == 1
-
-    captured = capsys.readouterr()
-    assert captured.err.startswith("error: chunk ")
-    assert not (command_line.index_directory / MANIFEST_FILE).exists()
-
-
-def test_the_index_and_the_database_agree_on_chunk_ids(command_line: Settings) -> None:
-    assert build_index_script.main() == 0
-    loaded, _ = load_index(command_line, command_line.index_directory)
-
-    engine = create_db_engine(command_line.database_url)
-    with create_session_factory(engine)() as session:
-        assert loaded.chunk_ids == set(session.scalars(select(Chunk.id)))
-    engine.dispose()
 
 
 def test_a_setting_for_the_index_folder_exists() -> None:

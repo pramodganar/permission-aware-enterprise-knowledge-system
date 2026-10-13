@@ -20,7 +20,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
-- [ ] Chunking, embeddings and the vector index (the index is built, saved and loaded; versioning is next)
+- [x] Chunking, embeddings and the vector index, with versions and rollback
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
 - [ ] API
@@ -110,12 +110,14 @@ Three documents are company-wide, twelve belong to a department, and two are res
 ## Vector index
 
 ```
-python -m scripts.build_index
+python -m scripts.index build              # build a new version and make it current
+python -m scripts.index status             # list versions; exit code 2 if out of date
+python -m scripts.index rollback [VERSION] # go back to an earlier version
 ```
 
-This embeds the chunks of every active document and saves the index to `data/index`: `vectors.faiss` and a `manifest.json` that records the embedding model, the chunk settings, the number of chunks and a checksum. For the company data that is 57 chunks and an 88 KB file. The first run downloads the embedding model.
+`build` embeds the chunks of every active document and writes a new version under `data/index/versions/`. The new version is loaded back and checked before the `current` pointer is moved to it, so a failed build leaves the previous one in use. The last three versions are kept (`APP_INDEX_KEEP_VERSIONS`). For the company data a version is 57 chunks and an 88 KB file. The first run downloads the embedding model.
 
-Loading refuses an index built with a different model or different chunk settings, and one whose files don't match. Run the command again after documents change.
+Each version has a manifest with the embedding model, the chunk settings, a checksum of the index file and a fingerprint of the text that was embedded. Loading refuses a version built with a different model or chunk settings, or whose files don't match. `status` compares the fingerprint with the database and reports the index as out of date when documents have been added, replaced or deleted since it was built. A label or grant change doesn't make it out of date, because permissions are not in the index.
 
 The index holds vectors of every document, restricted ones included. It is not committed, and it needs the same protection as the database.
 

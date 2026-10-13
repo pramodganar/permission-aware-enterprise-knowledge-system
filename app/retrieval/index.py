@@ -164,20 +164,29 @@ class FaissVectorIndex:
         return hits
 
 
-def build_index(db: Session, embedder: Embedder) -> FaissVectorIndex:
-    """Embed the chunks of every active document and return an index of them.
+def active_chunks(db: Session) -> list[Chunk]:
+    """Every chunk of every active document, in ID order.
 
     Chunks of replaced and deleted documents are left out. They could not be
     found anyway, since nobody's allowed list contains them, but there is no
     reason to keep their vectors.
     """
-    chunks = db.scalars(
-        select(Chunk)
-        .join(Document, Chunk.document_id == Document.id)
-        .where(Document.status == DocumentStatus.ACTIVE)
-        .order_by(Chunk.id)
-    ).all()
+    return list(
+        db.scalars(
+            select(Chunk)
+            .join(Document, Chunk.document_id == Document.id)
+            .where(Document.status == DocumentStatus.ACTIVE)
+            .order_by(Chunk.id)
+        )
+    )
 
+
+def build_index(db: Session, embedder: Embedder) -> FaissVectorIndex:
+    """Embed the chunks of every active document and return an index of them."""
+    return index_from_chunks(active_chunks(db), embedder)
+
+
+def index_from_chunks(chunks: Sequence[Chunk], embedder: Embedder) -> FaissVectorIndex:
     index = FaissVectorIndex(embedder.dimension)
     index.add([chunk.id for chunk in chunks], embed_chunks(chunks, embedder))
     logger.info(

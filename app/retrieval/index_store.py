@@ -3,9 +3,10 @@
 An index is two files in one folder:
 
     vectors.faiss   the index itself
-    manifest.json   what built it: the embedding model, the vector size, the
-                    chunk settings, the number of chunks and a checksum of
-                    vectors.faiss
+    manifest.json   what built it: the version, the embedding model, the
+                    vector size, the chunk settings, the number of chunks, a
+                    checksum of vectors.faiss and a fingerprint of the text
+                    that was embedded
 
 Loading checks the files against each other and against the current settings,
 and refuses on any mismatch. An index built by another model would still
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 INDEX_FILE = "vectors.faiss"
 MANIFEST_FILE = "manifest.json"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 
 class IndexLoadError(VectorIndexError):
@@ -46,17 +47,28 @@ class IndexManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     format_version: int
+    version: int = Field(ge=1)
     embedding_model: str
     dimension: int = Field(gt=0)
     chunk_max_characters: int
     chunk_overlap_characters: int
     chunk_count: int = Field(ge=0)
     index_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    # A fingerprint of every chunk ID and the exact text embedded for it. Used
+    # to tell whether the database has changed since the index was built. None
+    # when it isn't known, which counts as out of date.
+    content_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     built_at: datetime
 
 
 def save_index(
-    index: FaissVectorIndex, embedder: Embedder, settings: Settings, directory: Path
+    index: FaissVectorIndex,
+    embedder: Embedder,
+    settings: Settings,
+    directory: Path,
+    *,
+    version: int = 1,
+    content_sha256: str | None = None,
 ) -> IndexManifest:
     """Write the index and its manifest to ``directory``.
 
@@ -72,18 +84,20 @@ def save_index(
     data = index.to_bytes()
     manifest = IndexManifest(
         format_version=FORMAT_VERSION,
+        version=version,
         embedding_model=embedder.name,
         dimension=index.dimension,
         chunk_max_characters=settings.chunk_max_characters,
         chunk_overlap_characters=settings.chunk_overlap_characters,
         chunk_count=index.size,
         index_sha256=hashlib.sha256(data).hexdigest(),
+        content_sha256=content_sha256,
         built_at=utc_now(),
     )
 
     directory.mkdir(parents=True, exist_ok=True)
-    _write_atomically(directory / INDEX_FILE, data)
-    _write_atomically(
+    write_atomically(directory / INDEX_FILE, data)
+    write_atomically(
         directory / MANIFEST_FILE, (manifest.model_dump_json(indent=2) + "\n").encode()
     )
     logger.info(
@@ -147,7 +161,7 @@ def _read_manifest(directory: Path) -> IndexManifest:
         raise IndexLoadError("the index manifest can't be read") from None
 
 
-def _write_atomically(path: Path, data: bytes) -> None:
+def write_atomically(path: Path, data: bytes) -> None:
     """Write to a temporary file next to ``path``, then rename it into place."""
     temporary = path.with_name(f".{path.name}.tmp")
     with temporary.open("wb") as file:
