@@ -5,6 +5,7 @@ in the project root. Environment variables win over the file.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
@@ -43,6 +44,11 @@ class Settings(BaseSettings):
     embedding_batch_size: int = Field(default=32, gt=0, le=1024)
     # True loads the model from the local cache only and makes no network call.
     embedding_offline: bool = False
+
+    # Where the vector index and its manifest are saved. The index holds
+    # vectors of every document, restricted ones included, so this folder
+    # needs the same protection as the database.
+    index_directory: Path = Path("data/index")
 
     @model_validator(mode="after")
     def check_overlap(self) -> "Settings":

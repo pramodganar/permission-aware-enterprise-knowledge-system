@@ -1,5 +1,7 @@
 """The real embedding model. Slow, so left out of a normal run: pytest -m model"""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from pydantic import SecretStr
@@ -18,6 +20,7 @@ from app.retrieval.embeddings import (
     load_embedder,
 )
 from app.retrieval.index import build_index
+from app.retrieval.index_store import load_index, save_index
 from scripts.seed import seed
 
 pytestmark = pytest.mark.model
@@ -174,3 +177,20 @@ def test_the_bonus_question_with_the_real_model_and_a_restricted_search(
         "Travel and Expense Policy",
         "Discount Approval Policy",
     }
+
+
+def test_a_saved_index_loads_and_answers_like_the_one_in_memory(
+    embedder: Embedder, db: Session, chunks: list[Chunk], tmp_path: Path
+) -> None:
+    settings = Settings(_env_file=None, jwt_secret_key=SecretStr("x" * 64))
+    built = build_index(db, embedder)
+    manifest = save_index(built, embedder, settings, tmp_path)
+
+    loaded, loaded_manifest = load_index(settings, tmp_path)
+
+    assert loaded_manifest == manifest
+    assert manifest.dimension == 384
+    assert manifest.chunk_count == 57
+    for question in QUESTIONS:
+        vector = embed_question(question, embedder)
+        assert loaded.search(vector, 5, built.chunk_ids) == built.search(vector, 5, built.chunk_ids)

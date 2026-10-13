@@ -20,7 +20,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Authorization: roles, document classification, grants, and tests for the full access matrix
 - [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
-- [ ] Chunking, embeddings and the vector index (an index can be built in memory and searched within a list of allowed chunks; it is not saved yet)
+- [ ] Chunking, embeddings and the vector index (the index is built, saved and loaded; versioning is next)
 - [ ] Permission-aware retrieval
 - [ ] Answer generation with citations
 - [ ] API
@@ -106,6 +106,18 @@ All seeded users share one password. Pass it with `--password`, or set `SEED_PAS
 | irene@acmecorp.example | Legal | security reviewer |
 
 Three documents are company-wide, twelve belong to a department, and two are restricted: an HR case file that only Carol can read, and an acquisition paper readable by Grace and, for 60 days, by Emma.
+
+## Vector index
+
+```
+python -m scripts.build_index
+```
+
+This embeds the chunks of every active document and saves the index to `data/index`: `vectors.faiss` and a `manifest.json` that records the embedding model, the chunk settings, the number of chunks and a checksum. For the company data that is 57 chunks and an 88 KB file. The first run downloads the embedding model.
+
+Loading refuses an index built with a different model or different chunk settings, and one whose files don't match. Run the command again after documents change.
+
+The index holds vectors of every document, restricted ones included. It is not committed, and it needs the same protection as the database.
 
 ## Checks
 

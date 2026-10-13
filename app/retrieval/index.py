@@ -67,6 +67,33 @@ class FaissVectorIndex:
         self._index = faiss.IndexIDMap2(faiss.IndexFlatIP(dimension))
         self._ids: set[int] = set()
 
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "FaissVectorIndex":
+        """Rebuild an index from ``to_bytes``. Refuses anything but this kind of index."""
+        try:
+            raw = faiss.deserialize_index(np.frombuffer(data, dtype=np.uint8))
+        except Exception:
+            raise VectorIndexError("the index data could not be read") from None
+
+        # Another kind of index could search approximately, or by distance
+        # instead of similarity, and still look as if it worked.
+        if not isinstance(raw, faiss.IndexIDMap2):
+            raise VectorIndexError("the index is not keyed by chunk ID")
+        if not isinstance(faiss.downcast_index(raw.index), faiss.IndexFlatIP):
+            raise VectorIndexError("the index is not an exact inner-product index")
+
+        ids = [int(chunk_id) for chunk_id in faiss.vector_to_array(raw.id_map)]
+        if len(set(ids)) != len(ids) or any(chunk_id < 1 for chunk_id in ids):
+            raise VectorIndexError("the index has repeated or invalid chunk IDs")
+
+        index = cls(int(raw.d))
+        index._index = raw
+        index._ids = set(ids)
+        return index
+
+    def to_bytes(self) -> bytes:
+        return bytes(faiss.serialize_index(self._index))
+
     @property
     def size(self) -> int:
         return len(self._ids)
