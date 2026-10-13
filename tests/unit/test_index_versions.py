@@ -37,6 +37,7 @@ from app.retrieval.index_versions import (
     rollback_index,
 )
 from fakes import FakeEmbedder
+from logcheck import everything_logged
 from scripts.seed import seed
 
 GUIDE = "\n".join(
@@ -174,7 +175,7 @@ def test_publishing_is_logged_with_numbers_only(
 
     record = next(r for r in caplog.records if r.message == "index version published")
     assert (record.version, record.chunks) == (1, len(guide.chunks))  # type: ignore[attr-defined]
-    assert "on-call" not in caplog.text
+    assert "on-call" not in everything_logged(caplog)
 
 
 # --- the pointer ---------------------------------------------------------------------

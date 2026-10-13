@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # build can be rolled back.
     index_keep_versions: int = Field(default=3, ge=1, le=100)
 
+    # The longest question accepted, before it is looked at any further.
+    max_question_characters: int = Field(default=1000, ge=10, le=10_000)
+
     @model_validator(mode="after")
     def check_overlap(self) -> "Settings":
         # More than half would put most of every chunk into the next one.

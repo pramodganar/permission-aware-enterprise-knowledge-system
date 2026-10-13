@@ -36,6 +36,7 @@ def test_defaults_when_only_secret_is_set(monkeypatch: pytest.MonkeyPatch) -> No
     assert (settings.chunk_max_characters, settings.chunk_overlap_characters) == (800, 120)
     assert settings.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
     assert (settings.embedding_batch_size, settings.embedding_offline) == (32, False)
+    assert settings.max_question_characters == 1000
 
 
 def test_environment_variable_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,6 +100,8 @@ def test_short_secret_error_does_not_echo_the_value(monkeypatch: pytest.MonkeyPa
         ("APP_EMBEDDING_MODEL", ""),
         ("APP_EMBEDDING_BATCH_SIZE", "0"),
         ("APP_EMBEDDING_OFFLINE", "sometimes"),
+        ("APP_MAX_QUESTION_CHARACTERS", "5"),
+        ("APP_MAX_QUESTION_CHARACTERS", "100000"),
     ],
 )
 def test_invalid_values_fail(monkeypatch: pytest.MonkeyPatch, name: str, value: str) -> None:

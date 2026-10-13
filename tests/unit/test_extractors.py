@@ -9,6 +9,7 @@ from app.ingestion import extractors
 from app.ingestion.extractors import extract_docx, extract_pdf, extract_text, extract_txt
 from app.ingestion.pipeline import Upload, ingest
 from files import make_docx, make_encrypted_pdf, make_pdf, make_zip
+from logcheck import everything_logged
 
 EXE_HEADER = b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff"
 
@@ -395,5 +396,5 @@ def test_pdf_removal_is_logged_without_the_text(caplog: pytest.LogCaptureFixture
 
     record = next(r for r in caplog.records if "repeated page lines" in r.message)
     assert (record.pages, record.lines_per_page) == (2, 3)  # type: ignore[attr-defined]
-    assert "Secret" not in caplog.text
-    assert "Confidential" not in caplog.text
+    assert "Secret" not in everything_logged(caplog)
+    assert "Confidential" not in everything_logged(caplog)

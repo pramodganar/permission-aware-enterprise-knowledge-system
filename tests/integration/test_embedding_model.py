@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.authorization.service import readable_chunks
 from app.core.config import Settings
+from app.core.exceptions import InvalidInputError
 from app.models import Chunk, User
 from app.retrieval.embeddings import (
     Embedder,
@@ -21,6 +22,7 @@ from app.retrieval.embeddings import (
 )
 from app.retrieval.index import build_index
 from app.retrieval.index_store import load_index, save_index
+from app.retrieval.query import process_question
 from scripts.seed import seed
 
 pytestmark = pytest.mark.model
@@ -194,3 +196,24 @@ def test_a_saved_index_loads_and_answers_like_the_one_in_memory(
     for question in QUESTIONS:
         vector = embed_question(question, embedder)
         assert loaded.search(vector, 5, built.chunk_ids) == built.search(vector, 5, built.chunk_ids)
+
+
+def test_questions_are_processed_with_the_real_model(embedder: Embedder) -> None:
+    settings = Settings(_env_file=None, jwt_secret_key=SecretStr("x" * 64))
+
+    question = process_question("  How many days of annual\t leave do I get? ", settings, embedder)
+
+    assert question.text == "How many days of annual leave do I get?"
+    assert question.tokens == 12
+    assert question.vector.shape == (384,)
+
+
+def test_a_question_within_the_character_limit_can_still_be_too_long_for_the_model(
+    embedder: Embedder,
+) -> None:
+    # 1,000 characters of numbers is far more than 256 tokens.
+    settings = Settings(_env_file=None, jwt_secret_key=SecretStr("x" * 64))
+    question = ("68,000 92,000 " * 80)[:1000]
+
+    with pytest.raises(InvalidInputError, match="too long"):
+        process_question(question, settings, embedder)

@@ -21,6 +21,7 @@ from app.ingestion.pipeline import (
     replace_document,
 )
 from app.models import Chunk, Document, DocumentStatus
+from logcheck import everything_logged
 
 # Long enough for several chunks at the small sizes used here.
 GUIDE = "\n".join(
@@ -221,7 +222,7 @@ def test_the_chunk_count_is_logged_without_the_text(
 
     record = next(r for r in caplog.records if r.message == "document ingested")
     assert record.chunks == len(document.chunks)  # type: ignore[attr-defined]
-    assert "on-call engineer" not in caplog.text
+    assert "on-call engineer" not in everything_logged(caplog)
 
 
 # --- versions and deletion ----------------------------------------------------------------

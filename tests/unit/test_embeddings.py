@@ -22,6 +22,7 @@ from app.retrieval.embeddings import (
     load_embedder,
 )
 from fakes import FakeEmbedder
+from logcheck import everything_logged
 
 GUIDE = "\n".join(
     f"Step {number}. The on-call engineer checks item {number} before the release goes out."
@@ -272,7 +273,7 @@ def test_embedding_is_logged_with_counts_only(
     record = next(r for r in caplog.records if r.message == "chunks embedded")
     assert record.chunks == len(guide.chunks)  # type: ignore[attr-defined]
     assert record.model == "fake-embedder"  # type: ignore[attr-defined]
-    assert "on-call" not in caplog.text
+    assert "on-call" not in everything_logged(caplog)
 
 
 def test_the_fake_has_the_shape_of_a_real_embedder() -> None:

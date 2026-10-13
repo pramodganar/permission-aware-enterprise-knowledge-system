@@ -18,6 +18,7 @@ from app.retrieval.index import (
     build_index,
 )
 from fakes import FakeEmbedder
+from logcheck import everything_logged
 
 DIMENSION = 16
 
@@ -378,4 +379,4 @@ def test_building_is_logged_with_counts_only(
 
     record = next(r for r in caplog.records if r.message == "vector index built")
     assert record.chunks == len(guide.chunks)  # type: ignore[attr-defined]
-    assert "on-call" not in caplog.text
+    assert "on-call" not in everything_logged(caplog)
