@@ -15,6 +15,13 @@ chunks left have passed both checks.
 
 Both checks use the moment the scope was decided, so a grant that expires
 during the request is judged the same way by both.
+
+Last, the relevance gate. If the best chunk that passed both checks scores
+below ``min_score``, nothing here is about the question and nothing is
+returned, so the answer is "no information available" and the LLM is not
+called. The gate looks at the best chunk only, not at each one: measured on
+the company data, a per-chunk cut-off removes real answers that rank lower
+(docs/retrieval.md).
 """
 
 import logging
@@ -53,6 +60,11 @@ class Retrieval:
     chunks: tuple[RetrievedChunk, ...]
     # Hits removed by the second check. Expected to be 0 every time.
     dropped: int
+    # The best score among the chunks that passed both checks, None if there
+    # were none. Kept when the gate empties the result, to tune the threshold.
+    best_score: float | None = None
+    # True when chunks were found but the best was below the threshold.
+    below_threshold: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -65,8 +77,12 @@ def retrieve(
     user: User,
     question: ProcessedQuestion,
     limit: int,
+    min_score: float,
 ) -> Retrieval:
-    """Return the chunks closest to the question that this person may read, best first."""
+    """Return the chunks closest to the question that this person may read, best first.
+
+    Returns no chunks if the best of them scores below ``min_score``.
+    """
     scope = access_scope(db, user)
     hits = search_in_scope(index, scope, question, limit, now=scope.decided_at)
     if not hits:
@@ -106,8 +122,29 @@ def retrieve(
             "second check removed chunks the scope allowed",
             extra={"user_id": user.id, "dropped": dropped},
         )
+    # Judged only on chunks the person may read: a forbidden chunk's score
+    # must not decide whether they get an answer.
+    best_score = kept[0].score if kept else None
+    below_threshold = best_score is not None and best_score < min_score
+    if below_threshold:
+        kept = []
+
+    # The best score is logged so the threshold can be checked against real
+    # questions. It says how close the person's own documents came, nothing more.
     logger.info(
         "chunks retrieved",
-        extra={"user_id": user.id, "chunks": len(kept), "dropped": dropped},
+        extra={
+            "user_id": user.id,
+            "chunks": len(kept),
+            "dropped": dropped,
+            "best_score": None if best_score is None else round(best_score, 3),
+            "below_threshold": below_threshold,
+        },
     )
-    return Retrieval(user_id=user.id, chunks=tuple(kept), dropped=dropped)
+    return Retrieval(
+        user_id=user.id,
+        chunks=tuple(kept),
+        dropped=dropped,
+        best_score=best_score,
+        below_threshold=below_threshold,
+    )

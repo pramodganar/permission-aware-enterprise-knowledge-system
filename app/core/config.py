@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     # The longest question accepted, before it is looked at any further.
     max_question_characters: int = Field(default=1000, ge=10, le=10_000)
 
+    # How many chunks a question retrieves.
+    retrieval_top_k: int = Field(default=5, ge=1, le=100)
+    # If the best chunk scores below this, nothing is relevant and nothing is
+    # returned. A cosine similarity, so it only means something for the model
+    # it was measured with. See docs/retrieval.md.
+    retrieval_min_score: float = Field(default=0.35, ge=-1.0, le=1.0)
+
     @model_validator(mode="after")
     def check_overlap(self) -> "Settings":
         # More than half would put most of every chunk into the next one.

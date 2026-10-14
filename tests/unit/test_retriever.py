@@ -28,6 +28,9 @@ QUESTIONS = [
     "What acquisitions is the company considering?",
     "How are executive bonuses calculated?",
 ]
+# The lowest possible cosine similarity, so the relevance gate lets everything
+# through. The fake embedder's scores mean nothing; the gate has its own tests.
+NO_GATE = -1.0
 
 
 class Company:
@@ -46,8 +49,10 @@ class Company:
     def ask(self, text: str) -> ProcessedQuestion:
         return process_question(text, self.settings, self.embedder)
 
-    def retrieve(self, name: str, text: str, limit: int = 10) -> Retrieval:
-        return retrieve(self.db, self.index, self.user(name), self.ask(text), limit)
+    def retrieve(
+        self, name: str, text: str, limit: int = 10, min_score: float = NO_GATE
+    ) -> Retrieval:
+        return retrieve(self.db, self.index, self.user(name), self.ask(text), limit, min_score)
 
 
 @pytest.fixture
@@ -263,3 +268,85 @@ def test_retrieval_logs_counts_only(acme: Company, caplog: pytest.LogCaptureFixt
     assert "salary bands" not in logged.lower()
     for found in retrieval.chunks:
         assert found.text[:40] not in logged
+
+
+# --- the relevance gate -----------------------------------------------------------------
+
+
+def test_below_the_threshold_nothing_is_returned(acme: Company) -> None:
+    best = acme.retrieve("alice", QUESTIONS[0]).chunks[0].score
+
+    retrieval = acme.retrieve("alice", QUESTIONS[0], min_score=best + 0.001)
+
+    assert retrieval.is_empty
+    assert retrieval.below_threshold
+    assert retrieval.best_score == best
+
+
+def test_a_best_score_equal_to_the_threshold_passes(acme: Company) -> None:
+    best = acme.retrieve("alice", QUESTIONS[0]).chunks[0].score
+
+    retrieval = acme.retrieve("alice", QUESTIONS[0], min_score=best)
+
+    assert retrieval.chunks
+    assert not retrieval.below_threshold
+
+
+def test_the_gate_is_on_the_best_chunk_not_on_each_chunk(acme: Company) -> None:
+    # A real answer can rank fifth with a score under the threshold, while
+    # the best chunk is well above it. Measured in docs/retrieval.md.
+    everything = acme.retrieve("grace", QUESTIONS[3], 5)
+    best, weakest = everything.chunks[0].score, everything.chunks[-1].score
+    assert weakest < best
+
+    retrieval = acme.retrieve("grace", QUESTIONS[3], 5, min_score=(best + weakest) / 2)
+
+    assert retrieval.chunks == everything.chunks
+    assert retrieval.chunks[-1].score < (best + weakest) / 2
+
+
+def test_the_gate_only_looks_at_chunks_the_person_may_read(
+    acme: Company, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    david = acme.user("david")
+    scope = access_scope(acme.db, david)
+    forbidden = acme.document("HR Case File 2026-014").chunks[0].id
+    allowed = min(scope.chunk_ids)
+
+    # A forbidden chunk with a high score, as a faulty scope would let through.
+    def search(*_: object, **__: object) -> list[Hit]:
+        return [Hit(chunk_id=forbidden, score=0.9), Hit(chunk_id=allowed, score=0.1)]
+
+    monkeypatch.setattr(retriever_module, "search_in_scope", search)
+
+    retrieval = acme.retrieve("david", QUESTIONS[2], min_score=0.5)
+
+    # The 0.9 was someone else's document. David's best is 0.1, so no answer.
+    assert retrieval.dropped == 1
+    assert retrieval.best_score == 0.1
+    assert retrieval.below_threshold
+    assert retrieval.is_empty
+
+
+def test_an_empty_scope_is_not_below_the_threshold(acme: Company) -> None:
+    retrieval = acme.retrieve("henry", QUESTIONS[0], min_score=0.5)
+
+    assert retrieval.is_empty
+    assert retrieval.best_score is None
+    assert not retrieval.below_threshold
+
+
+def test_the_gate_is_logged_with_the_best_score(
+    acme: Company, caplog: pytest.LogCaptureFixture
+) -> None:
+    best = acme.retrieve("carol", QUESTIONS[1]).chunks[0].score
+
+    with caplog.at_level(logging.INFO):
+        retrieval = acme.retrieve("carol", QUESTIONS[1], min_score=0.99)
+
+    record = next(r for r in caplog.records if r.message == "chunks retrieved")
+    assert record.below_threshold is True  # type: ignore[attr-defined]
+    assert record.best_score == round(best, 3)  # type: ignore[attr-defined]
+    assert record.chunks == 0  # type: ignore[attr-defined]
+    assert retrieval.is_empty
+    assert "salary" not in everything_logged(caplog).lower()

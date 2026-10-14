@@ -64,7 +64,9 @@ class Company:
     def search(self, name: str, question: str, limit: int = 10) -> list[Chunk]:
         # The same path a question takes in the application.
         processed = process_question(question, self.settings, self.embedder)
-        retrieval = retrieve(self.db, self.index, self.user(name), processed, limit)
+        # No relevance gate: the fake embedder's scores mean nothing, and
+        # what is tested here is access, not relevance.
+        retrieval = retrieve(self.db, self.index, self.user(name), processed, limit, -1.0)
         self.dropped += retrieval.dropped
         return [self.chunks[found.chunk_id] for found in retrieval.chunks]
 
