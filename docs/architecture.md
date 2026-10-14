@@ -82,11 +82,13 @@ The retriever first gets the allowed chunk IDs for the user, then runs the simil
 
 This part is built and tested at the level of the index. In 300 random trials no search returned an ID outside its list, and in 200 more the results matched a calculation done by hand. On the company data, 9 people asking 17 questions gives 153 searches, 107 of which ask for a document the person may not read. None returned a chunk of that document.
 
-Those searches go through the same function the application uses, `search_in_scope`. It takes the person's access scope, not a list of IDs, so the allowed list can only come from the authorization service. It refuses a scope older than 60 seconds or dated in the future, does not touch the index for an empty scope, and checks every hit against the scope again. The second check against the authorization service, on each chunk's document, comes with the retriever.
+Those searches go through the retriever, `retrieve`, the same function the application uses. It works out the access scope and searches with `search_in_scope`, which takes the scope, not a list of IDs, so the allowed list can only come from the authorization service. The search refuses a scope older than 60 seconds or dated in the future, does not touch the index for an empty scope, and checks every hit against the scope again.
 
 The simpler option is to search everything and drop unauthorized results afterwards. I didn't choose it for two reasons. Unauthorized chunks would take up places in the top K, so a user with narrow access gets fewer or worse results. And it puts unauthorized content one bug away from the context.
 
 Step 5 above is a second check on the way out. It should never remove anything. If it does, that is logged as an error, because it means the first filter is wrong.
+
+The two checks are written differently on purpose. The scope is a SQL query (`readable_chunks`); the second check is the same rule in Python (`can_read`), run on each loaded chunk's document at the moment the scope was decided. A mistake in one is unlikely to be the same mistake in the other. Over the 153 searches above the second check removed nothing, so the two agree on the company data. A test that widens the scope to the whole company, as a bug in the query would, shows the second check removing the HR case file from David's results while the rest of his answer goes on.
 
 ### The token carries identity only
 

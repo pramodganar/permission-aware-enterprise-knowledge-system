@@ -2,7 +2,7 @@
 
 The index holds every chunk of the company, the restricted ones included.
 These tests run each person's questions against it the way the application
-does, through their access scope, and look at what comes back.
+does, through the retriever, and look at what comes back.
 
 The embedder is the fake one. What is tested is the restriction, not the
 quality of the ranking.
@@ -18,8 +18,7 @@ from app.core.config import Settings
 from app.models import Chunk, Document, User
 from app.retrieval.index import FaissVectorIndex, build_index
 from app.retrieval.query import process_question
-from app.retrieval.scope import access_scope
-from app.retrieval.search import search_in_scope
+from app.retrieval.retriever import retrieve
 from fakes import FakeEmbedder
 from scripts.seed import seed
 
@@ -56,16 +55,18 @@ class Company:
         self.embedder = FakeEmbedder()
         self.index: FaissVectorIndex = build_index(db, self.embedder)
         self.chunks = {chunk.id: chunk for chunk in db.scalars(select(Chunk))}
+        # Hits the second check removed, over every search in a test.
+        self.dropped = 0
 
     def user(self, name: str) -> User:
         return self.db.scalars(select(User).where(User.email == f"{name}@acmecorp.example")).one()
 
     def search(self, name: str, question: str, limit: int = 10) -> list[Chunk]:
         # The same path a question takes in the application.
-        scope = access_scope(self.db, self.user(name))
         processed = process_question(question, self.settings, self.embedder)
-        hits = search_in_scope(self.index, scope, processed, limit)
-        return [self.chunks[hit.chunk_id] for hit in hits]
+        retrieval = retrieve(self.db, self.index, self.user(name), processed, limit)
+        self.dropped += retrieval.dropped
+        return [self.chunks[found.chunk_id] for found in retrieval.chunks]
 
 
 @pytest.fixture
@@ -106,6 +107,19 @@ def test_no_search_returns_a_chunk_of_a_document_the_person_may_not_read(acme: C
     # document the person may not read.
     assert forbidden_searches == 107
     assert leaks == 0
+
+
+def test_the_scope_and_the_second_check_agree_on_every_search(acme: Company) -> None:
+    # The scope is a SQL query and the second check is the same rule in
+    # Python. Over every person and question they must never disagree.
+    searches = 0
+    for name in USERS:
+        for question in QUESTIONS:
+            acme.search(name, question, limit=50)
+            searches += 1
+
+    assert searches == 153
+    assert acme.dropped == 0
 
 
 @pytest.mark.parametrize("name", ["henry", "irene"])
