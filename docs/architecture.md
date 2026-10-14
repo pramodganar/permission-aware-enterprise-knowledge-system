@@ -80,7 +80,9 @@ The alternative was to copy permission metadata next to each vector. That is how
 
 The retriever first gets the allowed chunk IDs for the user, then runs the similarity search only over those IDs. FAISS supports restricting a search to a set of IDs, and the index is built so that this is the only way to search it: the list of allowed IDs is a required argument, and an empty list finds nothing.
 
-This part is built and tested at the level of the index. In 300 random trials no search returned an ID outside its list, and in 200 more the results matched a calculation done by hand. On the company data, 9 people asking 17 questions gives 153 searches, 107 of which ask for a document the person may not read. None returned a chunk of that document. The full retriever, with the second check against the authorization service, comes later.
+This part is built and tested at the level of the index. In 300 random trials no search returned an ID outside its list, and in 200 more the results matched a calculation done by hand. On the company data, 9 people asking 17 questions gives 153 searches, 107 of which ask for a document the person may not read. None returned a chunk of that document.
+
+Those searches go through the same function the application uses, `search_in_scope`. It takes the person's access scope, not a list of IDs, so the allowed list can only come from the authorization service. It refuses a scope older than 60 seconds or dated in the future, does not touch the index for an empty scope, and checks every hit against the scope again. The second check against the authorization service, on each chunk's document, comes with the retriever.
 
 The simpler option is to search everything and drop unauthorized results afterwards. I didn't choose it for two reasons. Unauthorized chunks would take up places in the top K, so a user with narrow access gets fewer or worse results. And it puts unauthorized content one bug away from the context.
 
@@ -147,6 +149,8 @@ The audit log is a table that the service only ever inserts into.
 |---|---|
 | Token invalid, expired, or user inactive | 401, nothing else runs |
 | Authorization or scope query errors | Request fails, no content returned (NFR-4) |
+| Vector search returns a chunk outside the scope | Request fails, error logged. The index can't be trusted for this search |
+| Access scope older than 60 seconds or dated in the future | Request fails. A scope belongs to one question |
 | Second check removes a chunk | Chunk dropped, error logged, request continues with the rest |
 | Index manifest doesn't match config | Service refuses to serve queries |
 | LLM provider down or times out | Q&A returns an error after limited retries; search still works (NFR-5) |
@@ -158,7 +162,7 @@ Not tested beyond the AcmeCorp corpus. What I expect to change:
 
 - Allowed-ID lists get large. Passing tens of thousands of IDs per query stops being reasonable. At that point the filter should run inside the vector store: pgvector (permission join and vector search in one SQL query) or a vector database with metadata filtering.
 - Exact search becomes slow. A flat FAISS index compares against every vector. Larger corpora need an approximate index, and approximate search combined with filtering needs care so that filtered queries still return enough results.
-- Scope lookups repeat. The access scope per user could be cached for a short time, at the cost of a delay on revocation equal to the cache lifetime.
+- Scope lookups repeat. One query per question. I chose not to cache scopes, and the search refuses one older than 60 seconds, because a cache delays every revocation by its lifetime. If the query becomes the bottleneck, I'd make it cheaper before I'd cache it.
 - Ingestion blocks the API. It would move to a background worker with a queue.
 
 ## Repository layout

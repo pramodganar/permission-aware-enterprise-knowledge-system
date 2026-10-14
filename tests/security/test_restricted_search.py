@@ -1,8 +1,8 @@
 """A vector search restricted to a user's chunks returns nobody else's.
 
 The index holds every chunk of the company, the restricted ones included.
-These tests run each person's questions against it with that person's list of
-readable chunks, and look at what comes back.
+These tests run each person's questions against it the way the application
+does, through their access scope, and look at what comes back.
 
 The embedder is the fake one. What is tested is the restriction, not the
 quality of the ranking.
@@ -13,11 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.authorization.document_access import revoke_access
-from app.authorization.service import can_read, readable_chunks
+from app.authorization.service import can_read
 from app.core.config import Settings
 from app.models import Chunk, Document, User
-from app.retrieval.embeddings import embed_question
 from app.retrieval.index import FaissVectorIndex, build_index
+from app.retrieval.query import process_question
+from app.retrieval.scope import access_scope
+from app.retrieval.search import search_in_scope
 from fakes import FakeEmbedder
 from scripts.seed import seed
 
@@ -48,8 +50,9 @@ QUESTIONS = {
 
 
 class Company:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, settings: Settings) -> None:
         self.db = db
+        self.settings = settings
         self.embedder = FakeEmbedder()
         self.index: FaissVectorIndex = build_index(db, self.embedder)
         self.chunks = {chunk.id: chunk for chunk in db.scalars(select(Chunk))}
@@ -57,20 +60,18 @@ class Company:
     def user(self, name: str) -> User:
         return self.db.scalars(select(User).where(User.email == f"{name}@acmecorp.example")).one()
 
-    def allowed_ids(self, name: str) -> set[int]:
-        query = readable_chunks(self.user(name)).with_only_columns(Chunk.id)
-        return set(self.db.scalars(query))
-
     def search(self, name: str, question: str, limit: int = 10) -> list[Chunk]:
-        vector = embed_question(question, self.embedder)
-        hits = self.index.search(vector, limit, self.allowed_ids(name))
+        # The same path a question takes in the application.
+        scope = access_scope(self.db, self.user(name))
+        processed = process_question(question, self.settings, self.embedder)
+        hits = search_in_scope(self.index, scope, processed, limit)
         return [self.chunks[hit.chunk_id] for hit in hits]
 
 
 @pytest.fixture
 def acme(db: Session, settings: Settings) -> Company:
     seed(db, settings, "restricted-search-password")
-    return Company(db)
+    return Company(db, settings)
 
 
 def test_the_index_holds_the_whole_company_including_restricted_documents(acme: Company) -> None:
