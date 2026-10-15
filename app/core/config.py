@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     # it was measured with. See docs/retrieval.md.
     retrieval_min_score: float = Field(default=0.35, ge=-1.0, le=1.0)
 
+    # A cross-encoder that reorders the chunks found, or None for no
+    # reranking. Off by default: on the company data it didn't change which
+    # document came first. See docs/retrieval.md.
+    reranker_model: str | None = Field(default=None, min_length=1)
+    # How many chunks the reranker chooses the top ones from.
+    rerank_candidates: int = Field(default=20, ge=1, le=100)
+
     @model_validator(mode="after")
     def check_overlap(self) -> "Settings":
         # More than half would put most of every chunk into the next one.

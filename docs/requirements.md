@@ -102,7 +102,7 @@ Answers come with citations, and every query goes into an audit log.
 ### Search and answers
 
 - FR-8: A user asks a question and gets back the most relevant chunks they are allowed to read (search).
-- FR-9: Retrieved chunks are reranked before use.
+- FR-9: Retrieved chunks can be reranked before use. Whether they are is decided by measuring it on the corpus (decision record 0012).
 - FR-10: The answer is generated only from the retrieved context (Q&A).
 - FR-11: Every answer lists the sources it used.
 - FR-12: If nothing the user can access answers the question, the system says so and doesn't guess.

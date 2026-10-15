@@ -11,11 +11,13 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.ingestion.pipeline import delete_document
 from app.models import Chunk, Classification, Document, User
+from app.retrieval import retriever as retriever_module
 from app.retrieval.filters import MAX_DEPARTMENTS, MAX_DOCUMENTS, SearchFilters, narrow_scope
-from app.retrieval.index import FaissVectorIndex, build_index
+from app.retrieval.index import FaissVectorIndex, Hit, build_index
 from app.retrieval.query import process_question
 from app.retrieval.retriever import Retrieval, retrieve
 from app.retrieval.scope import AccessScope, access_scope
+from app.retrieval.search import search_in_scope
 from fakes import FakeEmbedder
 from logcheck import everything_logged
 from scripts.seed import seed
@@ -384,3 +386,107 @@ def test_the_query_alone_only_looks_at_the_scope(acme: Company, name: str) -> No
     assert all(row[1] in scope.document_ids for row in recording.returned)
     if not scope.is_empty:
         assert recording.returned
+
+
+# --- filters and the relevance gate -----------------------------------------------------
+# The gate is judged on the best chunk the person may read, before the filter.
+# Otherwise a filter that removes the strong chunk leaves the one the person
+# asked for just under the threshold, which is what happened to Carol with the
+# real model (docs/retrieval.md).
+
+PLAN_QUESTION = "Which employees are on a performance improvement plan?"
+RESTRICTED = SearchFilters(classifications=frozenset({"restricted"}))
+
+
+def gated(acme: Company, name: str, filters: SearchFilters | None, min_score: float) -> Retrieval:
+    processed = process_question(PLAN_QUESTION, acme.settings, acme.embedder)
+    return retrieve(acme.db, acme.index, acme.user(name), processed, 5, min_score, filters=filters)
+
+
+def test_a_filter_does_not_push_a_relevant_question_under_the_threshold(acme: Company) -> None:
+    unfiltered = acme.retrieve("carol", PLAN_QUESTION, None)
+    filtered = acme.retrieve("carol", PLAN_QUESTION, RESTRICTED)
+    best_overall, best_filtered = unfiltered.chunks[0].score, filtered.chunks[0].score
+    assert best_filtered < best_overall
+    threshold = (best_overall + best_filtered) / 2
+
+    retrieval = gated(acme, "carol", RESTRICTED, threshold)
+
+    assert not retrieval.below_threshold
+    assert {c.document_title for c in retrieval.chunks} == {"HR Case File 2026-014"}
+    assert retrieval.best_score == best_overall
+
+
+def test_with_a_filter_the_gate_still_stops_an_irrelevant_question(acme: Company) -> None:
+    best_overall = acme.retrieve("carol", PLAN_QUESTION, None).chunks[0].score
+
+    retrieval = gated(acme, "carol", RESTRICTED, best_overall + 0.01)
+
+    assert retrieval.below_threshold
+    assert retrieval.is_empty
+
+
+def test_a_filter_that_leaves_nothing_gives_nothing(acme: Company) -> None:
+    executive = SearchFilters(departments=frozenset({"executive"}))
+
+    retrieval = gated(acme, "david", executive, NO_GATE)
+
+    assert retrieval.is_empty
+    assert retrieval.best_score is None
+
+
+def test_the_wider_gate_search_stays_inside_what_the_person_may_read(
+    acme: Company, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scopes: list[AccessScope] = []
+
+    def recording(*arguments: Any, **keywords: Any) -> Any:
+        scopes.append(arguments[1])
+        return search_in_scope(*arguments, **keywords)
+
+    monkeypatch.setattr(retriever_module, "search_in_scope", recording)
+    readable = acme.scope("carol")
+
+    gated(acme, "carol", RESTRICTED, NO_GATE)
+
+    assert len(scopes) == 2
+    filtered, wider = scopes
+    assert filtered.chunk_ids < readable.chunk_ids
+    assert wider.chunk_ids == readable.chunk_ids
+
+
+def test_without_a_filter_there_is_one_search(
+    acme: Company, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[object] = []
+
+    def recording(*arguments: Any, **keywords: Any) -> Any:
+        calls.append(arguments)
+        return search_in_scope(*arguments, **keywords)
+
+    monkeypatch.setattr(retriever_module, "search_in_scope", recording)
+
+    gated(acme, "carol", None, NO_GATE)
+
+    assert len(calls) == 1
+
+
+def test_a_forbidden_chunk_in_the_wider_search_does_not_open_the_gate(
+    acme: Company, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    falcon = acme.documents["Project Falcon Acquisition Paper"].chunks[0].id
+
+    def wider_search_with_a_fault(*arguments: Any, **keywords: Any) -> Any:
+        if arguments[3] == 1:  # the gate's search for the single best chunk
+            return [Hit(chunk_id=falcon, score=0.99)]
+        return search_in_scope(*arguments, **keywords)
+
+    monkeypatch.setattr(retriever_module, "search_in_scope", wider_search_with_a_fault)
+    filtered_best = acme.retrieve("carol", PLAN_QUESTION, RESTRICTED).chunks[0].score
+
+    retrieval = gated(acme, "carol", RESTRICTED, filtered_best + 0.01)
+
+    # Carol may not read the acquisition paper, so its 0.99 counts for nothing.
+    assert retrieval.dropped == 1
+    assert retrieval.below_threshold
+    assert retrieval.best_score == filtered_best

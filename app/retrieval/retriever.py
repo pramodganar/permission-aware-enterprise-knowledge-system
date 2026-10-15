@@ -16,14 +16,20 @@ chunks left have passed both checks.
 Both checks use the moment the scope was decided, so a grant that expires
 during the request is judged the same way by both.
 
-Last, the relevance gate. If the best chunk that passed both checks scores
-below ``min_score``, nothing here is about the question and nothing is
-returned, so the answer is "no information available" and the LLM is not
-called. The gate looks at the best chunk only, not at each one: measured on
-the company data, a per-chunk cut-off removes real answers that rank lower
-(docs/retrieval.md).
+Then the relevance gate. If the best chunk the person may read scores below
+``min_score``, nothing here is about the question and nothing is returned, so
+the answer is "no information available" and the LLM is not called. The gate
+looks at the best chunk only, not at each one: measured on the company data,
+a per-chunk cut-off removes real answers that rank lower. With filters, it
+looks at the best chunk in everything the person may read, not just in what
+the filter left: a filter can remove the strong chunk and leave the one the
+person asked for just under the threshold (docs/retrieval.md).
+
+Last, if a reranker is given, it reorders the chunks that are left. It never
+adds or removes one.
 """
 
+import dataclasses
 import logging
 from dataclasses import dataclass
 
@@ -32,10 +38,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.authorization.service import can_read
 from app.models import Chunk, Document, User
+from app.retrieval.embeddings import embedding_text
 from app.retrieval.filters import SearchFilters, narrow_scope
-from app.retrieval.index import VectorIndex
+from app.retrieval.index import Hit, VectorIndex
 from app.retrieval.query import ProcessedQuestion
-from app.retrieval.scope import access_scope
+from app.retrieval.reranking import Reranker, checked_scores
+from app.retrieval.scope import AccessScope, access_scope
 from app.retrieval.search import search_in_scope
 
 logger = logging.getLogger(__name__)
@@ -53,6 +61,8 @@ class RetrievedChunk:
     text: str
     # Cosine similarity to the question, from -1 to 1.
     score: float
+    # The reranker's score, if there was one. Its scale is the model's own.
+    rerank_score: float | None = None
 
 
 @dataclass(frozen=True)
@@ -61,8 +71,9 @@ class Retrieval:
     chunks: tuple[RetrievedChunk, ...]
     # Hits removed by the second check. Expected to be 0 every time.
     dropped: int
-    # The best score among the chunks that passed both checks, None if there
-    # were none. Kept when the gate empties the result, to tune the threshold.
+    # The score the relevance gate judged: the best among the chunks the
+    # person may read, before any filter. None if there were none. Kept when
+    # the gate empties the result, to tune the threshold.
     best_score: float | None = None
     # True when chunks were found but the best was below the threshold.
     below_threshold: bool = False
@@ -81,16 +92,83 @@ def retrieve(
     min_score: float,
     *,
     filters: SearchFilters | None = None,
+    reranker: Reranker | None = None,
+    candidates: int | None = None,
 ) -> Retrieval:
-    """Return the chunks closest to the question that this person may read, best first.
+    """Return up to ``limit`` chunks this person may read that answer the question, best first.
 
-    Returns no chunks if the best of them scores below ``min_score``.
-    ``filters`` can narrow the search within what the person may read.
+    Returns no chunks if the best chunk they may read scores below
+    ``min_score``. ``filters`` can narrow the search within what the person
+    may read. With a ``reranker``, the closest ``candidates`` chunks are
+    reordered by it and the best ``limit`` of them returned.
     """
-    scope = narrow_scope(db, access_scope(db, user), filters)
-    hits = search_in_scope(index, scope, question, limit, now=scope.decided_at)
+    searched = limit if reranker is None else (candidates or limit)
+    if searched < limit:
+        raise ValueError("candidates must be at least the limit")
+
+    readable = access_scope(db, user)
+    scope = narrow_scope(db, readable, filters)
+    hits = search_in_scope(index, scope, question, searched, now=scope.decided_at)
+    kept, dropped = _load_and_check(db, user, scope, hits)
+
+    # Judged only on chunks the person may read: a forbidden chunk's score
+    # must not decide whether they get an answer.
+    best_score = kept[0].score if kept else None
+    if kept and scope is not readable:
+        # A filter can remove the chunk that shows the question is relevant.
+        # The best chunk in everything the person may read decides instead.
+        top = search_in_scope(index, readable, question, 1, now=readable.decided_at)
+        best_of_readable, dropped_here = _load_and_check(db, user, readable, top)
+        dropped += dropped_here
+        if best_of_readable:
+            best_score = max(best_score or -1.0, best_of_readable[0].score)
+
+    if dropped:
+        # The scope and the second check disagree, so one of them is wrong.
+        # Counts only: which chunk it was would say what the person nearly saw.
+        logger.error(
+            "second check removed chunks the scope allowed",
+            extra={"user_id": user.id, "dropped": dropped},
+        )
+
+    below_threshold = best_score is not None and best_score < min_score
+    if below_threshold:
+        kept = []
+    elif reranker is not None and kept:
+        kept = _reranked(question, kept, reranker)
+    kept = kept[:limit]
+
+    # The best score is logged so the threshold can be checked against real
+    # questions. It says how close the person's own documents came, nothing more.
+    logger.info(
+        "chunks retrieved",
+        extra={
+            "user_id": user.id,
+            "chunks": len(kept),
+            "dropped": dropped,
+            "best_score": None if best_score is None else round(best_score, 3),
+            "below_threshold": below_threshold,
+            "reranked": reranker is not None and bool(kept),
+        },
+    )
+    return Retrieval(
+        user_id=user.id,
+        chunks=tuple(kept),
+        dropped=dropped,
+        best_score=best_score,
+        below_threshold=below_threshold,
+    )
+
+
+def _load_and_check(
+    db: Session, user: User, scope: AccessScope, hits: list[Hit]
+) -> tuple[list[RetrievedChunk], int]:
+    """Load the chunks found and keep those whose document passes ``can_read``.
+
+    Returns them in the order of the hits, and how many were dropped.
+    """
     if not hits:
-        return Retrieval(user_id=user.id, chunks=(), dropped=0)
+        return [], 0
 
     # The text comes from the database, not from the index, and the document
     # is loaded with its grants so that can_read sees the current rows.
@@ -117,38 +195,27 @@ def retrieve(
                 score=hit.score,
             )
         )
+    return kept, len(hits) - len(kept)
 
-    dropped = len(hits) - len(kept)
-    if dropped:
-        # The scope and the second check disagree, so one of them is wrong.
-        # Counts only: which chunk it was would say what the person nearly saw.
-        logger.error(
-            "second check removed chunks the scope allowed",
-            extra={"user_id": user.id, "dropped": dropped},
+
+def _reranked(
+    question: ProcessedQuestion, chunks: list[RetrievedChunk], reranker: Reranker
+) -> list[RetrievedChunk]:
+    """The same chunks, ordered by the reranker. Ties keep the search's order."""
+    # The reranker reads the chunk the way it was embedded: title, then text.
+    passages = [embedding_text(chunk.document_title, chunk.text) for chunk in chunks]
+
+    # A cross-encoder cuts what doesn't fit without saying so, and would judge
+    # a chunk by its start. Reranking is an improvement, not a requirement, so
+    # the search's order is kept rather than failing the question.
+    if any(reranker.count_tokens(question.text, p) > reranker.max_tokens for p in passages):
+        logger.warning(
+            "not reranked, a chunk and the question are too long for the reranker",
+            extra={"model": reranker.name},
         )
-    # Judged only on chunks the person may read: a forbidden chunk's score
-    # must not decide whether they get an answer.
-    best_score = kept[0].score if kept else None
-    below_threshold = best_score is not None and best_score < min_score
-    if below_threshold:
-        kept = []
+        return chunks
 
-    # The best score is logged so the threshold can be checked against real
-    # questions. It says how close the person's own documents came, nothing more.
-    logger.info(
-        "chunks retrieved",
-        extra={
-            "user_id": user.id,
-            "chunks": len(kept),
-            "dropped": dropped,
-            "best_score": None if best_score is None else round(best_score, 3),
-            "below_threshold": below_threshold,
-        },
-    )
-    return Retrieval(
-        user_id=user.id,
-        chunks=tuple(kept),
-        dropped=dropped,
-        best_score=best_score,
-        below_threshold=below_threshold,
-    )
+    scores = checked_scores(reranker.score(question.text, passages), len(chunks))
+    # sorted() is stable, so equal scores stay in the search's order.
+    order = sorted(range(len(chunks)), key=lambda i: -scores[i])
+    return [dataclasses.replace(chunks[i], rerank_score=scores[i]) for i in order]

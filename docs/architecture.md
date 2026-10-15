@@ -20,7 +20,7 @@ flowchart TD
         API --> AUTH[Authentication]
         AUTH --> AUTHZ[Authorization]
         AUTHZ --> RET[Retriever]
-        RET --> RER[Reranker]
+        RET --> RER[Reranker, optional]
         RER --> CTX[Context builder]
         API --> ING[Ingestion pipeline]
         API --> AUD[Audit writer]
@@ -44,7 +44,7 @@ flowchart TD
 | Authentication | Verifies the token and loads the user | Trust department or roles sent by the client |
 | Authorization | Turns a user into an access scope, and answers "can this user read this document?" | Be bypassed. It is the only place that decides access (SR-3). |
 | Retriever | Finds the most similar chunks inside the user's scope | Return a chunk outside the scope |
-| Reranker | Reorders the authorized candidates | See anything the retriever didn't return |
+| Reranker | Reorders the authorized candidates. Off by default (ADR 0012) | See anything the retriever didn't return |
 | Context builder | Picks chunks up to the size cap and formats them with source labels | Add content from anywhere else |
 | LLM provider | Writes the answer from the context | Make any access decision |
 | Ingestion pipeline | Validates, extracts, chunks, embeds and stores a document | Accept a document with no department or classification |
@@ -57,7 +57,7 @@ flowchart TD
 3. Authorization builds the user's access scope from their department and roles.
 4. The retriever asks the database which chunks fall inside that scope, embeds the question, and searches the vector index restricted to those chunk IDs.
 5. Each returned chunk is checked once more against the authorization service before it leaves the retriever.
-6. The reranker reorders the candidates.
+6. If reranking is on, the reranker reorders the candidates. It is off by default ([ADR 0012](adr/0012-reranking-off-by-default.md)).
 7. The context builder takes the top chunks up to the cap (NFR-3).
 8. If there are no chunks, or the best of them scores below the relevance threshold ([retrieval.md](retrieval.md)), the service returns the standard "no information available" response. The LLM is not called.
 9. Otherwise the LLM is called with the question and the context, and returns an answer with references to the chunks it used.

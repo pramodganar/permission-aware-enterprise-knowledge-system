@@ -137,7 +137,7 @@ To run only the security tests:
 pytest tests/security
 ```
 
-The tests that load the real embedding model are left out of a normal run, because loading it takes about half a minute. The first run downloads the model, about 90 MB.
+The tests that load the real models are left out of a normal run, because loading them takes about half a minute. The first run downloads the embedding model and the reranker, about 90 MB each.
 
 ```
 pytest -m model
@@ -145,6 +145,6 @@ pytest -m model
 
 ## Stack
 
-In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` model, FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
+In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
 
 Planned: PostgreSQL as the target database, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.
