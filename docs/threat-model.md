@@ -43,6 +43,8 @@ This lists what could go wrong, what the design does about it, how I intend to c
 | T4 | A second route skips the check: document list, citations, a debug or evaluation endpoint | One authorization module used by every route that returns content or titles | Call every endpoint as each persona | A future endpoint added without the check. Needs a test that fails when a new route has no authorization. |
 | T5 | A chunk ends up more open than its document | Chunks have no permissions of their own and read them from the document | Unit test on the scope query | None expected |
 | T6 | A cached result is served to a different user | No cache shared across users | Review, plus a test if a cache is ever added | None while there is no cache |
+| T26 | A search filter is used to reach outside the scope, for example filtering by another department or by a restricted document's ID | A filter is intersected with the access scope, so it can only remove chunks. The filter query also only looks at documents in the scope. Each guard is tested with the other removed. | Every person with 34 filters: the result is exactly the scope and the filter | None expected |
+| T27 | Filtering by document ID to find out which IDs exist | A document the person can't read and one that doesn't exist give identical results. Filter values are not logged. | Every unreadable document compared with a missing ID, for three people | Timing, not measured (as T11) |
 
 ### Pretending to be someone else
 

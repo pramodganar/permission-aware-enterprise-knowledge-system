@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.authorization.service import can_read
 from app.models import Chunk, Document, User
+from app.retrieval.filters import SearchFilters, narrow_scope
 from app.retrieval.index import VectorIndex
 from app.retrieval.query import ProcessedQuestion
 from app.retrieval.scope import access_scope
@@ -78,12 +79,15 @@ def retrieve(
     question: ProcessedQuestion,
     limit: int,
     min_score: float,
+    *,
+    filters: SearchFilters | None = None,
 ) -> Retrieval:
     """Return the chunks closest to the question that this person may read, best first.
 
     Returns no chunks if the best of them scores below ``min_score``.
+    ``filters`` can narrow the search within what the person may read.
     """
-    scope = access_scope(db, user)
+    scope = narrow_scope(db, access_scope(db, user), filters)
     hits = search_in_scope(index, scope, question, limit, now=scope.decided_at)
     if not hits:
         return Retrieval(user_id=user.id, chunks=(), dropped=0)

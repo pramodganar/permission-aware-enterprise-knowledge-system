@@ -6,11 +6,29 @@ How a question becomes a handful of chunks, and how the relevance threshold was 
 
 1. The question is checked, cleaned and embedded (`app/retrieval/query.py`).
 2. The person's access scope is worked out from the database (`scope.py`).
-3. The index is searched only inside that scope (`search.py`).
-4. The chunks found are loaded and each one's document is checked again with `can_read` (`retriever.py`).
-5. If the best of the remaining chunks scores below the threshold, nothing is returned.
+3. If the person asked for filters, the scope is narrowed to match them (`filters.py`).
+4. The index is searched only inside that scope (`search.py`).
+5. The chunks found are loaded and each one's document is checked again with `can_read` (`retriever.py`).
+6. If the best of the remaining chunks scores below the threshold, nothing is returned.
 
 The person gets up to `APP_RETRIEVAL_TOP_K` chunks (default 5), best first. An empty result, for whatever reason, leads to the same "no information available" answer, and the LLM is not called.
+
+## Filters
+
+A person can narrow a question to some departments, classifications or document IDs: "only HR documents", "only this policy". Values in one field are alternatives (finance or legal); different fields must all hold (finance, and general).
+
+A filter is input from the person, so it is treated like the question: it can only take chunks away from their scope, never add any. Two things make sure of that, and either one alone would be enough:
+
+- The filter query only looks at documents already in the scope.
+- Its result is intersected with the scope's chunk IDs.
+
+A test removes each guard in turn and checks the other still holds, because a test of the overall result alone can't tell if one of them is missing.
+
+Asking for something you may not read is not an error. Filtering by another department's document, or by the executive department, gives exactly the same empty result as filtering by an ID or a department that doesn't exist. Otherwise a filter would be a way to find out which documents exist. Filter values are not logged, only which kinds of filter were used, because "document 16" or "hr" says what the person was looking for.
+
+Filters can also improve results for people who can read a lot. Grace asking about bonuses with an HR filter gets five HR chunks; the executive paper, which matches better, doesn't take any of the places.
+
+Limits: up to 20 departments and 50 document IDs. An empty list is refused rather than guessed at, since it could mean "no filter" or "nothing".
 
 ## The relevance threshold
 
