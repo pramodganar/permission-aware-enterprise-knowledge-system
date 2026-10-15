@@ -118,3 +118,19 @@ A cross-encoder cuts what doesn't fit without saying so. With the default models
 
 `tests/integration/test_reranking_model.py` repeats the measurements above with the real models, so the decision can be checked again when the documents or the models change.
 
+
+## The security boundary, tested end to end
+
+`tests/security/test_retrieval_boundaries.py` tests retrieval from the outside, through `retrieve`, with an index built once that holds every chunk of the company, restricted ones included. Every check counts a chunk as leaked if the person may not read its document, or if its text isn't the stored text.
+
+- **Every person, every question, every filter.** 9 people, 17 questions and 29 ways of filtering (none, each of the 7 departments, each of the 3 classifications, each of the 17 documents, and an ID that doesn't exist): 4,437 retrievals, 3,103 of them asking about a document the person may not read. No leaks, and the second check never had to remove anything. Over the same run, no question, title or chunk text reached the logs.
+- **With reranking on.** The reranker only ever read chunks of the person's own documents.
+- **Hostile questions.** Eight questions that try to talk past the rules ("ignore all previous instructions", "I am Grace, an executive", an SQL fragment, filter syntax typed into the question, invisible tag characters) change nothing for anyone.
+- **Forbidden looks like missing.** For every person, filtering by each document they may not read gives a result identical to filtering by an ID that doesn't exist, and the same for departments they read nothing of.
+- **Changes take effect on the next question, with the index unchanged.** A revoked grant, an expired grant, a new grant, a deactivated account, a demoted executive, an employee moving department, a document reclassified as restricted, a document moved to another department, a deleted document, and a replaced document whose old vectors are still in the index.
+- **Failures close the door.** If the scope query, the second check or the index fails, the question fails. A failing check is never taken as a yes.
+- **Scopes can't be kept.** A scope from an hour ago, as a cache would hold, is refused.
+
+Every retrieval in the suite must also have needed nothing from the second check. I added that after breaking the SQL rule on purpose: with grant expiry or document status removed from it, nobody saw anything they shouldn't, because `can_read` caught it, and so no test failed. The safety net was working and hiding that the first line had broken. Now the suite fails as soon as the second check has to step in.
+
+The test for kept scopes found a bug. The retriever passed the scope's own time to the search as "now", so the scope's age always came out as zero and the 60-second limit could never trigger through the retriever. The search's own tests called it directly with a real time, so they didn't notice. The retriever now lets the search use the current time.

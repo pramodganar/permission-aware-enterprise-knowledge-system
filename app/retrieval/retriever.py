@@ -108,7 +108,9 @@ def retrieve(
 
     readable = access_scope(db, user)
     scope = narrow_scope(db, readable, filters)
-    hits = search_in_scope(index, scope, question, searched, now=scope.decided_at)
+    # No clock is passed: the search checks the scope's age against the real
+    # time, so a scope kept from an earlier question is refused.
+    hits = search_in_scope(index, scope, question, searched)
     kept, dropped = _load_and_check(db, user, scope, hits)
 
     # Judged only on chunks the person may read: a forbidden chunk's score
@@ -117,7 +119,7 @@ def retrieve(
     if kept and scope is not readable:
         # A filter can remove the chunk that shows the question is relevant.
         # The best chunk in everything the person may read decides instead.
-        top = search_in_scope(index, readable, question, 1, now=readable.decided_at)
+        top = search_in_scope(index, readable, question, 1)
         best_of_readable, dropped_here = _load_and_check(db, user, readable, top)
         dropped += dropped_here
         if best_of_readable:
