@@ -46,7 +46,7 @@ The rest of the code relies on rules 2 and 3. `NOT_IN_SOURCES` becomes the same 
 
 **Versioned.** The prompt has a version, `1`, which will be recorded with every answer and every evaluation run, so a change in answers can be traced to a change in instructions.
 
-**Not yet known:** whether a real model follows these instructions, in particular rule 2 on a related but unanswered question. That is measured once a provider is connected, not assumed.
+Whether real models follow these instructions was measured, not assumed: see [Answering](#answering).
 
 ## Calling the model
 
@@ -72,11 +72,11 @@ The rest of the code relies on rules 2 and 3. `NOT_IN_SOURCES` becomes the same 
 |---|---|---|---|
 | `none` (default) | Nowhere. Questions get search results but no answers. | | |
 | `ollama` | Stays on this machine | Free, no limits | About a minute per answer (measured, below) |
-| `groq` | Groq's servers | Free tier with daily limits | Fast; not measured here yet |
+| `groq` | Groq's servers | Free tier with daily limits | About a second per answer (measured, below) |
 
 The default is `none`, so nothing is sent anywhere until someone chooses to. With `ollama`, no document text leaves the machine at all, which is the strongest answer to SR-13. With `groq`, the prompt, which is company text, goes to Groq; for the fictional AcmeCorp documents that's acceptable, for a real company it would be a decision for whoever owns the data.
 
-Every request asks for `temperature` 0, so the same question and sources give the same answer, which evaluation needs.
+Every request asks for `temperature` 0, so the same question and sources should give the same answer, which evaluation needs. It isn't a guarantee: gpt-oss on Groq once returned an empty answer to a question it answered normally in a later run.
 
 ### Measured with Ollama
 
@@ -91,3 +91,45 @@ The 3 was checked against llama3.1's own count on four real prompts: 3.96 to 4.4
 ### Errors
 
 Timeouts, refused connections (Ollama not running), 429 and 5xx answers are worth retrying. Other 4xx answers are not. The body of an error response is never read into a message, because it can echo the request. A reply in the wrong form is a failure, not an empty answer.
+
+## Answering
+
+`app/rag/answer.py` puts the steps together, in the only order they can run in: the question is checked and embedded, the chunks the person may read are retrieved, the context is built from those alone, and only then is the model asked. There is no other path to the model, so it is never given anything the person may not read.
+
+**Two ways to no answer, one response.** When nothing the person may read is relevant, the model isn't called. When the model replies `NOT_IN_SOURCES`, its reply is thrown away. Both give the person the same fixed "no information available" message, so they can't tell one from the other, and there's nothing to tell: either way there is nothing to show them. Which one it was stays on the answer, for the audit log and for evaluation, never in the response. A refusal by the provider's own safety system is a third reason with the same message.
+
+**The marker is matched anywhere in the reply**, in any case, with spaces or underscores. A model that writes "NOT_IN_SOURCES, but the limit is usually 150 EUR" has said the sources don't answer it and then answered from somewhere else, which is the one thing it mustn't do. A reply that only uses the word "sources" is still an answer; tests cover both.
+
+**A cut-off answer is marked, not hidden.** An answer that stopped at the length cap is returned with `cut_off` set, so the interface can say the rest is missing. What it says up to there came from the sources. An empty reply is a failure (503), not an answer.
+
+**Logged:** outcome, reason, number of sources, whether it was cut off, and the milliseconds for retrieval and for the model separately (NFR-8). Never the question, the answer or a title.
+
+### Do the models follow the rules?
+
+Measured on 42 questions, each asked by a real AcmeCorp person:
+
+- **22 answerable**: the person may read the document that answers it.
+- **10 they may not have answered**: the answer is in a document they can't read.
+- **10 related but unanswered**: near a document they may read, but no document answers it, such as "How do I roll back a mobile app release?" against a runbook about services, or "What discount can I give a government customer?" against a discount policy that never mentions government.
+
+The relevance gate stopped 7 of the 10 forbidden questions and 1 of the 10 related ones before any model was asked. The rest went to the model:
+
+| | gpt-oss-20b on Groq, default reasoning | gpt-oss-20b, low reasoning | llama3.1 8B on Ollama (15 of the questions) |
+|---|---|---|---|
+| Answerable questions answered | 21 of 22 | 21 of 22 | 4 of 5 |
+| Related questions refused with `NOT_IN_SOURCES` | 8 of 9 | 7 of 9 | 8 of 9 |
+| Forbidden questions that reached it, refused or answered from allowed text | 3 of 3 | 3 of 3 | 1 of 1 |
+| Marker written exactly as asked | every time | every time | every time |
+| Cut off at 600 tokens | 2 | 0 | 0 |
+| Seconds per answer | about 1 | about 1 | 2 to 61 |
+
+What the numbers hide:
+
+- **The one answerable "miss" is right.** Every model said `NOT_IN_SOURCES` to Carol's "Which employees are on a performance improvement plan?". The case-file chunk she got has the plan's notes, not the employee number, which is in a chunk that didn't make the top five. The model correctly said what it was given doesn't answer the question. That is a retrieval limit, for evaluation in phase 11.
+- **The one related question every model answered** is "What is our customer data retention design?". There's no design document, and the models described the retention obligations as one. Nothing in the answer is made up, but it answers a slightly different question. This is the known limit from [retrieval](retrieval.md#what-the-threshold-cant-do), now measured at the model too.
+- **Low reasoning stretches.** It answered the mobile-app question with the runbook's service rollback command, which the runbook doesn't say applies to apps. Default reasoning and the local model both refused it. So the Groq preset keeps the default.
+- **Grace's "Who is on a performance improvement plan?"** was answered from the plan process document she may read: only the employee, the manager, the department head and HR know. True, cited and not from the case file she can't read.
+- **Reasoning counts against the cap.** gpt-oss reasons before answering, and those tokens count towards `APP_LLM_MAX_OUTPUT_TOKENS`. At 600, the two longest answers were cut off; at 1,000 they finished at 610 and 674 tokens, and the government question was still refused. The local model's longest answer was 105 tokens. So the default stays 600, and `.env.example` says to use 1,000 with Groq.
+- **Citations come in three spellings**: `[S1]`, `[ S1 ]` and `【S1】`, the last from gpt-oss. With default reasoning 1 of 23 answers had none, with low reasoning 3 of 24. Both are for the citation step.
+
+`tests/integration/test_local_llm.py` asks the local model an answerable question and two related ones (`pytest -m llm`), and fails if it answers a question its sources don't answer.

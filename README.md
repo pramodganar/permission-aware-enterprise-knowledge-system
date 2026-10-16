@@ -150,6 +150,8 @@ Answers come from a language model chosen with `APP_LLM_PROVIDER` (see `.env.exa
 pytest -m llm
 ```
 
+For fast answers, Groq has a free tier: create a key at [console.groq.com](https://console.groq.com), put it in your `.env` as `APP_LLM_API_KEY`, and set `APP_LLM_PROVIDER=groq` and `APP_LLM_MAX_OUTPUT_TOKENS=1000`. The prompt, which is document text, then goes to Groq.
+
 ## Stack
 
 In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.

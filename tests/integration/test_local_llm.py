@@ -9,7 +9,10 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
+from sqlalchemy import select
 
+from app.models import User
+from app.rag.answer import NO_INFORMATION_MESSAGE, Answer, NoAnswerReason, answer_question
 from app.rag.context import build_context
 from app.rag.llm import complete
 from app.rag.prompt import Prompt, build_prompt
@@ -73,3 +76,41 @@ def test_the_size_estimate_is_never_below_the_real_token_count(
     estimated = (len(prompt.system) + len(prompt.user)) // CHARACTERS_PER_TOKEN + 1
     assert completion.input_tokens is not None
     assert completion.input_tokens <= estimated
+
+
+# --- whole answers ----------------------------------------------------------------------
+
+
+def ask(acme: Company, llm: OpenAICompatibleProvider, name: str, question: str) -> Answer:
+    user = acme.db.scalars(select(User).where(User.email == f"{name}@acmecorp.example")).one()
+    return answer_question(acme.db, acme.index, acme.embedder, llm, user, question, acme.settings)
+
+
+def test_an_answerable_question_is_answered(acme: Company, llm: OpenAICompatibleProvider) -> None:
+    answer = ask(acme, llm, "alice", "How many days of annual leave do I get?")
+
+    assert answer.answered
+    assert "25" in answer.text
+    assert not answer.cut_off
+
+
+@pytest.mark.parametrize(
+    ("name", "question"),
+    [
+        # The runbook rolls back services. Nothing says how to roll back an
+        # app, and the closest command is not the answer.
+        ("alice", "How do I roll back a mobile app release?"),
+        # David may read his own discount policy, which is also about approval
+        # limits, but not the finance one that answers this.
+        ("david", "What is the approval limit for vendor payments?"),
+    ],
+)
+def test_a_related_but_unanswered_question_gets_no_information(
+    acme: Company, llm: OpenAICompatibleProvider, name: str, question: str
+) -> None:
+    answer = ask(acme, llm, name, question)
+
+    # It passed the relevance gate, so the model was asked, and said no.
+    assert answer.context.sources
+    assert answer.reason is NoAnswerReason.NOT_IN_SOURCES
+    assert answer.text == NO_INFORMATION_MESSAGE
