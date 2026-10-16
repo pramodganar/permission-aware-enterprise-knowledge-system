@@ -58,6 +58,9 @@ class RetrievedChunk:
     document_title: str
     document_version: int
     position: int
+    # Where the text sits in the document: text == content[start_offset:end_offset].
+    start_offset: int
+    end_offset: int
     text: str
     # Cosine similarity to the question, from -1 to 1.
     score: float
@@ -193,6 +196,8 @@ def _load_and_check(
                 document_title=chunk.document.title,
                 document_version=chunk.document.version,
                 position=chunk.position,
+                start_offset=chunk.start_offset,
+                end_offset=chunk.end_offset,
                 text=chunk.text,
                 score=hit.score,
             )

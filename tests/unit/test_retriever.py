@@ -107,6 +107,8 @@ def test_each_chunk_carries_its_text_and_what_is_needed_to_cite_it(acme: Company
             document_title=chunk.document.title,
             document_version=chunk.document.version,
             position=chunk.position,
+            start_offset=chunk.start_offset,
+            end_offset=chunk.end_offset,
             text=chunk.text,
             score=found.score,
         )

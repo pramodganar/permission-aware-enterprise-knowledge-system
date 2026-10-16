@@ -49,6 +49,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Authorization](docs/authorization.md): roles, permissions and the rules that combine them
 - [Chunking](docs/chunking.md): how documents are split, with the measurements behind it
 - [Retrieval](docs/retrieval.md): from question to chunks, and how the relevance threshold was measured
+- [Generation](docs/generation.md): from chunks to an answer with sources
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made
 

@@ -70,13 +70,22 @@ class Settings(BaseSettings):
     # How many chunks the reranker chooses the top ones from.
     rerank_candidates: int = Field(default=20, ge=1, le=100)
 
+    # The most document text sent to the LLM for one question (NFR-3).
+    # Characters, not tokens: every provider counts tokens differently, and
+    # this has to hold before any provider is asked.
+    context_max_characters: int = Field(default=6000, ge=500, le=100_000)
+
     @model_validator(mode="after")
-    def check_overlap(self) -> "Settings":
+    def check_sizes(self) -> "Settings":
         # More than half would put most of every chunk into the next one.
         if self.chunk_overlap_characters * 2 > self.chunk_max_characters:
             raise ValueError(
                 "chunk_overlap_characters must be at most half of chunk_max_characters"
             )
+        # Otherwise the best chunk alone might not fit, and a question with a
+        # good answer would get no context at all.
+        if self.context_max_characters < self.chunk_max_characters:
+            raise ValueError("context_max_characters must be at least chunk_max_characters")
         return self
 
 
