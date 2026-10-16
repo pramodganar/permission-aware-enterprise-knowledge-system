@@ -47,3 +47,19 @@ The rest of the code relies on rules 2 and 3. `NOT_IN_SOURCES` becomes the same 
 **Versioned.** The prompt has a version, `1`, which will be recorded with every answer and every evaluation run, so a change in answers can be traced to a change in instructions.
 
 **Not yet known:** whether a real model follows these instructions, in particular rule 2 on a related but unanswered question. That is measured once a provider is connected, not assumed.
+
+## Calling the model
+
+`app/rag/llm.py` is the one place where document text leaves the service (SR-13). Everything else depends on a small `LLMProvider` interface, so the provider is configuration (decision record 0009) and tests use a fake one.
+
+**Only a prompt goes out.** `complete` refuses anything that isn't a `Prompt`, and a prompt is only built from a context of chunks the person may read. A plain string, which could hold anything, can't be sent.
+
+**Every call is bounded.** A timeout (30 seconds by default) and a cap on the answer's length (600 tokens) are passed on every call. The cap is part of the cost limit (NFR-3) with the context cap. An answer that comes back longer than the cap, or empty, is a failure.
+
+**Retries only where they can help.** A provider that is down, too slow or rate-limiting may answer a moment later, so those failures are retried up to two times, pausing 0.5 and then 1 second. A request the provider rejects, for example because of a bad key, will be rejected again, so it isn't retried. After that the question fails with "service unavailable" (503), and search keeps working without the model (NFR-5). The longest a question can wait is about three timeouts plus the pauses.
+
+**A provider's error message is never passed on.** Provider libraries sometimes include parts of the request in their errors, which here would mean document text. Any failure becomes a fixed message; the log records only the type of error. A test puts the prompt into an error message and checks it reaches neither the client nor the log.
+
+**What is logged:** provider, model, attempts, milliseconds, input and output tokens as the provider counts them, why the answer stopped, and the prompt version. Never the prompt or the answer.
+
+**Why an answer stopped** is kept: finished, cut off at the length cap, or declined by the provider's own safety system. A cut-off answer can end mid-sentence, so the next step has to decide what to do with it rather than pass it on as if it were whole.

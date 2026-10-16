@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     # this has to hold before any provider is asked.
     context_max_characters: int = Field(default=6000, ge=500, le=100_000)
 
+    # Every call to the language model (NFR-3, NFR-5). The longest a question
+    # can wait is about (retries + 1) x timeout, plus a few seconds of pauses.
+    llm_max_output_tokens: int = Field(default=600, ge=50, le=4000)
+    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    llm_max_retries: int = Field(default=2, ge=0, le=5)
+
     @model_validator(mode="after")
     def check_sizes(self) -> "Settings":
         # More than half would put most of every chunk into the next one.
