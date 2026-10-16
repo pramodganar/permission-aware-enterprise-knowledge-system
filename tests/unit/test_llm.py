@@ -256,7 +256,7 @@ def test_the_defaults() -> None:
         {"llm_max_output_tokens": 10},
         {"llm_max_output_tokens": 5000},
         {"llm_timeout_seconds": 0},
-        {"llm_timeout_seconds": 600},
+        {"llm_timeout_seconds": 601},
         {"llm_max_retries": -1},
         {"llm_max_retries": 10},
     ],

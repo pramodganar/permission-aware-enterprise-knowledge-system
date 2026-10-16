@@ -75,10 +75,22 @@ class Settings(BaseSettings):
     # this has to hold before any provider is asked.
     context_max_characters: int = Field(default=6000, ge=500, le=100_000)
 
+    # Which language model answers questions. "none" sends nothing anywhere:
+    # questions get search results but no answers. "ollama" runs the model on
+    # this machine; "groq" sends the prompt, company text, to Groq. See
+    # app/rag/providers.py and docs/generation.md.
+    llm_provider: Literal["none", "ollama", "groq"] = "none"
+    # Each is optional and overrides the provider's preset.
+    llm_model: str | None = Field(default=None, min_length=1)
+    llm_base_url: str | None = Field(default=None, min_length=1)
+    llm_context_tokens: int | None = Field(default=None, ge=512, le=2_000_000)
+    llm_api_key: SecretStr | None = None
+
     # Every call to the language model (NFR-3, NFR-5). The longest a question
     # can wait is about (retries + 1) x timeout, plus a few seconds of pauses.
+    # A local model on a laptop CPU needs minutes, not seconds.
     llm_max_output_tokens: int = Field(default=600, ge=50, le=4000)
-    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
 
     @model_validator(mode="after")
@@ -92,6 +104,8 @@ class Settings(BaseSettings):
         # good answer would get no context at all.
         if self.context_max_characters < self.chunk_max_characters:
             raise ValueError("context_max_characters must be at least chunk_max_characters")
+        if self.llm_provider == "groq" and self.llm_api_key is None:
+            raise ValueError("llm_provider groq needs llm_api_key")
         return self
 
 

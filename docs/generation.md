@@ -63,3 +63,31 @@ The rest of the code relies on rules 2 and 3. `NOT_IN_SOURCES` becomes the same 
 **What is logged:** provider, model, attempts, milliseconds, input and output tokens as the provider counts them, why the answer stopped, and the prompt version. Never the prompt or the answer.
 
 **Why an answer stopped** is kept: finished, cut off at the length cap, or declined by the provider's own safety system. A cut-off answer can end mid-sentence, so the next step has to decide what to do with it rather than pass it on as if it were whole.
+
+## Providers
+
+`app/rag/providers.py` has one provider class for any service that accepts the OpenAI chat completions request. That covers Ollama, which runs the model on this machine, and Groq, which hosts it. Which one is used is `APP_LLM_PROVIDER`:
+
+| Setting | Where the prompt goes | Cost | Speed on the development laptop |
+|---|---|---|---|
+| `none` (default) | Nowhere. Questions get search results but no answers. | | |
+| `ollama` | Stays on this machine | Free, no limits | About a minute per answer (measured, below) |
+| `groq` | Groq's servers | Free tier with daily limits | Fast; not measured here yet |
+
+The default is `none`, so nothing is sent anywhere until someone chooses to. With `ollama`, no document text leaves the machine at all, which is the strongest answer to SR-13. With `groq`, the prompt, which is company text, goes to Groq; for the fictional AcmeCorp documents that's acceptable, for a real company it would be a decision for whoever owns the data.
+
+Every request asks for `temperature` 0, so the same question and sources give the same answer, which evaluation needs.
+
+### Measured with Ollama
+
+On the development laptop (4-core i5, 16 GB, no graphics card), llama3.1 8B generates about 4 tokens a second. A prompt of about 750 tokens took 67 seconds the first time, 21 of them loading the model, and about 45 seconds once loaded. A 3,300-token prompt took 170 seconds. So with Ollama `APP_LLM_TIMEOUT_SECONDS` has to be in minutes; the setting allows up to 600.
+
+### A prompt that doesn't fit is not sent
+
+Ollama runs llama3.1 with a 4,096-token window here, as `ollama ps` reports. A longer prompt isn't refused: Ollama cuts its start, without an error. The start is the instructions, and a model without them answers from what it knows. So before sending, the provider estimates the prompt's size at 3 characters a token, a deliberate overestimate, and if that plus the answer cap is more than the window, the prompt isn't sent. With the defaults the largest possible prompt is about 2,200 tokens plus 600 for the answer, which fits.
+
+The 3 was checked against llama3.1's own count on four real prompts: 3.96 to 4.42 characters a token, lowest for the salary bands, which are mostly numbers. So the estimate is 24 to 32 percent too high, the safe direction. A real-model test checks it stays that way.
+
+### Errors
+
+Timeouts, refused connections (Ollama not running), 429 and 5xx answers are worth retrying. Other 4xx answers are not. The body of an error response is never read into a message, because it can echo the request. A reply in the wrong form is a failure, not an empty answer.

@@ -3,8 +3,11 @@ testpaths = ["tests"]
 pythonpath = [".", "tests"]
 # Tests marked "model" load the real embedding model, which takes about half a
 # minute. They are left out of a normal run. Run them with: pytest -m model
-addopts = "--strict-markers -m 'not model'"
-markers = ["model: loads the real embedding model (slow, needs the model downloaded)"]
+addopts = "--strict-markers -m 'not model and not llm'"
+markers = [
+    "model: loads the real embedding model (slow, needs the model downloaded)",
+    "llm: asks a real local language model (very slow, needs Ollama running)",
+]
 # A warning usually means a test is doing something it shouldn't.
 filterwarnings = ["error"]
 

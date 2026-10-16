@@ -144,6 +144,12 @@ The tests that load the real models are left out of a normal run, because loadin
 pytest -m model
 ```
 
+Answers come from a language model chosen with `APP_LLM_PROVIDER` (see `.env.example`). The default, `none`, sends nothing anywhere. For a free model that runs on your own machine, install [Ollama](https://ollama.com), run `ollama pull llama3.1`, and set `APP_LLM_PROVIDER=ollama` and `APP_LLM_TIMEOUT_SECONDS=300`. The tests that ask the real local model are left out of a normal run too, because each answer takes about a minute on a laptop CPU:
+
+```
+pytest -m llm
+```
+
 ## Stack
 
 In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
