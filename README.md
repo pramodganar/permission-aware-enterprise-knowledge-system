@@ -10,6 +10,8 @@ User -> Auth -> Identity -> Authorization -> Filtered retrieval -> Context -> LL
 
 The setting is AcmeCorp, a fictional company with seven departments. All documents and users are synthetic.
 
+**Live demo:** [https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/](https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/). Pick who you are, ask a question, or ask the same question as two people side by side ([how it works](docs/demo.md)).
+
 ## Status
 
 Work in progress. Identity, authorization and document ingestion are built and tested, and the AcmeCorp company data can be loaded with one command. There is no chunking, retrieval or API yet, so documents can be stored with their permissions but nothing is searchable.

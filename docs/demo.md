@@ -45,7 +45,7 @@ It reads `.env` like the rest of the project. With `APP_LLM_PROVIDER=groq` and a
 
 With Groq, every question sends the person's passages, fictional company text, to Groq. For a real company that would be a decision for whoever owns the data ([generation](generation.md#providers)).
 
-**Not verified yet:** the page has been run locally and headless in tests, not on Streamlit Community Cloud. The CPU-only PyTorch build, the memory needed, and how long the first start takes there will be known after the first deployment.
+**Deployed** at [https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/](https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/), from this repository with the CPU-only PyTorch build, and checked by hand: David gets no information about executive bonuses, Grace gets the formula with its source. A free app sleeps when nobody has used it for a while, and the first visit after that waits for it to load the company again. Memory use and start time on Streamlit's servers have not been measured.
 
 ## Tests
 
