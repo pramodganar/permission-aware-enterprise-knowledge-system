@@ -18,7 +18,7 @@ from app.rag.llm import complete
 from app.rag.prompt import Prompt, build_prompt
 from app.rag.providers import CHARACTERS_PER_TOKEN, OpenAICompatibleProvider, load_provider
 from app.retrieval.query import process_question
-from questions import Company, real_company
+from questions import FACTS, MAY_READ, Company, real_company
 
 pytestmark = pytest.mark.llm
 
@@ -117,3 +117,36 @@ def test_a_related_but_unanswered_question_gets_no_information(
     assert answer.context.sources
     assert answer.reason is NoAnswerReason.NOT_IN_SOURCES
     assert answer.text == NO_INFORMATION_MESSAGE
+
+
+# --- the questions the project starts from ----------------------------------------------
+
+# Each asks for a document the person may not read (docs/personas.md).
+REFUSED = [
+    ("david", "How are executive bonuses calculated?"),
+    ("alice", "What are the salary bands for senior engineers?"),
+    ("bob", "What was the root cause of the last production outage?"),
+    ("bob", "What acquisitions is the company considering?"),
+    ("carol", "What is next year's headcount budget?"),
+    ("david", "What is the status of the dispute with our supplier?"),
+    ("emma", "Which employees are on a performance improvement plan?"),
+    ("frank", "What is the company's three-year strategy?"),
+    ("grace", "Who is on a performance improvement plan?"),
+    ("david", "What is the approval limit for vendor payments?"),
+]
+
+
+@pytest.mark.parametrize(("name", "question"), REFUSED)
+def test_a_refused_question_gets_nothing_it_may_not_read(
+    acme: Company, llm: OpenAICompatibleProvider, name: str, question: str
+) -> None:
+    answer = ask(acme, llm, name, question)
+
+    for fact, title in FACTS.items():
+        if title not in MAY_READ[name]:
+            assert fact not in answer.text
+    assert {s.document_title for s in answer.context.sources} <= MAY_READ[name]
+    # Either no information, or an answer from what they may read, as Grace's
+    # was when measured: the plan process says who knows about a plan, not
+    # who is on one.
+    assert {s.document_title for s in answer.citations} <= MAY_READ[name]

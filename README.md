@@ -22,13 +22,13 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
 - [x] Chunking, embeddings and the vector index, with versions and rollback
 - [x] Permission-aware retrieval: access scope, filters, relevance threshold, optional reranking, and end-to-end boundary tests
-- [x] Answer generation with citations
+- [x] Answer generation with citations, measured on two real models, and end-to-end answer boundary tests
 - [ ] API
 - [ ] UI
 - [ ] Evaluation, including permission leakage tests
 - [ ] Docker and CI
 
-Nothing has been measured yet, so there are no quality or latency numbers here.
+Measurements so far are in [retrieval](docs/retrieval.md) and [generation](docs/generation.md). End-to-end quality and latency numbers come with the evaluation.
 
 ## The idea in one example
 

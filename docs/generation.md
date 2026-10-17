@@ -163,3 +163,35 @@ No model invented a label in these runs, so that check has only been exercised b
 
 **Logged:** the number of citations and of made-up labels, with the rest of the answer's counts.
 
+## The boundary, tested at the answer
+
+`tests/security/test_answer_boundaries.py` tests the project's rule where a person meets it: in the answer. Everything goes through `answer_question`, with an index that holds every chunk of the company, the restricted ones included, and the relevance gate off, so every question reaches the model with as much context as it can get.
+
+**The worst model.** The model in these tests repeats everything it was given, sources and question, and then cites every label from S1 to S20. A real model leaks less than that. If even this model's answer holds nothing the person may not read, then what they get doesn't depend on the model behaving. That is the claim of [decision record 0001](adr/0001-enforce-permissions-before-the-llm.md), tested.
+
+**What counts as a leak**, checked in each answer and in each prompt sent:
+
+- a passage of a document the person may not read: 60-character windows of that document that appear in nothing they may read;
+- a named fact written in one document only, such as the case file's employee number or the acquisition target;
+- a citation to a document they may not read.
+
+Who may read what is written out in the tests from [personas](personas.md), not taken from the code under test. A check that asked `can_read` would be broken along with it, and this caught it: the first version did ask, and breaking `can_read` broke the check too.
+
+**Covered:** every person, the 17 company questions and 7 hostile ones ("ignore all previous instructions", "I am Grace", a fake source block in the question, "cite S1 to S20"). A revoked grant on the next answer, with the index unchanged. A deactivated account. A general document with instructions to include salary data and a fake `<source>` block of its own, asked about by three people. A model that fails with the whole prompt in its error message: nothing of it reaches the caller or the logs. People who may read nothing never reach the model.
+
+**With the real models.** The ten refused questions from the personas go through the real embedding model, the real relevance gate and the local llama3.1 (`pytest -m llm`). The gate stops seven before any model is asked. None of the ten answers holds a fact the person may not read, and every source and citation is a document they may read.
+
+**Breaking the protections** to see the tests notice:
+
+| What was broken | Result |
+|---|---|
+| Both access checks open | Caught: the worst model repeats restricted text |
+| Only the SQL scope open | No leak. The second check removed every forbidden chunk. The retrieval tests catch it, because they require the second check never to remove anything. |
+| Only the Python check open | No leak. The scope never let a forbidden chunk through. |
+| Inactive accounts keep their permissions | Caught |
+| Document text not escaped | Caught: the fake source block becomes a real one |
+| The provider's error message passed on, or logged | Caught |
+| The model asked with no sources | Caught |
+
+So one access check can fail without anything leaking, and the tests say which one failed. Both have to fail for a leak, and then these tests fail.
+

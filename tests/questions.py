@@ -80,6 +80,43 @@ OFF_TOPIC = [
 ]
 
 
+# Who may read what, written out from docs/personas.md and not taken from the
+# code under test: a check that asked can_read would break along with it.
+GENERAL = {"Leave Policy", "Code of Conduct", "Travel and Expense Policy"}
+DEPARTMENT_DOCUMENTS = {
+    "engineering": {"Deployment Runbook", "Payments Outage Postmortem"},
+    "finance": {"Vendor Payment Approval Limits", "Headcount Budget 2027"},
+    "hr": {"Performance Improvement Plan Process", "Salary Bands 2026"},
+    "sales": {"Discount Approval Policy"},
+    "legal": {"Contract Data Retention Obligations", "Supplier Dispute Status"},
+    "operations": {"Warehouse Incident SOP"},
+    "executive": {"Executive Compensation Strategy 2027", "Three-Year Strategy 2027 to 2029"},
+}
+ALL_DEPARTMENTAL = set().union(*DEPARTMENT_DOCUMENTS.values())
+MAY_READ = {
+    "alice": GENERAL | DEPARTMENT_DOCUMENTS["engineering"],
+    "bob": GENERAL | DEPARTMENT_DOCUMENTS["finance"],
+    "carol": GENERAL | DEPARTMENT_DOCUMENTS["hr"] | {"HR Case File 2026-014"},
+    "david": GENERAL | DEPARTMENT_DOCUMENTS["sales"],
+    "emma": GENERAL | DEPARTMENT_DOCUMENTS["legal"] | {"Project Falcon Acquisition Paper"},
+    "frank": GENERAL | DEPARTMENT_DOCUMENTS["operations"],
+    "grace": GENERAL | ALL_DEPARTMENTAL | {"Project Falcon Acquisition Paper"},
+    "henry": set(),
+    "irene": set(),
+}
+
+# A fact that is written in one document only, and so must never reach
+# anyone who may not read that document.
+FACTS = {
+    "E-2291": "HR Case File 2026-014",
+    "Brightline": "Project Falcon Acquisition Paper",
+    "68,000 to 92,000": "Salary Bands 2026",
+    "Northwind": "Supplier Dispute Status",
+    "1,240": "Headcount Budget 2027",
+    "connection pool": "Payments Outage Postmortem",
+}
+
+
 @dataclass
 class Company:
     db: Session
