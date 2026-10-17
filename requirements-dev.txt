@@ -9,5 +9,8 @@ pytest-cov==7.1.0
 ruff==0.16.10
 mypy==2.4.0
 
+# The demo page (ui/). Pinned the same in ui/requirements.txt.
+streamlit==1.65.0
+
 # HTTP client used by FastAPI's test client
 httpx2==2.13.1

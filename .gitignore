@@ -18,6 +18,7 @@ htmlcov/
 
 # Secrets and local config
 .env
+.streamlit/secrets.toml
 
 # Runtime data: uploaded files, vector index, local database
 data/uploads/

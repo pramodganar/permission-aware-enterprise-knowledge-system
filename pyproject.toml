@@ -45,7 +45,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.11"
-files = ["app", "scripts", "tests"]
+files = ["app", "scripts", "tests", "ui"]
 mypy_path = "tests"
 strict = true
 plugins = ["pydantic.mypy"]
@@ -56,4 +56,4 @@ module = ["faiss"]
 ignore_missing_imports = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "scripts", "acmecorp", "testapp", "files", "fakes", "logcheck", "questions"]
+known-first-party = ["app", "scripts", "ui", "acmecorp", "testapp", "files", "fakes", "logcheck", "questions"]

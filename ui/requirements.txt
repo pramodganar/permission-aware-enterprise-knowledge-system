@@ -1,0 +1,11 @@
+# What Streamlit Community Cloud installs for the demo page. It reads the
+# requirements file next to the page before the one in the project root.
+#
+# PyTorch from its CPU-only index: the default Linux build brings GPU
+# libraries of several gigabytes that the demo never uses.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1
+
+-r ../requirements.txt
+
+streamlit==1.65.0

@@ -24,7 +24,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Permission-aware retrieval: access scope, filters, relevance threshold, optional reranking, and end-to-end boundary tests
 - [x] Answer generation with citations, measured on two real models, and end-to-end answer boundary tests
 - [ ] API
-- [ ] UI
+- [ ] UI (a demo page is done early: [docs/demo.md](docs/demo.md))
 - [ ] Evaluation, including permission leakage tests
 - [ ] Docker and CI
 
@@ -50,6 +50,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Chunking](docs/chunking.md): how documents are split, with the measurements behind it
 - [Retrieval](docs/retrieval.md): from question to chunks, and how the relevance threshold was measured
 - [Generation](docs/generation.md): from chunks to an answer with sources
+- [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made
 
