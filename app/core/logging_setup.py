@@ -36,6 +36,9 @@ BLOCKED_FIELDS = frozenset(
     }
 )
 
+# Libraries whose INFO lines are one per HTTP request they make.
+QUIET_LIBRARIES = ("httpx", "httpcore", "huggingface_hub", "urllib3")
+
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 # Attributes present on every LogRecord. Anything else came in through `extra`.
@@ -55,6 +58,10 @@ def bind_request_id(request_id: str | None = None) -> str:
 
 def clear_request_id() -> None:
     _request_id.set(None)
+
+
+def current_request_id() -> str | None:
+    return _request_id.get()
 
 
 class JsonFormatter(logging.Formatter):
@@ -91,3 +98,10 @@ def configure_logging(level: str) -> None:
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(level)
+
+    # These log every HTTP request they make at INFO: each check of the
+    # embedding model's files at startup, and each call to the language model.
+    # Only their warnings and errors are kept. What the service sends is
+    # already logged by the service, as counts.
+    for library in QUIET_LIBRARIES:
+        logging.getLogger(library).setLevel(max(logging.WARNING, root.level))

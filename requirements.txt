@@ -17,6 +17,9 @@ PyJWT==2.15.1
 # API framework
 fastapi==0.142.4
 
+# Serving the API
+uvicorn==0.54.0
+
 # Document text extraction
 pypdf==6.19.0
 python-docx==1.2.0

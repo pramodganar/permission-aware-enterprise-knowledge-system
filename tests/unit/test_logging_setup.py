@@ -8,6 +8,7 @@ import pytest
 
 from app.core.logging_setup import (
     BLOCKED_FIELDS,
+    QUIET_LIBRARIES,
     REDACTED,
     JsonFormatter,
     bind_request_id,
@@ -27,8 +28,11 @@ def no_request_id() -> Iterator[None]:
 def restore_root_logger() -> Iterator[None]:
     root = logging.getLogger()
     handlers, level = root.handlers[:], root.level
+    libraries = {name: logging.getLogger(name).level for name in QUIET_LIBRARIES}
     yield
     root.handlers, root.level = handlers, level
+    for name, library_level in libraries.items():
+        logging.getLogger(name).setLevel(library_level)
 
 
 def format_record(
@@ -155,3 +159,17 @@ def test_configure_logging_twice_does_not_duplicate_lines(
     logging.getLogger("app").info("once")
 
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+def test_libraries_that_log_every_http_request_keep_only_warnings(
+    restore_root_logger: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    configure_logging("INFO")
+
+    logging.getLogger("httpx").info("HTTP Request: POST https://api.groq.com/openai/v1/chat")
+    logging.getLogger("huggingface_hub.utils").info("HEAD https://huggingface.co/...")
+    logging.getLogger("httpx").warning("connection pool full")
+    logging.getLogger("app.rag.llm").info("model answered")
+
+    messages = [json.loads(line)["message"] for line in capsys.readouterr().out.splitlines()]
+    assert messages == ["connection pool full", "model answered"]

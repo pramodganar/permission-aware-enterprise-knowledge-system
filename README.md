@@ -52,6 +52,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Chunking](docs/chunking.md): how documents are split, with the measurements behind it
 - [Retrieval](docs/retrieval.md): from question to chunks, and how the relevance threshold was measured
 - [Generation](docs/generation.md): from chunks to an answer with sources
+- [API](docs/api.md): the HTTP service, its errors, request IDs and logs
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made
@@ -125,6 +126,14 @@ python -m scripts.index rollback [VERSION] # go back to an earlier version
 Each version has a manifest with the embedding model, the chunk settings, a checksum of the index file and a fingerprint of the text that was embedded. Loading refuses a version built with a different model or chunk settings, or whose files don't match. `status` compares the fingerprint with the database and reports the index as out of date when documents have been added, replaced or deleted since it was built. A label or grant change doesn't make it out of date, because permissions are not in the index.
 
 The index holds vectors of every document, restricted ones included. It is not committed, and it needs the same protection as the database.
+
+## Running the API
+
+```
+uvicorn app.main:serve --factory --no-access-log
+```
+
+It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`. See [docs/api.md](docs/api.md).
 
 ## Checks
 
