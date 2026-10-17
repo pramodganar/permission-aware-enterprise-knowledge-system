@@ -45,6 +45,7 @@ This lists what could go wrong, what the design does about it, how I intend to c
 | T6 | A cached result is served to a different user | No cache shared across users | Review, plus a test if a cache is ever added | None while there is no cache |
 | T26 | A search filter is used to reach outside the scope, for example filtering by another department or by a restricted document's ID | A filter is intersected with the access scope, so it can only remove chunks. The filter query also only looks at documents in the scope. Each guard is tested with the other removed. | Every person with 34 filters: the result is exactly the scope and the filter | None expected |
 | T27 | Filtering by document ID to find out which IDs exist | A document the person can't read and one that doesn't exist give identical results. Filter values are not logged. | Every unreadable document compared with a missing ID, for three people | Timing, not measured (as T11) |
+| T28 | The model cites a source it wasn't given, or names a restricted document, so the answer appears to point at it | A citation is a label, looked up in this question's context only. A label that isn't there is removed from the answer and counted; a document title or ID in brackets is not a citation and resolves to nothing. | Every person, five questions, a reply citing S1 to S10: every citation is a source of their own context and a document they may read | The text of an answer can still mention anything the model writes. It is only ever given what the person may read (T13). |
 
 ### Pretending to be someone else
 

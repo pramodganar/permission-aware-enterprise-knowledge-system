@@ -133,3 +133,33 @@ What the numbers hide:
 - **Citations come in three spellings**: `[S1]`, `[ S1 ]` and `【S1】`, the last from gpt-oss. With default reasoning 1 of 23 answers had none, with low reasoning 3 of 24. Both are for the citation step.
 
 `tests/integration/test_local_llm.py` asks the local model an answerable question and two related ones (`pytest -m llm`), and fails if it answers a question its sources don't answer.
+
+## Citations
+
+`app/rag/citations.py` turns the labels in an answer into the sources they stand for (FR-11).
+
+**A citation can only point to what the person may read.** `[S1]` is only a name for a source in the context this answer was built from, so it is looked up there and nowhere else. The context holds only passages that passed both access checks, so a cited source is always one of them. A label that isn't in the context, `[S9]` when there were five sources, is something the model made up: it is removed from the text and counted, never resolved. A title or ID in brackets, `[Salary Bands 2026]`, isn't a label and resolves to nothing. A test has every person ask five questions with a reply that cites S1 to S10, and checks that every citation is a source of their own context and a document they may read.
+
+**Every way of writing it, one way out.** The real replies used `[S1]`, `[ S1 ]` and the full-width `【S1】`; lists like `[S1, S3]` or `[S1; S3]`, lower case and `[S01]` are read too. The text is rewritten with `[S1]` only, so the interface has one form to turn into links. Removing a made-up label takes the space in front of it and nothing else.
+
+**Sources are listed in the order they are first cited**, once each, with their document title and version. Sources the model was given but didn't cite aren't listed as citations.
+
+**An answer that cites nothing is kept, and marked `uncited`.** It came from the context like any other answer, but there's no saying which statement came from which source. Throwing it away would turn a correct answer into "no information"; listing every source as cited would claim something the model didn't say. So the interface can say the answer gives no sources and show the ones it was given. An answer that is nothing but made-up citations is a failure, like an empty one. No-information answers have no citations.
+
+### Measured
+
+The resolver was run over all 55 real answers from the measurements above, without asking any model again:
+
+| | gpt-oss, default reasoning | gpt-oss, low reasoning | llama3.1 8B | gpt-oss at 1,000 tokens |
+|---|---|---|---|---|
+| Answers | 23 | 24 | 5 | 3 |
+| Citing at least one source | 22 | 21 | 5 | 3 |
+| Uncited | 1 | 3 | 0 | 0 |
+| Made-up labels | 0 | 0 | 0 | 0 |
+| Rewritten to `[S1]` | 6 | 1 | 0 | 0 |
+| Citations left unread | 0 | 0 | 0 | 0 |
+
+No model invented a label in these runs, so that check has only been exercised by tests. The uncited answers were all from gpt-oss. Three were correct answers from their sources; the fourth was the retention-design answer described above. Whether a cited source actually says what the statement next to it says is not checked here; that is answer quality, for evaluation in phase 11.
+
+**Logged:** the number of citations and of made-up labels, with the rest of the answer's counts.
+

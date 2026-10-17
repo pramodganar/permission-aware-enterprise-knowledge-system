@@ -92,6 +92,9 @@ def test_an_answerable_question_is_answered(acme: Company, llm: OpenAICompatible
     assert answer.answered
     assert "25" in answer.text
     assert not answer.cut_off
+    # It cites the leave policy, by a label that was in its context.
+    assert "Leave Policy" in {s.document_title for s in answer.citations}
+    assert answer.unknown_citations == 0
 
 
 @pytest.mark.parametrize(

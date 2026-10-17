@@ -22,7 +22,7 @@ Work in progress. Identity, authorization and document ingestion are built and t
 - [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
 - [x] Chunking, embeddings and the vector index, with versions and rollback
 - [x] Permission-aware retrieval: access scope, filters, relevance threshold, optional reranking, and end-to-end boundary tests
-- [ ] Answer generation with citations
+- [x] Answer generation with citations
 - [ ] API
 - [ ] UI
 - [ ] Evaluation, including permission leakage tests

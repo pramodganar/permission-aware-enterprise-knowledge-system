@@ -27,6 +27,10 @@ do.
 An answer cut off at the length cap is returned, marked as cut off, rather
 than passed on as if it were whole. What it says up to there came from the
 sources; the person is told the rest is missing.
+
+An answer's citations are resolved against its own context only
+(``app/rag/citations.py``), so a cited source is always one the person may
+read. A label the model made up is removed from the text.
 """
 
 import logging
@@ -40,8 +44,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.models import User
-from app.rag.context import Context, build_context
-from app.rag.llm import LLMProvider, StopReason, complete
+from app.rag.citations import resolve_citations
+from app.rag.context import Context, Source, build_context
+from app.rag.llm import LLMError, LLMProvider, StopReason, complete
 from app.rag.prompt import NOT_IN_SOURCES, build_prompt
 from app.retrieval.embeddings import Embedder
 from app.retrieval.filters import SearchFilters
@@ -79,12 +84,17 @@ class Answer:
     # The question as it was searched with.
     question: str
     outcome: Outcome
-    # The model's answer, or NO_INFORMATION_MESSAGE.
+    # The model's answer with its citations as [S1], or NO_INFORMATION_MESSAGE.
     text: str
     # What the model was given. Empty when it wasn't asked. Kept for the
     # audit log even when there is no answer: the model still read it.
     context: Context
     reason: NoAnswerReason | None = None
+    # The sources the answer cites, in the order it first cites them. Always
+    # taken from the context.
+    citations: tuple[Source, ...] = ()
+    # Labels the model cited that weren't in the context, removed from the text.
+    unknown_citations: int = 0
     # True when the answer stopped at the length cap.
     cut_off: bool = False
     model: str | None = None
@@ -95,6 +105,11 @@ class Answer:
     @property
     def answered(self) -> bool:
         return self.outcome is Outcome.ANSWERED
+
+    @property
+    def uncited(self) -> bool:
+        """An answer that cites none of its sources."""
+        return self.answered and not self.citations
 
 
 def answer_question(
@@ -152,13 +167,24 @@ def answer_question(
     elif _NOT_IN_SOURCES.search(completion.text):
         reason = NoAnswerReason.NOT_IN_SOURCES
 
+    if reason is None:
+        cited = resolve_citations(completion.text, context)
+        if not cited.text:
+            # Nothing but citations the model made up.
+            raise LLMError("the model's answer was only citations")
+        text, citations, unknown = cited.text, cited.sources, cited.unknown
+    else:
+        text, citations, unknown = NO_INFORMATION_MESSAGE, (), 0
+
     answer = Answer(
         user_id=user.id,
         question=question.text,
         outcome=Outcome.ANSWERED if reason is None else Outcome.NO_INFORMATION,
-        text=completion.text if reason is None else NO_INFORMATION_MESSAGE,
+        text=text,
         context=context,
         reason=reason,
+        citations=citations,
+        unknown_citations=unknown,
         cut_off=reason is None and completion.stop_reason is StopReason.MAX_TOKENS,
         model=completion.model,
         prompt_version=prompt.version,
@@ -178,6 +204,8 @@ def _log(answer: Answer, started: float, retrieved: float, generated: float | No
             "outcome": answer.outcome.value,
             "reason": None if answer.reason is None else answer.reason.value,
             "sources": len(answer.context.sources),
+            "citations": len(answer.citations),
+            "unknown_citations": answer.unknown_citations,
             "cut_off": answer.cut_off,
             "retrieval_milliseconds": round((retrieved - started) * 1000),
             "generation_milliseconds": (

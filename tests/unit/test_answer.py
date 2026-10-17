@@ -251,6 +251,71 @@ def test_only_the_length_cap_marks_an_answer_cut_off(acme: Company, stop: StopRe
     assert not answer.cut_off
 
 
+# --- citations --------------------------------------------------------------------------
+
+
+def test_citations_are_resolved_from_the_context(acme: Company) -> None:
+    answer = acme.ask("frank", llm=FakeLLM(["The limit is 160 EUR [S1]."]))
+
+    assert answer.citations == (answer.context.sources[0],)
+    assert answer.unknown_citations == 0
+    assert not answer.uncited
+
+
+def test_citations_are_written_one_way(acme: Company) -> None:
+    answer = acme.ask("frank", llm=FakeLLM(["The limit is 160 EUR【S1】 [ S2 ]."]))
+
+    assert answer.text == "The limit is 160 EUR[S1] [S2]."
+    assert [s.label for s in answer.citations] == ["S1", "S2"]
+
+
+def test_a_made_up_citation_is_removed_and_counted(acme: Company) -> None:
+    answer = acme.ask("frank", llm=FakeLLM(["The limit is 160 EUR [S1][S9]."]))
+
+    assert answer.text == "The limit is 160 EUR [S1]."
+    assert [s.label for s in answer.citations] == ["S1"]
+    assert answer.unknown_citations == 1
+
+
+def test_an_answer_that_cites_nothing_is_kept_and_marked(acme: Company) -> None:
+    answer = acme.ask("frank", llm=FakeLLM(["The limit is 160 EUR."]))
+
+    assert answer.answered
+    assert answer.uncited
+    assert answer.citations == ()
+    assert answer.text == "The limit is 160 EUR."
+
+
+def test_no_information_has_no_citations(acme: Company) -> None:
+    answer = acme.ask("frank", llm=FakeLLM(["NOT_IN_SOURCES, though [S1] mentions hotels."]))
+
+    assert answer.citations == ()
+    assert answer.unknown_citations == 0
+    # Only an answer can be uncited.
+    assert not answer.uncited
+
+
+def test_nothing_relevant_is_not_uncited(acme: Company) -> None:
+    assert not acme.ask("frank", retrieval_min_score=0.99).uncited
+
+
+# Cites every label a five-source context could have, and some it can't.
+CITE_EVERYTHING = "Statement [S1][S2][S3][S4][S5][S6][S7][S8][S9][S10]."
+
+
+@pytest.mark.parametrize("name", ["alice", "bob", "carol", "david", "emma", "frank", "grace"])
+def test_a_citation_only_ever_points_to_what_the_person_may_read(acme: Company, name: str) -> None:
+    user = acme.user(name)
+
+    for question in QUESTIONS:
+        answer = acme.ask(name, question, llm=FakeLLM([CITE_EVERYTHING]))
+
+        assert answer.citations == answer.context.sources
+        for cited in answer.citations:
+            assert can_read(user, acme.db.get_one(Document, cited.document_id))
+        assert answer.unknown_citations == 10 - len(answer.context.sources)
+
+
 # --- failures ---------------------------------------------------------------------------
 
 
@@ -274,6 +339,11 @@ def test_a_provider_that_recovers_gives_the_answer(acme: Company) -> None:
 def test_an_empty_reply_fails_the_question(acme: Company) -> None:
     with pytest.raises(LLMError):
         acme.ask("frank", llm=FakeLLM([completion("   ", StopReason.MAX_TOKENS)]))
+
+
+def test_an_answer_of_only_made_up_citations_fails_the_question(acme: Company) -> None:
+    with pytest.raises(LLMError):
+        acme.ask("frank", llm=FakeLLM(["[S9]"]))
 
 
 def test_a_question_that_can_not_be_searched_never_reaches_the_model(acme: Company) -> None:
@@ -360,6 +430,8 @@ def test_an_answer_is_logged_with_counts_and_timings(
     assert record.outcome == "answered"  # type: ignore[attr-defined]
     assert record.reason is None  # type: ignore[attr-defined]
     assert record.sources == len(answer.context.sources)  # type: ignore[attr-defined]
+    assert record.citations == 1  # type: ignore[attr-defined]
+    assert record.unknown_citations == 0  # type: ignore[attr-defined]
     assert record.cut_off is False  # type: ignore[attr-defined]
     assert record.retrieval_milliseconds >= 0  # type: ignore[attr-defined]
     assert record.generation_milliseconds >= 0  # type: ignore[attr-defined]

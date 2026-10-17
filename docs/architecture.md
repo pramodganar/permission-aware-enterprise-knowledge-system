@@ -61,7 +61,7 @@ flowchart TD
 7. The context builder takes the top chunks up to the cap (NFR-3).
 8. If there are no chunks, or the best of them scores below the relevance threshold ([retrieval.md](retrieval.md)), the service returns the standard "no information available" response. The LLM is not called.
 9. Otherwise the LLM is called with the question and the context, and returns an answer with references to the chunks it used.
-10. Citations are resolved from chunk IDs. Only chunks that were in the context can be cited.
+10. Citations are resolved from the source labels in the answer, looked up in this question's context only. A label that wasn't there is removed, so only passages the person may read can be cited.
 11. An audit record is written, and the response is returned.
 
 Search (FR-8) is the same flow stopped after step 6. The document list (FR-5) uses the same access scope from step 3 against the documents table.
