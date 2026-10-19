@@ -98,3 +98,42 @@ An ID that can't be a document ID (not a whole number, below 1, or too big for t
 **What is never shown**, even to someone who may read the document: who else holds a grant, who uploaded it, and which earlier version it replaced. A reader needs none of it, and each says something about people or documents outside their own access. The response models list their fields one by one, so a field added to a document doesn't reach a client unless it's added to the model too.
 
 **Both responses carry `Cache-Control: no-store`.** Each person's list is different, and a cache shared between people would otherwise hand one person's list to another (threat T6).
+
+## Searching and asking
+
+```
+POST /search  {"question": "How many days of annual leave do I get?",
+               "filters": {"departments": ["hr"], "classifications": ["general"], "document_ids": [1]}}
+           -> {"results": [{document {id, title, version}, start_offset, end_offset, text, score}, ...],
+               "message": null}
+
+POST /ask     the same body
+           -> {"answered": true, "answer": "... [S1]", "citations": [{label, document, text}, ...],
+               "cut_off": false, "uncited": false}
+```
+
+`filters` is optional, and so is each field in it.
+
+**Both are POST**, so the question travels in the body. In the URL it would end up in proxy logs, browser history and the service's own request log. The question isn't logged here either, and neither is the answer (NFR-9).
+
+**No rules of their own.** `/search` calls `retrieve` and `/ask` calls `answer_question`, the one path to the model, with the user from the token. The body allows exactly `question` and `filters`; a `user_id` or `role` next to them is refused (422). Filters narrow within what the caller may read, as in [retrieval](retrieval.md): filtering on a document the caller can't read gives exactly the response of filtering on one that doesn't exist.
+
+**"No information" looks the same whatever the reason.** Nothing the caller may read is relevant, the model found nothing in its sources, or the provider refused: each gets `"answered": false` and "No information available to answer this question.", and an empty search gets the same message. Which reason it was is logged, not returned, and the relevance score it was decided on isn't returned either.
+
+**Citations are the sources the answer cites**, not everything the model was given, each with the passage it points to. They come from the answer's own context, so every one is to something the caller may read. A label the model made up is removed from the text. An answer that reached the length cap is marked `cut_off`; one that cites nothing is marked `uncited`.
+
+**When the model can't answer**, `/ask` gets 503 and `/search` keeps working (NFR-5):
+
+| Situation | Response |
+|---|---|
+| `APP_LLM_PROVIDER=none` | 503, "Answers are switched off on this service. Search still works." |
+| The provider is down, too slow or rate-limiting, after its retries | 503, "The service is temporarily unavailable." |
+| The model's reply is unusable: empty, or nothing but made-up citations | 503, the same |
+
+A question that can't be searched with (empty, no words, over `APP_MAX_QUESTION_CHARACTERS`) is a 422 that says which, and nothing reaches the model. A body over 10,000 characters is refused before any of that.
+
+If `APP_RERANKER_MODEL` names a cross-encoder, it is loaded at startup and both routes use it.
+
+Both responses carry `Cache-Control: no-store`.
+
+Not built yet: a limit on questions per person. Every `/ask` can cost a model call (NFR-3 caps the size of each call, not how many there are).

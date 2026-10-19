@@ -16,6 +16,7 @@ from app.core.config import Settings
 from app.main import create_app
 from app.rag.llm import LLMProvider
 from app.retrieval.index import build_index
+from app.retrieval.reranking import Reranker
 from fakes import FakeEmbedder
 from scripts.seed import seed
 
@@ -28,11 +29,20 @@ def email(name: str) -> str:
 
 @contextmanager
 def company_client(
-    db: Session, engine: Engine, settings: Settings, provider: LLMProvider | None = None
+    db: Session,
+    engine: Engine,
+    settings: Settings,
+    provider: LLMProvider | None = None,
+    reranker: Reranker | None = None,
 ) -> Iterator[TestClient]:
     seed(db, settings, PASSWORD)
     embedder = FakeEmbedder()
-    components = Components(embedder=embedder, index=build_index(db, embedder), provider=provider)
+    components = Components(
+        embedder=embedder,
+        index=build_index(db, embedder),
+        provider=provider,
+        reranker=reranker,
+    )
     app = create_app(settings, engine=engine, components=components)
     with TestClient(app, raise_server_exceptions=False) as client:
         yield client

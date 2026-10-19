@@ -85,6 +85,12 @@ class ServiceUnavailableError(AppError):
     public_message = "The service is temporarily unavailable."
 
 
+class AnswersSwitchedOffError(ServiceUnavailableError):
+    """No language model is configured (APP_LLM_PROVIDER=none). Search still works."""
+
+    public_message = "Answers are switched off on this service. Search still works."
+
+
 def error_response(error: Exception, request_id: str | None = None) -> tuple[int, dict[str, Any]]:
     """Return the HTTP status and response body for an error.
 

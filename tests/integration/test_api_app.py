@@ -17,9 +17,10 @@ from app.api.components import Components
 from app.core.config import Settings
 from app.core.exceptions import NotFoundError
 from app.main import create_app
+from app.retrieval import reranking
 from app.retrieval.index import build_index
 from app.retrieval.index_versions import publish_index
-from fakes import FakeEmbedder, FakeLLM
+from fakes import FakeEmbedder, FakeLLM, FakeReranker
 from logcheck import everything_logged
 
 HEX_ID = re.compile(r"[0-9a-f]{32}")
@@ -317,7 +318,28 @@ def test_startup_loads_the_current_index(
         assert client.get("/health").status_code == 200
 
     assert loaded.provider is None
+    assert loaded.reranker is None
     assert not any("behind the database" in r.message for r in caplog.records)
+
+
+def test_startup_loads_the_reranker_the_settings_name(
+    fake_model_settings: Settings, engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publish_index(db, FakeEmbedder(), fake_model_settings, fake_model_settings.index_directory)
+    names: list[str] = []
+
+    def load(name: str, *, offline: bool) -> FakeReranker:
+        names.append(name)
+        return FakeReranker()
+
+    monkeypatch.setattr(reranking, "CrossEncoderReranker", load)
+    with_reranker = fake_model_settings.model_copy(update={"reranker_model": "some-cross-encoder"})
+
+    with TestClient(create_app(with_reranker, engine=engine)) as client:
+        loaded = client.app.state.components  # type: ignore[attr-defined]
+
+    assert isinstance(loaded.reranker, FakeReranker)
+    assert names == ["some-cross-encoder"]
 
 
 def test_startup_refuses_without_an_index(fake_model_settings: Settings, engine: Engine) -> None:

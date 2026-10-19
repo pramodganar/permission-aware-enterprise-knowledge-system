@@ -14,7 +14,7 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in and listing and opening documents work so far.
+Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in, listing and opening documents, searching and asking work so far.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks

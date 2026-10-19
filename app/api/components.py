@@ -1,7 +1,7 @@
 """The slow parts the API loads once at startup, and how endpoints get them.
 
-The embedding model, the vector index and the language model provider are
-loaded when the service starts, not per request: the model takes seconds to
+The embedding model, the vector index, the language model provider and the
+optional reranker are loaded when the service starts, not per request: the model takes seconds to
 load, the index is checked against its manifest.
 
 The service refuses to start without a usable index: one that is missing,
@@ -26,6 +26,7 @@ from app.rag.providers import load_provider
 from app.retrieval.embeddings import Embedder, load_embedder
 from app.retrieval.index import VectorIndex
 from app.retrieval.index_versions import check_freshness, load_current_index
+from app.retrieval.reranking import Reranker, load_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,12 @@ class Components:
     index: VectorIndex
     # None when answers are switched off (APP_LLM_PROVIDER=none).
     provider: LLMProvider | None
+    # None unless APP_RERANKER_MODEL names one.
+    reranker: Reranker | None = None
 
 
 def load_components(settings: Settings, db: Session) -> Components:
-    """Load the model, the current index and the provider named in the settings."""
+    """Load the model, the current index, the provider and the reranker named in the settings."""
     embedder = load_embedder(settings)
     index, manifest = load_current_index(settings, settings.index_directory)
     freshness = check_freshness(db, index, manifest)
@@ -49,7 +52,12 @@ def load_components(settings: Settings, db: Session) -> Components:
             "rebuild it with: python -m scripts.index build",
             extra={"missing": freshness.missing, "retired": freshness.retired},
         )
-    return Components(embedder=embedder, index=index, provider=load_provider(settings))
+    return Components(
+        embedder=embedder,
+        index=index,
+        provider=load_provider(settings),
+        reranker=load_reranker(settings),
+    )
 
 
 def close_components(components: Components) -> None:
