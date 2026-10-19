@@ -213,8 +213,9 @@ def test_an_answer_that_only_mentions_sources_is_an_answer(acme: Company, reply:
     assert answer.text == reply
 
 
-def test_a_refusal_by_the_provider_gives_no_information(acme: Company) -> None:
-    answer = acme.ask("frank", llm=FakeLLM([completion("I can't help.", StopReason.REFUSED)]))
+@pytest.mark.parametrize("text", ["I can't help.", ""], ids=["with text", "empty"])
+def test_a_refusal_by_the_provider_gives_no_information(acme: Company, text: str) -> None:
+    answer = acme.ask("frank", llm=FakeLLM([completion(text, StopReason.REFUSED)]))
 
     assert answer.reason is NoAnswerReason.REFUSED_BY_PROVIDER
     assert answer.text == NO_INFORMATION_MESSAGE

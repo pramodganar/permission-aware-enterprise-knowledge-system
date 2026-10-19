@@ -178,6 +178,31 @@ def test_an_empty_answer_is_a_failure(settings: Settings, text: str) -> None:
         complete(FakeLLM([text]), PROMPT, settings)
 
 
+@pytest.mark.parametrize("text", ["", "   "])
+def test_an_empty_refusal_is_a_refusal_not_a_failure(settings: Settings, text: str) -> None:
+    refused = Completion(text, "fake-model", StopReason.REFUSED, 100, 0)
+
+    completion = complete(FakeLLM([refused]), PROMPT, settings)
+
+    assert completion.stop_reason is StopReason.REFUSED
+    assert completion.text == ""
+
+
+@pytest.mark.parametrize("stop", [StopReason.END, StopReason.MAX_TOKENS, StopReason.OTHER])
+def test_an_empty_answer_that_is_not_a_refusal_is_still_a_failure(
+    settings: Settings, stop: StopReason
+) -> None:
+    with pytest.raises(LLMError, match="empty"):
+        complete(FakeLLM([Completion("", "fake-model", stop, 100, 0)]), PROMPT, settings)
+
+
+def test_an_answer_that_is_not_text_is_a_failure_even_as_a_refusal(settings: Settings) -> None:
+    not_text = Completion(None, "fake-model", StopReason.REFUSED, 100, 0)  # type: ignore[arg-type]
+
+    with pytest.raises(LLMError, match="not text"):
+        complete(FakeLLM([not_text]), PROMPT, settings)
+
+
 def test_an_answer_longer_than_the_cap_is_a_failure(settings: Settings) -> None:
     too_long = Completion("x" * 10, "fake-model", StopReason.END, 100, 601)
 

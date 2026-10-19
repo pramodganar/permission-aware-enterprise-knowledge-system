@@ -129,6 +129,7 @@ POST /ask     the same body
 | `APP_LLM_PROVIDER=none` | 503, "Answers are switched off on this service. Search still works." |
 | The provider is down, too slow or rate-limiting, after its retries | 503, "The service is temporarily unavailable." |
 | The model's reply is unusable: empty, or nothing but made-up citations | 503, the same |
+| The provider refuses, with or without text | 200, the usual "no information" answer |
 
 A question that can't be searched with (empty, no words, over `APP_MAX_QUESTION_CHARACTERS`) is a 422 that says which, and nothing reaches the model. A body over 10,000 characters is refused before any of that.
 

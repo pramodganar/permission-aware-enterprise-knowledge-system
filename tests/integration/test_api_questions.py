@@ -371,8 +371,9 @@ def test_nothing_readable_means_no_information_and_the_model_is_not_asked(
         NOT_IN_SOURCES,
         f"The sources don't say. {NOT_IN_SOURCES.lower().replace('_', ' ')} [S1]",
         Completion("I can not help with that.", "fake-model", StopReason.REFUSED, 10, 6),
+        Completion("", "fake-model", StopReason.REFUSED, 10, 0),
     ],
-    ids=["not in sources", "not in sources, then an answer", "refused"],
+    ids=["not in sources", "not in sources, then an answer", "refused", "refused, empty"],
 )
 def test_every_kind_of_no_answer_looks_the_same(
     make_client: MakeClient, reply: str | Completion

@@ -126,6 +126,9 @@ def _completion(response: httpx.Response, asked_for: str) -> Completion:
         data: Any = response.json()
         choice = data["choices"][0]
         text = choice["message"]["content"]
+        if text is None and choice.get("finish_reason") == "content_filter":
+            # A filtered reply can come without any content.
+            text = ""
         usage = data.get("usage") or {}
         if not isinstance(text, str):
             raise TypeError

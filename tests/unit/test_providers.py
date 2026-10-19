@@ -158,6 +158,19 @@ def test_why_the_answer_stopped(finish: str, reason: StopReason) -> None:
     assert ask(provider(Server(ok(reply(finish=finish))))).stop_reason is reason
 
 
+@pytest.mark.parametrize("content", [None, ""])
+def test_a_filtered_reply_with_no_content_is_a_refusal(content: str | None) -> None:
+    completion = ask(provider(Server(ok(reply(text=content, finish="content_filter")))))
+
+    assert completion.stop_reason is StopReason.REFUSED
+    assert completion.text == ""
+
+
+def test_no_content_is_only_accepted_from_a_filtered_reply() -> None:
+    with pytest.raises(LLMError, match="expected form"):
+        ask(provider(Server(ok(reply(text=None, finish="stop")))))
+
+
 @pytest.mark.parametrize(
     "usage",
     [

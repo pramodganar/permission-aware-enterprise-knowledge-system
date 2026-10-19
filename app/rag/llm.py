@@ -136,7 +136,11 @@ def complete(
 
 
 def _checked(completion: Completion, settings: Settings) -> Completion:
-    if not isinstance(completion.text, str) or not completion.text.strip():
+    if not isinstance(completion.text, str):
+        raise LLMError("the model returned an answer that is not text")
+    # A refusal often comes with no text at all. It is still a reply: the
+    # person is told there is no information, not that the service failed.
+    if not completion.text.strip() and completion.stop_reason is not StopReason.REFUSED:
         raise LLMError("the model returned an empty answer")
     if (
         completion.output_tokens is not None

@@ -54,7 +54,7 @@ Whether real models follow these instructions was measured, not assumed: see [An
 
 **Only a prompt goes out.** `complete` refuses anything that isn't a `Prompt`, and a prompt is only built from a context of chunks the person may read. A plain string, which could hold anything, can't be sent.
 
-**Every call is bounded.** A timeout (30 seconds by default) and a cap on the answer's length (600 tokens) are passed on every call. The cap is part of the cost limit (NFR-3) with the context cap. An answer that comes back longer than the cap, or empty, is a failure.
+**Every call is bounded.** A timeout (30 seconds by default) and a cap on the answer's length (600 tokens) are passed on every call. The cap is part of the cost limit (NFR-3) with the context cap. An answer that comes back longer than the cap, or empty, is a failure, except an empty refusal: a provider that filters a reply often sends no text with it, and that is a refusal, not a fault.
 
 **Retries only where they can help.** A provider that is down, too slow or rate-limiting may answer a moment later, so those failures are retried up to two times, pausing 0.5 and then 1 second. A request the provider rejects, for example because of a bad key, will be rejected again, so it isn't retried. After that the question fails with "service unavailable" (503), and search keeps working without the model (NFR-5). The longest a question can wait is about three timeouts plus the pauses.
 
@@ -100,7 +100,7 @@ Timeouts, refused connections (Ollama not running), 429 and 5xx answers are wort
 
 **The marker is matched anywhere in the reply**, in any case, with spaces or underscores. A model that writes "NOT_IN_SOURCES, but the limit is usually 150 EUR" has said the sources don't answer it and then answered from somewhere else, which is the one thing it mustn't do. A reply that only uses the word "sources" is still an answer; tests cover both.
 
-**A cut-off answer is marked, not hidden.** An answer that stopped at the length cap is returned with `cut_off` set, so the interface can say the rest is missing. What it says up to there came from the sources. An empty reply is a failure (503), not an answer.
+**A cut-off answer is marked, not hidden.** An answer that stopped at the length cap is returned with `cut_off` set, so the interface can say the rest is missing. What it says up to there came from the sources. An empty reply is a failure (503), not an answer, unless the provider marked it refused; then the person gets the usual "no information available", like any other refusal.
 
 **Logged:** outcome, reason, number of sources, whether it was cut off, and the milliseconds for retrieval and for the model separately (NFR-8). Never the question, the answer or a title.
 
