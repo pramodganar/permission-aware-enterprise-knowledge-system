@@ -37,6 +37,11 @@ the person was given, and what came of it (FR-13). That includes a question
 the model failed on, because its sources were sent to the model all the
 same. If the record can't be stored, the answer isn't given
 (decision record 0006).
+
+Before the model is called, a record of what it is about to be sent is
+stored. With a hosted model, that is company text leaving the machine, and
+it must not leave unrecorded: if this record can't be stored, the model is
+never called. The record of the outcome follows once there is one.
 """
 
 import logging
@@ -168,6 +173,15 @@ def answer_question(
         return answer
 
     prompt = build_prompt(question, context)
+    write(
+        db,
+        AuditAction.QUESTION_SENT,
+        "sent",
+        actor_id=user.id,
+        question=question.text,
+        chunk_ids=_chunks_given(context),
+        details={"provider": provider.name, "filters": _filters(filters)},
+    )
     try:
         answer = _generate(provider, prompt, user, question.text, context, settings, sleep)
     except LLMError as error:

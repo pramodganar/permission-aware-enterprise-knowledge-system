@@ -8,6 +8,7 @@ The application log leaves the question and the document text out (NFR-9). The a
 
 | Action | When | Holds |
 |---|---|---|
+| `question.sent` | Just before the model is called | The question and the chunks it is about to be sent, and the provider. If this can't be stored, the model isn't called |
 | `question.asked` | Every question that reaches retrieval, whatever came of it | The question, the chunks given to the model in order, the outcome (`answered`, `no_information`, `failed`) and its reason, the cited documents, the model, prompt version and token counts, any filters |
 | `search` | Every search | The question, the chunks returned, the filters |
 | `document.read` | Every attempt to open a document | `allowed`, `denied` or `not_found`. The response for the last two is identical; the record tells them apart |
@@ -18,7 +19,9 @@ The application log leaves the question and the document text out (NFR-9). The a
 
 A question that is refused before retrieval (empty, too long) isn't recorded, because nothing was looked up. Lists of documents and successful logins aren't recorded either.
 
-A failed question is recorded with its chunks, because they were sent to the model all the same. With a hosted model, that is company text that left the building.
+A question that goes to the model leaves two records: `question.sent` before the call, and `question.asked` with the outcome after it. Records are never changed, so "sent" and "answered" are two facts recorded when each became true. A failed question has both, the second with outcome `failed`: its chunks were sent all the same, and with a hosted model that is company text that left the building.
+
+The record before the call is there because of what the record after it can't cover. Running the service with the audit table removed showed the model being called, answering, and only then the record failing: the answer was withheld, but the question and its sources had already gone to the provider with no record. Now the model is never called unless what it will be sent is on record first.
 
 Each record has the request ID of the request that made it, so the application log lines of the same request can be found.
 
@@ -34,7 +37,7 @@ Questions, searches, document reads and failed logins change nothing, so they ar
 
 | Request | Response |
 |---|---|
-| A question | 503. The model was asked, but its answer isn't returned |
+| A question | 503. The model is never called |
 | A search | 503, no results |
 | Opening a document | 503, no content |
 | A failed login | 503 instead of 401 |

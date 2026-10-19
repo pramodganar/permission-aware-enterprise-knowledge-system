@@ -11,6 +11,8 @@ from app.core.database import Base, UtcDateTime, utc_now
 class AuditAction(StrEnum):
     """What was done. Each one is recorded by the code that does it."""
 
+    # Written before the model is called, with what it is about to be sent.
+    QUESTION_SENT = "question.sent"
     QUESTION_ASKED = "question.asked"
     SEARCH = "search"
     DOCUMENT_READ = "document.read"

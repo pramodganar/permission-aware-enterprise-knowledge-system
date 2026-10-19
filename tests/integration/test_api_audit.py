@@ -367,6 +367,8 @@ def test_without_an_audit_store_nothing_is_answered_found_or_opened(
         assert response.status_code == 503, response.text
         assert response.json()["error"]["code"] == "service_unavailable"
     assert "Twenty-five" not in asked.text
+    # Not even sent: the record of what the model would be sent came first.
+    assert llm.prompts == []
     assert "Leave" not in searched.text
     assert "annual leave" not in opened.text.lower()
 

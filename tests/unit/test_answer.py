@@ -4,13 +4,14 @@ import dataclasses
 import logging
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
+from app.audit.trail import AuditWriteError
 from app.authorization.service import can_read
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
-from app.models import Document, User
+from app.models import AuditRecord, Document, User
 from app.rag.answer import (
     NO_INFORMATION_MESSAGE,
     Answer,
@@ -469,3 +470,59 @@ def test_an_answer_can_not_be_changed(acme: Company) -> None:
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         answer.text = "something else"  # type: ignore[misc]
+
+
+# --- audited before anything is sent ----------------------------------------------------
+
+
+def audit_records(db: Session) -> list[AuditRecord]:
+    return list(db.scalars(select(AuditRecord).order_by(AuditRecord.id)))
+
+
+def test_what_the_model_is_sent_is_recorded_before_it_is_sent(acme: Company) -> None:
+    llm = FakeLLM([ANSWER])
+    before = len(audit_records(acme.db))
+
+    answer = acme.ask("frank", llm=llm)
+
+    sent, asked = audit_records(acme.db)[before:]
+    assert (sent.action, sent.outcome) == ("question.sent", "sent")
+    assert (asked.action, asked.outcome) == ("question.asked", "answered")
+    assert sent.id < asked.id
+    assert sent.question == asked.question == answer.question
+    assert sent.chunk_ids == asked.chunk_ids
+    assert sent.chunk_ids == [c for s in answer.context.sources for c in s.chunk_ids]
+    assert sent.details["provider"] == "fake"
+
+
+def test_nothing_is_recorded_as_sent_when_the_model_is_not_asked(acme: Company) -> None:
+    llm = FakeLLM([ANSWER])
+    before = len(audit_records(acme.db))
+
+    acme.ask("henry", llm=llm)
+
+    assert llm.prompts == []
+    assert [r.action for r in audit_records(acme.db)[before:]] == ["question.asked"]
+
+
+def test_a_failed_model_call_leaves_what_was_sent_and_that_it_failed(acme: Company) -> None:
+    before = len(audit_records(acme.db))
+
+    with pytest.raises(LLMError):
+        acme.ask("frank", llm=FakeLLM([LLMUnavailableError("down")]))
+
+    assert [(r.action, r.outcome) for r in audit_records(acme.db)[before:]] == [
+        ("question.sent", "sent"),
+        ("question.asked", "failed"),
+    ]
+
+
+def test_without_an_audit_store_the_model_is_never_called(acme: Company, engine: Engine) -> None:
+    llm = FakeLLM([ANSWER])
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE audit_records"))
+
+    with pytest.raises(AuditWriteError):
+        acme.ask("frank", llm=llm)
+
+    assert llm.prompts == []
