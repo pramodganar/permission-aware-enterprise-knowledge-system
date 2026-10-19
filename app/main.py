@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import Engine
 
-from app.api import auth, health
+from app.api import auth, documents, health
 from app.api.components import Components, close_components, load_components
 from app.api.errors import install_error_handlers
 from app.api.middleware import install_middleware
@@ -69,6 +69,7 @@ def create_app(
     install_middleware(app)
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(documents.router)
     return app
 
 

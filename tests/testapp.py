@@ -1,8 +1,9 @@
 """A small API over the real auth and authorization code, for tests.
 
-The production routes don't exist yet. These endpoints do nothing except call
-the dependencies and the authorization service, so tests can attack them the
-way a client would.
+It was written before the production routes, and is kept because it is the
+smallest thing that exercises the dependencies and the authorization service:
+these endpoints do nothing else, so tests can attack them the way a client
+would.
 """
 
 from typing import Annotated

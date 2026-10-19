@@ -78,3 +78,23 @@ What it doesn't cover (threat T10):
 - Someone who knows a colleague's email can lock them out for the window by failing on purpose. The window is short for that reason.
 - At most 10,000 emails are remembered; past that the one not seen for longest is forgotten, so a flood of made-up emails can't use up memory.
 
+## Documents
+
+```
+GET /documents          ?department=hr&classification=departmental&limit=100&offset=0
+                     -> {"total": 3, "documents": [{id, title, department, classification,
+                                                    file_type, version, updated_at}, ...]}
+GET /documents/{id}  -> the same fields, plus source_filename, size_bytes, created_at, content
+```
+
+**The list is the documents the caller may read, and nothing else** (FR-5). It is the same `readable_documents` query that retrieval filters by, so the list and search can't disagree. Someone with no reading role, such as a knowledge admin or a security reviewer, gets an empty list, not an error. Documents come in title order; `total` counts every page.
+
+**A document the caller may not read gets exactly the 404 of one that doesn't exist**: the same body and the same headers. Trying IDs one by one tells nobody which documents exist. A replaced or deleted document, or one whose grant has expired, is gone from the list and gives the same 404 on the next request. The log records a denied attempt, with the document's ID, so a security reviewer can see someone trying; a missing ID isn't logged, and no title is ever logged.
+
+An ID that can't be a document ID (not a whole number, below 1, or too big for the database) is invalid input (422), not a database error.
+
+**Filters only narrow.** `department` and `classification` are added to the caller's query, so they can only remove documents from it. Asking for HR's documents as David gives the one HR document everyone may read, the Leave Policy, and nothing else. A filter for something the caller can't read gives an empty list, the same as a filter that matches nothing. An unknown department isn't an error, for the same reason.
+
+**What is never shown**, even to someone who may read the document: who else holds a grant, who uploaded it, and which earlier version it replaced. A reader needs none of it, and each says something about people or documents outside their own access. The response models list their fields one by one, so a field added to a document doesn't reach a client unless it's added to the model too.
+
+**Both responses carry `Cache-Control: no-store`.** Each person's list is different, and a cache shared between people would otherwise hand one person's list to another (threat T6).
