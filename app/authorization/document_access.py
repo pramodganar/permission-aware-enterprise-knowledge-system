@@ -8,6 +8,8 @@ own reading scope.
 One limit is built in: nobody can grant access to themselves. Someone who is
 both an admin and a reader would otherwise be able to open any restricted
 document on their own.
+
+Every change is audited in the same transaction as the change.
 """
 
 import logging
@@ -18,11 +20,13 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.audit.trail import record
 from app.authorization.checks import ensure_permission
 from app.authorization.permissions import Permission, permissions_for
 from app.core.database import utc_now
 from app.core.exceptions import InvalidInputError, NotFoundError, PermissionDeniedError
 from app.models import (
+    AuditAction,
     Classification,
     Department,
     Document,
@@ -105,6 +109,17 @@ def grant_access(
         document.grants.append(grant)
     grant.granted_by_id = admin.id
     grant.expires_at = expires_at
+    record(
+        db,
+        AuditAction.GRANT_GIVEN,
+        "done",
+        actor_id=admin.id,
+        document_id=document.id,
+        details={
+            "grantee_id": grantee.id,
+            "expires_at": None if expires_at is None else expires_at.isoformat(),
+        },
+    )
     db.commit()
 
     logger.info(
@@ -132,6 +147,14 @@ def revoke_access(db: Session, admin: User, document_id: int, email: str) -> Non
         raise NotFoundError(f"no grant on document {document_id} for that user")
 
     document.grants.remove(grant)
+    record(
+        db,
+        AuditAction.GRANT_REVOKED,
+        "done",
+        actor_id=admin.id,
+        document_id=document.id,
+        details={"grantee_id": grant.user_id},
+    )
     db.commit()
     logger.info(
         "document access revoked",
@@ -164,6 +187,19 @@ def change_labels(
         document.classification = new_classification
     if new_department is not None:
         document.department = new_department
+    record(
+        db,
+        AuditAction.DOCUMENT_RELABELLED,
+        "done",
+        actor_id=admin.id,
+        document_id=document.id,
+        details={
+            "old_classification": before["classification"],
+            "new_classification": document.classification,
+            "old_department": before["department"],
+            "new_department": document.department.code,
+        },
+    )
     db.commit()
 
     logger.info(

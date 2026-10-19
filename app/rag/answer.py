@@ -31,6 +31,12 @@ sources; the person is told the rest is missing.
 An answer's citations are resolved against its own context only
 (``app/rag/citations.py``), so a cited source is always one the person may
 read. A label the model made up is removed from the text.
+
+Every question that reaches retrieval is audited: the question, the chunks
+the person was given, and what came of it (FR-13). That includes a question
+the model failed on, because its sources were sent to the model all the
+same. If the record can't be stored, the answer isn't given
+(decision record 0006).
 """
 
 import logging
@@ -42,12 +48,13 @@ from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
+from app.audit.trail import write
 from app.core.config import Settings
-from app.models import User
+from app.models import AuditAction, User
 from app.rag.citations import resolve_citations
 from app.rag.context import Context, Source, build_context
 from app.rag.llm import LLMError, LLMProvider, StopReason, complete
-from app.rag.prompt import NOT_IN_SOURCES, build_prompt
+from app.rag.prompt import NOT_IN_SOURCES, Prompt, build_prompt
 from app.retrieval.embeddings import Embedder
 from app.retrieval.filters import SearchFilters
 from app.retrieval.index import VectorIndex
@@ -127,8 +134,9 @@ def answer_question(
 ) -> Answer:
     """Answer the question from what this person may read, or say there is nothing to answer it.
 
-    Raises InvalidInputError for a question that can't be searched with, and
-    LLMError when the model can't be reached or gives no usable reply.
+    Raises InvalidInputError for a question that can't be searched with,
+    LLMError when the model can't be reached or gives no usable reply, and
+    AuditWriteError when the answer can't be audited.
     """
     started = time.perf_counter()
     question = process_question(raw_question, settings, embedder)
@@ -156,9 +164,37 @@ def answer_question(
             reason=NoAnswerReason.NOTHING_RELEVANT,
         )
         _log(answer, started, retrieved, None)
+        _audit(db, answer, filters)
         return answer
 
     prompt = build_prompt(question, context)
+    try:
+        answer = _generate(provider, prompt, user, question.text, context, settings, sleep)
+    except LLMError as error:
+        write(
+            db,
+            AuditAction.QUESTION_ASKED,
+            "failed",
+            actor_id=user.id,
+            question=question.text,
+            chunk_ids=_chunks_given(context),
+            details={"error": type(error).__name__, "filters": _filters(filters)},
+        )
+        raise
+    _log(answer, started, retrieved, time.perf_counter())
+    _audit(db, answer, filters)
+    return answer
+
+
+def _generate(
+    provider: LLMProvider,
+    prompt: Prompt,
+    user: User,
+    question: str,
+    context: Context,
+    settings: Settings,
+    sleep: Callable[[float], None],
+) -> Answer:
     completion = complete(provider, prompt, settings, sleep=sleep)
 
     reason = None
@@ -176,9 +212,9 @@ def answer_question(
     else:
         text, citations, unknown = NO_INFORMATION_MESSAGE, (), 0
 
-    answer = Answer(
+    return Answer(
         user_id=user.id,
-        question=question.text,
+        question=question,
         outcome=Outcome.ANSWERED if reason is None else Outcome.NO_INFORMATION,
         text=text,
         context=context,
@@ -191,8 +227,42 @@ def answer_question(
         input_tokens=completion.input_tokens,
         output_tokens=completion.output_tokens,
     )
-    _log(answer, started, retrieved, time.perf_counter())
-    return answer
+
+
+def _chunks_given(context: Context) -> list[int]:
+    return [chunk_id for source in context.sources for chunk_id in source.chunk_ids]
+
+
+def _filters(filters: SearchFilters | None) -> dict[str, object] | None:
+    if filters is None:
+        return None
+    return {
+        name: sorted(value)
+        for name, value in filters.model_dump(mode="json", exclude_none=True).items()
+    }
+
+
+def _audit(db: Session, answer: Answer, filters: SearchFilters | None) -> None:
+    # The question and the chunks belong here, not in the application log.
+    write(
+        db,
+        AuditAction.QUESTION_ASKED,
+        answer.outcome.value,
+        actor_id=answer.user_id,
+        question=answer.question,
+        chunk_ids=_chunks_given(answer.context),
+        details={
+            "reason": None if answer.reason is None else answer.reason.value,
+            "cited_documents": [source.document_id for source in answer.citations],
+            "unknown_citations": answer.unknown_citations,
+            "cut_off": answer.cut_off,
+            "model": answer.model,
+            "prompt_version": answer.prompt_version,
+            "input_tokens": answer.input_tokens,
+            "output_tokens": answer.output_tokens,
+            "filters": _filters(filters),
+        },
+    )
 
 
 def _log(answer: Answer, started: float, retrieved: float, generated: float | None) -> None:

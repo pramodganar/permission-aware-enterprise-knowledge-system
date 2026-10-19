@@ -169,3 +169,11 @@ An uploaded form is read before the route's permission check can run, so without
 - a body that doesn't declare its length (chunked): 411. Its size can only be known by reading it, and every ordinary client declares the length.
 
 The server holds a client to the length it declared, so the declared length is a real bound. A file within that but over `APP_MAX_UPLOAD_BYTES` itself is refused by the pipeline with a 422 that gives the limit.
+
+## Audit trail
+
+```
+GET /audit   ?actor=...&action=...&document_id=...&since=...&until=...&limit=100&offset=0
+```
+
+Needs `audit:read`, which only the security reviewer holds. Every question, search, document opened, failed login and change is recorded, and if a record can't be stored the request fails with 503 rather than going unrecorded. What is recorded, and how it's kept append-only: [audit trail](audit.md).

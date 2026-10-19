@@ -21,6 +21,10 @@ access.
 
 Responses say they must not be stored, because they differ per person. A
 cache shared between people would otherwise hand one person's list to another.
+
+Opening a document is audited, and so is every attempt that fails: the audit
+trail says whether it was a document the caller may not read or one that
+doesn't exist, which the response never does. Lists are not audited.
 """
 
 from datetime import datetime
@@ -31,10 +35,12 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import defer, joinedload
 
+from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.authorization.checks import get_readable_document
 from app.authorization.service import readable_documents
-from app.models import Classification, Department, Document
+from app.core.exceptions import NotFoundError
+from app.models import AuditAction, Classification, Department, Document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -127,7 +133,21 @@ def read_document(
     db: DbSession,
     response: Response,
 ) -> DocumentDetail:
-    document = get_readable_document(db, user, document_id)
+    try:
+        document = get_readable_document(db, user, document_id)
+    except NotFoundError as error:
+        exists = bool(error.context.get("exists"))
+        write(
+            db,
+            AuditAction.DOCUMENT_READ,
+            "denied" if exists else "not_found",
+            actor_id=user.id,
+            # A missing ID can't be stored as a reference to a document.
+            document_id=document_id if exists else None,
+            details={} if exists else {"requested_id": document_id},
+        )
+        raise
+    write(db, AuditAction.DOCUMENT_READ, "allowed", actor_id=user.id, document_id=document.id)
 
     response.headers["Cache-Control"] = "no-store"
     return DocumentDetail.model_validate(

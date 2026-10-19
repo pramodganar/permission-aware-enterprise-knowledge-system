@@ -13,6 +13,9 @@ cases the old row stops being readable at once.
 A document's chunks are written in the same transaction as the document, so a
 document is never stored without them. Chunks belong to one version and are
 kept when it is replaced or deleted. They stop being readable with it.
+
+Each change is audited in the same transaction too, so it is stored with its
+audit record or not at all.
 """
 
 import hashlib
@@ -22,6 +25,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.audit.trail import record
 from app.authorization.checks import ensure_permission
 from app.authorization.document_access import (
     GrantRequest,
@@ -37,7 +41,15 @@ from app.core.exceptions import InvalidInputError
 from app.ingestion.chunking import chunk_text
 from app.ingestion.cleaning import clean_text
 from app.ingestion.extractors import EXTRACTORS, base_name, extension_of, extract_text
-from app.models import Chunk, Classification, Document, DocumentGrant, DocumentStatus, User
+from app.models import (
+    AuditAction,
+    Chunk,
+    Classification,
+    Document,
+    DocumentGrant,
+    DocumentStatus,
+    User,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +108,21 @@ def ingest(db: Session, user: User, upload: Upload, settings: Settings) -> Docum
         chunks=_chunks_of(content, settings),
     )
     db.add(document)
+    db.flush()
+    record(
+        db,
+        AuditAction.DOCUMENT_INGESTED,
+        "done",
+        actor_id=user.id,
+        document_id=document.id,
+        details={
+            "department": department.code,
+            "classification": classification.value,
+            "readers": [reader.id for reader, _ in readers],
+            "chunks": len(document.chunks),
+            "sha256": checksum,
+        },
+    )
     db.commit()
 
     logger.info(
@@ -160,6 +187,20 @@ def replace_document(
     )
     current.status = DocumentStatus.SUPERSEDED
     db.add(new_version)
+    db.flush()
+    record(
+        db,
+        AuditAction.DOCUMENT_REPLACED,
+        "done",
+        actor_id=user.id,
+        document_id=new_version.id,
+        details={
+            "replaced_document_id": current.id,
+            "version": new_version.version,
+            "chunks": len(new_version.chunks),
+            "sha256": checksum,
+        },
+    )
     db.commit()
 
     logger.info(
@@ -186,6 +227,7 @@ def delete_document(db: Session, user: User, document_id: int) -> None:
     document = find_current_document(db, document_id)
 
     document.status = DocumentStatus.DELETED
+    record(db, AuditAction.DOCUMENT_DELETED, "done", actor_id=user.id, document_id=document.id)
     db.commit()
     logger.info("document deleted", extra={"document_id": document.id, "user_id": user.id})
 
@@ -211,6 +253,13 @@ def rechunk_documents(db: Session, user: User, settings: Settings) -> int:
         db.flush()
         document.chunks = wanted
         changed += 1
+    record(
+        db,
+        AuditAction.DOCUMENTS_RECHUNKED,
+        "done",
+        actor_id=user.id,
+        details={"documents": changed},
+    )
     db.commit()
 
     logger.info("documents re-chunked", extra={"documents": changed, "user_id": user.id})

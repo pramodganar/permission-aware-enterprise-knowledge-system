@@ -51,4 +51,6 @@ def get_readable_document(db: Session, user: User, document_id: int) -> Document
         f"user {user.id}",
         user_id=user.id,
         document_id=document_id,
+        # For the audit trail, never for the response.
+        exists=exists,
     )

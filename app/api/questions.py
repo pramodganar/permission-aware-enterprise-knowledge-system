@@ -24,6 +24,10 @@ the caller may read. Without a model configured (APP_LLM_PROVIDER=none),
 that is down or too slow gives the same 503 after its retries.
 
 Responses must not be stored: they are different for every person.
+
+Both are audited with the question and the chunks the caller was given:
+``/ask`` inside ``answer_question``, ``/search`` here. If the record can't be
+stored, the caller gets 503 instead of the results (decision record 0006).
 """
 
 from typing import Annotated
@@ -32,9 +36,11 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.components import Loaded
+from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AnswersSwitchedOffError
+from app.models import AuditAction
 from app.rag.answer import NO_INFORMATION_MESSAGE, answer_question
 from app.retrieval.filters import SearchFilters
 from app.retrieval.query import process_question
@@ -108,16 +114,33 @@ def search(
     settings: AppSettings,
     response: Response,
 ) -> SearchResponse:
+    question = process_question(body.question, settings, components.embedder)
     retrieval = retrieve(
         db,
         components.index,
         user,
-        process_question(body.question, settings, components.embedder),
+        question,
         settings.retrieval_top_k,
         settings.retrieval_min_score,
         filters=body.filters,
         reranker=components.reranker,
         candidates=settings.rerank_candidates,
+    )
+    write(
+        db,
+        AuditAction.SEARCH,
+        "no_information" if retrieval.is_empty else "found",
+        actor_id=user.id,
+        question=question.text,
+        chunk_ids=[chunk.chunk_id for chunk in retrieval.chunks],
+        details={
+            "filters": None
+            if body.filters is None
+            else {
+                name: sorted(value)
+                for name, value in body.filters.model_dump(mode="json", exclude_none=True).items()
+            }
+        },
     )
 
     response.headers["Cache-Control"] = "no-store"

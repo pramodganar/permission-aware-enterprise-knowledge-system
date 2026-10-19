@@ -14,7 +14,7 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in, listing and opening documents, searching, asking and managing documents work so far.
+Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in, listing and opening documents, searching, asking, managing documents and the audit trail work so far.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
@@ -53,6 +53,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Retrieval](docs/retrieval.md): from question to chunks, and how the relevance threshold was measured
 - [Generation](docs/generation.md): from chunks to an answer with sources
 - [API](docs/api.md): the HTTP service, its errors, request IDs and logs
+- [Audit trail](docs/audit.md): what is recorded, who can read it, and why a request fails without it
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made
