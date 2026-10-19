@@ -77,6 +77,20 @@ class TooManyRequestsError(AppError):
         self.retry_after = retry_after
 
 
+class LengthRequiredError(AppError):
+    """A request body sent without saying how long it is."""
+
+    code = "length_required"
+    status_code = 411
+    public_message = "The request must say how long its body is."
+
+
+class RequestTooLargeError(AppError):
+    code = "request_too_large"
+    status_code = 413
+    public_message = "The request is too large."
+
+
 class ServiceUnavailableError(AppError):
     """Something the request depends on failed, so the request is refused."""
 

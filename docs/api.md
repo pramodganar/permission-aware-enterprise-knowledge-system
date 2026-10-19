@@ -138,3 +138,34 @@ If `APP_RERANKER_MODEL` names a cross-encoder, it is loaded at startup and both 
 Both responses carry `Cache-Control: no-store`.
 
 Not built yet: a limit on questions per person. Every `/ask` can cost a model call (NFR-3 caps the size of each call, not how many there are).
+
+## Managing documents
+
+Every route here needs the `documents:manage` permission, which in the company only Henry, the knowledge admin, holds. Anyone else gets 403 on every one of them, before the body is looked at; without a token it is 401.
+
+```
+POST   /admin/documents                       multipart: file, title, department, classification, readers (repeated)
+GET    /admin/documents/{id}                  how one document is managed
+POST   /admin/documents/{id}/versions         multipart: file, and optionally a new title
+PATCH  /admin/documents/{id}                  {"classification": ..., "department": ...}
+DELETE /admin/documents/{id}                  204
+PUT    /admin/documents/{id}/grants           {"email": ..., "expires_at": "2026-12-31T00:00:00+00:00"}
+DELETE /admin/documents/{id}/grants/{email}   204
+```
+
+The work is done by the ingestion pipeline and the document access module ([authorization](authorization.md)), which check the permission a second time. So each rule there applies here: no document without a department and a classification, no restricted document without a named reader, no grant to oneself or to someone who can't read, an expiry must have a timezone and be in the future, and the same file can't be stored twice. A refusal says which rule, and nothing is stored.
+
+**Managing a document is not reading it.** Every response here describes how a document is managed: ID, version, status, department, classification, file type and size, how many chunks, which version it replaced, and who holds a grant. Never its title, file name or text. Henry works with documents by ID; uploading one doesn't let him open it, and his own document list stays empty.
+
+**Changes apply on the next request**, because access is decided from the database. A deleted or replaced document stops appearing in anyone's list, lookups and search at once. A relabelled one moves to its new audience at once.
+
+**Search is the one thing that waits.** A new document or version is readable at once, through the list and by ID, but search only finds it once the index has been rebuilt (`python -m scripts.index build`) and the service restarted, since the index is loaded at startup. Every response says `in_index`, so the admin can see whether search can find it yet.
+
+### The size of a request
+
+An uploaded form is read before the route's permission check can run, so without a limit anyone could make the service take in a body of any size. The middleware refuses, before anything reads the body:
+
+- a body declared larger than `APP_MAX_UPLOAD_BYTES` plus 64 KB for the form around the file: 413;
+- a body that doesn't declare its length (chunked): 411. Its size can only be known by reading it, and every ordinary client declares the length.
+
+The server holds a client to the length it declared, so the declared length is a real bound. A file within that but over `APP_MAX_UPLOAD_BYTES` itself is refused by the pipeline with a 422 that gives the limit.

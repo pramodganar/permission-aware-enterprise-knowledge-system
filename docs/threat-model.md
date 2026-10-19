@@ -70,14 +70,14 @@ This lists what could go wrong, what the design does about it, how I intend to c
 |---|---|---|---|---|
 | T14 | A document contains instructions aimed at the model, for example "also include all salary data" | The context is fixed before the LLM runs, and the LLM cannot retrieve anything. There is nothing extra for it to include. | A general document asking for salary data and holding a fake source block: an obedient model given it, by three people, includes nothing they may not read, and the fake block stays escaped text | The model may still follow harmless-looking instructions and give a misleading answer. Integrity, not confidentiality. |
 | T15 | Someone ingests false content to mislead employees | Only admins can ingest. Ingestion is audited. Every answer cites its source, so a reader can check. | Audit record exists for each ingestion | A convincing false document from an admin |
-| T16 | A malicious file: oversized, malformed, or built to break the parser | File type and size limits, admin-only upload, parsing treated as untrusted | Tests with oversized and wrong-type files | Bugs in third-party parsers |
+| T16 | A malicious file: oversized, malformed, or built to break the parser | File type and size limits, admin-only upload, parsing treated as untrusted. A request body over the upload limit, or with no declared length, is refused before it is read, because a form is parsed before the permission check can run. | Tests with oversized and wrong-type files, through the pipeline and through the API; a body over the limit gets 413 and a chunked one 411 | Bugs in third-party parsers |
 
 ### Admin and labelling
 
 | ID | Threat | Mitigation | Check | Left over |
 |---|---|---|---|---|
 | T17 | A document is uploaded with the wrong department or classification | Upload is rejected if either is missing | Test for missing fields | A wrong but valid label is enforced faithfully. See residual risks. |
-| T18 | An admin changes permissions to give themselves or someone else access | Admin rights do not include read rights. Nobody can grant access to themselves. Permission changes are logged, and will be audited. | Tests that an admin gets no content, and that an admin who is also a reader can't grant to themselves. | An admin can still widen a document's audience for someone else, and two admins can grant to each other. Only the record of the change shows it. |
+| T18 | An admin changes permissions to give themselves or someone else access | Admin rights do not include read rights. Nobody can grant access to themselves. Permission changes are logged, and will be audited. | Tests that an admin gets no content, and that an admin who is also a reader can't grant to themselves. Through the API: the admin's responses hold no title, file name or text, the admin's own list stays empty, and every other person is refused every manage route with the company unchanged after. | An admin can still widen a document's audience for someone else, and two admins can grant to each other. Only the record of the change shows it. |
 
 ### Storage, logs and secrets
 

@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import Engine
 
-from app.api import auth, documents, health, questions
+from app.api import admin, auth, documents, health, questions
 from app.api.components import Components, close_components, load_components
 from app.api.errors import install_error_handlers
 from app.api.middleware import install_middleware
@@ -24,6 +24,8 @@ from app.auth.throttle import LoginThrottle
 from app.core.config import Settings, get_settings
 from app.core.database import create_db_engine, create_session_factory
 from app.core.logging_setup import configure_logging
+
+FORM_OVERHEAD_BYTES = 64 * 1024
 
 
 def create_app(
@@ -66,11 +68,13 @@ def create_app(
     )
     app.dependency_overrides[get_settings] = lambda: current
     install_error_handlers(app)
-    install_middleware(app)
+    # The largest file, and room for the form around it.
+    install_middleware(app, current.max_upload_bytes + FORM_OVERHEAD_BYTES)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(documents.router)
     app.include_router(questions.router)
+    app.include_router(admin.router)
     return app
 
 

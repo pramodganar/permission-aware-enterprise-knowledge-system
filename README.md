@@ -14,7 +14,7 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in, listing and opening documents, searching and asking work so far.
+Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in, listing and opening documents, searching, asking and managing documents work so far.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
@@ -166,6 +166,6 @@ For fast answers, Groq has a free tier: create a key at [console.groq.com](https
 
 ## Stack
 
-In use now: Python 3.11, FastAPI, SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
+In use now: Python 3.11, FastAPI (with python-multipart for uploads), SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
 
 Planned: PostgreSQL as the target database, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.
