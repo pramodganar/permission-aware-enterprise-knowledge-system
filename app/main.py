@@ -16,10 +16,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import Engine
 
-from app.api import health
+from app.api import auth, health
 from app.api.components import Components, close_components, load_components
 from app.api.errors import install_error_handlers
 from app.api.middleware import install_middleware
+from app.auth.throttle import LoginThrottle
 from app.core.config import Settings, get_settings
 from app.core.database import create_db_engine, create_session_factory
 from app.core.logging_setup import configure_logging
@@ -60,10 +61,14 @@ def create_app(
         openapi_url=None if production else "/openapi.json",
     )
     app.state.session_factory = session_factory
+    app.state.login_throttle = LoginThrottle(
+        current.login_max_failures, current.login_failure_window_seconds
+    )
     app.dependency_overrides[get_settings] = lambda: current
     install_error_handlers(app)
     install_middleware(app)
     app.include_router(health.router)
+    app.include_router(auth.router)
     return app
 
 

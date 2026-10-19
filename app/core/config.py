@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # No default on purpose: the service must not start with a known secret.
     jwt_secret_key: SecretStr = Field(min_length=32)
     access_token_expire_minutes: int = Field(default=30, gt=0, le=1440)
+    # Failed logins allowed for one email within the window before further
+    # attempts are refused without checking the password (threat T10).
+    login_max_failures: int = Field(default=5, ge=1, le=100)
+    login_failure_window_seconds: int = Field(default=900, ge=1, le=86_400)
 
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
 

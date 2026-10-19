@@ -26,7 +26,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from app.core.exceptions import AppError, InvalidInputError, NotFoundError, error_response
+from app.core.exceptions import (
+    AppError,
+    InvalidInputError,
+    NotFoundError,
+    TooManyRequestsError,
+    error_response,
+)
 from app.core.logging_setup import current_request_id
 
 
@@ -41,7 +47,10 @@ def _respond(status_code: int, body: dict[str, Any]) -> JSONResponse:
 
 
 async def _app_error(_: Request, error: Exception) -> JSONResponse:
-    return _respond(*error_response(error, current_request_id()))
+    response = _respond(*error_response(error, current_request_id()))
+    if isinstance(error, TooManyRequestsError) and error.retry_after:
+        response.headers["Retry-After"] = str(error.retry_after)
+    return response
 
 
 async def _invalid_request(_: Request, error: Exception) -> JSONResponse:

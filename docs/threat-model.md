@@ -54,7 +54,7 @@ This lists what could go wrong, what the design does about it, how I intend to c
 | T7 | Forged or altered token | Signature verified with a fixed algorithm, expiry enforced | Tests with a tampered token, an expired token, and an unsigned token | Key theft, see T20 |
 | T8 | The client sends its own department or role in the request | These fields are never read from the request. They come from the database. | Test that sends a false department in the body | None expected |
 | T9 | A deactivated user, or one whose role changed, keeps using an old token | User status and roles are loaded on every request | Deactivate a user, then reuse their token | None beyond the current request |
-| T10 | Password guessing | Hashed passwords, failed logins audited, rate limit on login designed | Unit tests on hashing. Rate limiting is design only. | Rate limiting is not implemented in this project |
+| T10 | Password guessing | Hashed passwords. After 5 failed logins for one email in 15 minutes, further attempts get 429 without the password being checked. Counted per email typed, so an unknown email is limited exactly like a real one. Failed logins are logged without what was typed. | Unit tests on hashing and on the limit; API tests that the sixth attempt is refused even with the right password, that an unknown email is limited the same way, and that the password isn't checked once refused | The limit is in memory per process and counts per email, not per client: one client trying one password on many emails isn't slowed. Someone can lock a colleague out for 15 minutes by failing on purpose. |
 
 ### Learning things without reading them
 

@@ -47,3 +47,34 @@ The libraries that log one line per HTTP request they make (`httpx`, `huggingfac
 ## Health
 
 `GET /health` → `{"status": "ok"}`, or 503 if the database doesn't answer. It needs no token, so it says nothing else: no version, no model, no counts.
+
+## Logging in and who you are
+
+```
+POST /auth/login   {"email": "david@acmecorp.example", "password": "..."}
+                -> {"access_token": "...", "token_type": "bearer", "expires_in": 1800}
+GET  /auth/me      Authorization: Bearer <token>
+                -> id, email, full_name, department, roles, permissions
+```
+
+**The token holds only the user's ID** and when it expires ([decision record 0004](adr/0004-identity-only-token.md)). Every request loads the user from the database, so a role change, a move to another department or a deactivated account takes effect on the next request with the same token. `/auth/me` shows exactly what the next request will be decided on: the department and roles as they are now, and the permissions the authorization service gives them.
+
+**Every failed login is the same 401**, with the same body: an unknown email, a wrong password and a deactivated account can't be told apart by the response. Nor, as far as measured, by its timing: an unknown email is checked against a dummy password hash, so it costs the same work. Over 30 attempts each on the development laptop, the median time was 72.9 ms for the right password, 72.0 ms for a wrong one and 73.3 ms for an unknown email. That is a check on one machine, not a proof against a patient attacker measuring thousands of attempts. The reason a login failed is logged, never the email or password typed.
+
+**The body is checked strictly.** Unknown fields are refused, so a client can't send `"role": "executive"` alongside its password and hope something reads it. A password over 1,024 characters is refused before hashing, so a huge one can't keep the server busy. As everywhere, a refused body names the fields and never echoes what was in them.
+
+The token response carries `Cache-Control: no-store`.
+
+### Too many failed logins
+
+After `APP_LOGIN_MAX_FAILURES` failed logins (5) for one email within `APP_LOGIN_FAILURE_WINDOW_SECONDS` (15 minutes), further attempts get **429** with a `Retry-After` header, and the password isn't checked at all, so even the right one is refused until the oldest failure leaves the window. A successful login clears the count.
+
+Attempts are counted **per email as typed**, normalised, whether or not an account has it. An unknown email is limited exactly like a real one, so the limit doesn't reveal which emails exist.
+
+What it doesn't cover (threat T10):
+
+- It is in memory, per process. Two copies of the service count separately, and a restart forgets. A shared store such as Redis would fix both.
+- It counts per email, not per client, so one client trying one common password on many emails isn't slowed. A per-client limit needs the client's real address, which behind a proxy is a trust question of its own.
+- Someone who knows a colleague's email can lock them out for the window by failing on purpose. The window is short for that reason.
+- At most 10,000 emails are remembered; past that the one not seen for longest is forgotten, so a flood of made-up emails can't use up memory.
+

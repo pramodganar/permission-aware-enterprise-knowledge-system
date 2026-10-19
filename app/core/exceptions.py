@@ -64,6 +64,19 @@ class InvalidInputError(AppError):
     expose_detail = True
 
 
+class TooManyRequestsError(AppError):
+    """Too many attempts in a short time. The same for every cause it has."""
+
+    code = "too_many_requests"
+    status_code = 429
+    public_message = "Too many attempts. Try again later."
+
+    def __init__(self, detail: str = "", retry_after: int = 0, **context: Any) -> None:
+        super().__init__(detail, **context)
+        # Seconds until the next attempt can succeed, for the Retry-After header.
+        self.retry_after = retry_after
+
+
 class ServiceUnavailableError(AppError):
     """Something the request depends on failed, so the request is refused."""
 
