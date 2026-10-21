@@ -87,6 +87,31 @@ The **Documents** page, offered with asking to anyone who may read, lists the do
 
 **Opening a document** shows its whole text, with where it came from: department, classification, version, the file it was made from and its size. Only the choice of document is remembered between interactions, never its text: the document is fetched again on every interaction, so a grant taken away, or a document replaced or removed, shows on the next click. Each of those fetches is an opening as far as the service is concerned, and the audit trail records each one; that is accurate, because the text was sent again. A document that has gone between listing and opening says "This document isn't available. It may have been removed, or you may no longer have access." and nothing about which.
 
+## Managing documents
+
+Someone with the manage-documents permission (Henry) gets a **Manage documents** page. Managing a document isn't reading it, and the service never tells an admin a document's title, file name or text, so the page works with documents by ID. For a document it shows how it is managed, from `GET /admin/documents/{id}`: status, version, department, classification, file type, size, number of chunks, which document it replaced, who holds a grant and until when, and whether search can find it yet. A new document or version can't be found by search until the index is rebuilt, and the page says so.
+
+From there an admin can:
+
+- **give someone access**, until the end of a day (UTC) or until revoked, and **revoke** a grant;
+- **change the labels**: only the ones that changed are sent;
+- **replace it with a new version**: the page moves to the new document's ID;
+- **withdraw it**, after ticking that nobody will be able to read or find it.
+
+**Uploading** takes the file (`.txt`, `.pdf` or `.docx`, the types the pipeline reads), a title, the owning department, the classification and, for a restricted document, the readers, one per line or separated by commas. A missing file, title or department, or more than 50 readers, is caught before sending. Everything else is the service's to refuse, and the page shows its reason: an unknown department, a reader with no role that can read, a file it can't read, or one over the upload limit. The page moves to the new document's ID afterwards. The title the admin typed isn't shown back; the page knows documents by ID like the service does.
+
+**Forms start again empty after each action.** A Streamlit form clears itself only when its run ends, and moving to the new document cuts the run short, which left the uploaded file in the form, ready to be sent a second time. Each finished action gives the forms new names, so they are drawn fresh. A test checks that after an upload no file is left in any uploader.
+
+The lists offered, classifications and file types, are written out in the UI because it can't import the service; a test checks they are the service's.
+
+## The audit trail
+
+Someone with the audit permission (Irene) gets an **Audit trail** page: `GET /audit`, newest first, 50 records a page, in UTC. It can be narrowed by who did something (their email), what they did, which document, and a range of days, from the start of the first to the end of the last. A range that ends before it starts is caught before sending. A failed login for an email no account has shows as "(no such account)".
+
+Questions and details are shown in a table, whose cells are plain text, so a question holding Markdown is shown as it was asked.
+
+**Every look at the page is a read of the trail**, and the service records each one, so the newest record is usually the reviewer's own previous look. The filters sit in a form, so typing in them doesn't read the trail on every keystroke.
+
 ## Text from the service
 
 A document, or an answer made from one, can hold an image link. Drawn as Markdown, the reader's browser would fetch that URL by itself, carrying whatever was put in it, without anyone clicking (threat T29 in the [threat model](threat-model.md)). Streamlit reads Markdown, images included, in headings, captions, messages and the labels of expanders, not only in `st.markdown`. So:

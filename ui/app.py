@@ -21,7 +21,7 @@ import streamlit as st
 # Started as a script from anywhere, the ui package lives one level up.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ui import asking, documents
+from ui import asking, documents, managing, reviewing
 from ui.client import (
     DEFAULT_API_URL,
     Answer,
@@ -30,6 +30,7 @@ from ui.client import (
     Citation,
     DocumentSummary,
     Filters,
+    ManagedDocument,
     Me,
     NotFound,
     NotSignedIn,
@@ -38,7 +39,9 @@ from ui.client import (
 )
 from ui.session import (
     ASK,
+    AUDIT,
     DOCUMENTS,
+    MANAGE,
     NOTICE,
     SESSION_ENDED,
     current_user,
@@ -298,6 +301,238 @@ def show_document(client: Api, signed_in: str, document_id: int) -> None:
     st.text(document.content)
 
 
+# --- managing documents -----------------------------------------------------------------
+
+MANAGE_ID = "manage_id"
+# Set by an action, applied before the ID box is drawn on the next run: a
+# widget's value can't be changed once it is drawn.
+MANAGE_NEXT = "manage_next"
+MANAGE_DONE = "manage_done"
+# Counts finished actions. The forms are named with it, so each action gets
+# fresh, empty forms: a form clears itself only when its run ends, and
+# st.rerun() cuts the run short, which would leave the file ready to be sent
+# again.
+MANAGE_ROUND = "manage_round"
+
+
+def form_name(name: str) -> str:
+    return f"{name} {st.session_state.get(MANAGE_ROUND, 0)}"
+
+
+def finished(message: str, document_id: int | None = None) -> None:
+    st.session_state[MANAGE_DONE] = message
+    st.session_state[MANAGE_ROUND] = st.session_state.get(MANAGE_ROUND, 0) + 1
+    if document_id is not None:
+        st.session_state[MANAGE_NEXT] = document_id
+    st.rerun()
+
+
+def show_manage(client: Api) -> None:
+    st.title(MANAGE)
+    st.caption(
+        "Managing a document doesn't let you read it: documents are worked with by ID, "
+        "and nothing here shows a title or text. Every change is recorded in the audit trail."
+    )
+    if MANAGE_NEXT in st.session_state:
+        st.session_state[MANAGE_ID] = st.session_state.pop(MANAGE_NEXT)
+    done = st.session_state.pop(MANAGE_DONE, None)
+    if done:
+        st.success(literal(done))
+    signed_in = token(st.session_state)
+    try:
+        show_managed(client, signed_in)
+        with st.expander("Upload a new document"):
+            show_upload(client, signed_in)
+    except NotSignedIn:
+        sign_out(st.session_state, notice=SESSION_ENDED)
+        st.rerun()
+    except ApiError as error:
+        st.error(literal(managing.explain(error)))
+
+
+def show_managed(client: Api, signed_in: str) -> None:
+    chosen = st.number_input("Document ID", min_value=1, step=1, value=None, key=MANAGE_ID)
+    if chosen is None:
+        st.caption("Enter a document's ID to see how it is managed.")
+        return
+    document_id = int(chosen)
+    try:
+        document = client.managed(signed_in, document_id)
+    except NotSignedIn:
+        raise
+    except ApiError as error:
+        st.error(literal(managing.explain(error)))
+        return
+    st.dataframe(
+        [{"": name, "Value": value} for name, value in managing.facts(document).items()],
+        hide_index=True,
+    )
+    show_grants(client, signed_in, document)
+    if document.status == "deleted":
+        st.info("This document has been withdrawn. Nobody can read or find it.")
+        return
+    with st.expander("Give someone access"):
+        show_grant_form(client, signed_in, document)
+    with st.expander("Change labels"):
+        show_label_form(client, signed_in, document)
+    with st.expander("Replace with a new version"):
+        show_version_form(client, signed_in, document)
+    with st.expander("Withdraw"):
+        show_withdraw(client, signed_in, document)
+
+
+def show_grants(client: Api, signed_in: str, document: ManagedDocument) -> None:
+    st.markdown("**Grants**")
+    if not document.grants:
+        st.caption("Nobody holds a grant to this document.")
+    for grant, line in zip(document.grants, managing.grant_lines(document), strict=True):
+        left, right = st.columns([4, 1])
+        left.text(line)
+        if right.button("Revoke", key=f"revoke {grant.email}"):
+            client.revoke(signed_in, document.id, grant.email)
+            finished(f"Revoked access to document {document.id} for {grant.email}.")
+
+
+def show_grant_form(client: Api, signed_in: str, document: ManagedDocument) -> None:
+    with st.form(form_name("grant"), clear_on_submit=True):
+        email = st.text_input("Email")
+        until = st.date_input("Until the end of (UTC; leave empty for no end)", value=None)
+        submitted = st.form_submit_button("Grant")
+    if submitted:
+        if not email.strip():
+            st.error("Enter the email of the person to give access to.")
+            return
+        client.grant(signed_in, document.id, email.strip(), managing.until_end_of(until or None))
+        finished(f"Gave {email.strip()} access to document {document.id}.")
+
+
+def show_label_form(client: Api, signed_in: str, document: ManagedDocument) -> None:
+    with st.form(form_name("labels")):
+        classification = st.selectbox(
+            "Classification",
+            managing.CLASSIFICATIONS,
+            index=managing.CLASSIFICATIONS.index(document.classification)
+            if document.classification in managing.CLASSIFICATIONS
+            else 0,
+        )
+        department = st.text_input("Department", value=document.department)
+        submitted = st.form_submit_button("Save labels")
+    if submitted:
+        changed = managing.label_changes(document, str(classification), department)
+        if not changed:
+            st.info("Nothing changed.")
+            return
+        client.relabel(signed_in, document.id, **changed)
+        finished(f"Changed the labels of document {document.id}.")
+
+
+def show_version_form(client: Api, signed_in: str, document: ManagedDocument) -> None:
+    with st.form(form_name("version"), clear_on_submit=True):
+        file = st.file_uploader("File", type=list(managing.FILE_TYPES))
+        title = st.text_input("New title (leave empty to keep it)")
+        submitted = st.form_submit_button("Upload new version")
+    if submitted:
+        if file is None:
+            st.error(managing.NO_FILE)
+            return
+        new = client.new_version(
+            signed_in,
+            document.id,
+            filename=file.name,
+            data=file.getvalue(),
+            title=title.strip() or None,
+        )
+        finished(f"Version {new.version} is document {new.id}; it replaces {document.id}.", new.id)
+
+
+def show_withdraw(client: Api, signed_in: str, document: ManagedDocument) -> None:
+    sure = st.checkbox(
+        "Nobody will be able to read or find this document", key=f"withdraw {document.id}"
+    )
+    if st.button("Withdraw document", disabled=not sure):
+        client.delete(signed_in, document.id)
+        finished(f"Withdrew document {document.id}.")
+
+
+def show_upload(client: Api, signed_in: str) -> None:
+    with st.form(form_name("upload"), clear_on_submit=True):
+        file = st.file_uploader("File", type=list(managing.FILE_TYPES))
+        title = st.text_input("Title")
+        department = st.text_input("Department", placeholder="such as hr")
+        classification = st.selectbox("Classification", managing.CLASSIFICATIONS)
+        readers = st.text_area(
+            "Readers", help="Emails of the people who may read a restricted document."
+        )
+        submitted = st.form_submit_button("Upload")
+    if not submitted:
+        return
+    named = managing.readers_from(readers)
+    problem = managing.upload_problem(file.name if file else None, title, department, named)
+    if problem or file is None:
+        st.error(problem or managing.NO_FILE)
+        return
+    new = client.upload(
+        signed_in,
+        filename=file.name,
+        data=file.getvalue(),
+        title=title.strip(),
+        department=department.strip(),
+        classification=str(classification),
+        readers=named,
+    )
+    finished(f"Uploaded as document {new.id}.", new.id)
+
+
+# --- the audit trail --------------------------------------------------------------------
+
+
+def show_audit(client: Api) -> None:
+    st.title(AUDIT)
+    st.caption("Newest first, in UTC. Every look at this page is itself recorded in the trail.")
+    with st.form("audit"):
+        left, middle, right = st.columns(3)
+        actor = left.text_input("Who (email)")
+        action = middle.selectbox(
+            "Action", [None, *reviewing.ACTIONS], format_func=lambda a: "Any" if a is None else a
+        )
+        document_id = right.number_input("Document ID", min_value=1, step=1, value=None)
+        first_col, last_col = st.columns(2)
+        first = first_col.date_input("From", value=None)
+        last = last_col.date_input("To", value=None)
+        st.form_submit_button("Show")
+    problem = reviewing.window_problem(first or None, last or None)
+    if problem:
+        st.error(problem)
+        return
+    since, until = reviewing.window(first or None, last or None)
+    try:
+        found, page = reviewing.fetch(
+            client,
+            token(st.session_state),
+            actor=actor.strip() or None,
+            action=action,
+            document_id=None if document_id is None else int(document_id),
+            since=since,
+            until=until,
+            page=int(st.session_state.get("audit_page", 1)),
+        )
+    except NotSignedIn:
+        sign_out(st.session_state, notice=SESSION_ENDED)
+        st.rerun()
+    except ApiError as error:
+        st.error(literal(reviewing.explain(error)))
+        return
+    if not found.records:
+        st.info("No records match.")
+        return
+    st.caption(f"{found.total} records")
+    # Questions are shown in a table, whose cells are plain text.
+    st.dataframe(reviewing.rows(found.records), hide_index=True, width="stretch")
+    pages = reviewing.pages_for(found.total)
+    if pages > 1:
+        st.selectbox("Page", list(range(1, pages + 1)), index=page - 1, key="audit_page")
+
+
 def main() -> None:
     st.set_page_config(page_title=TITLE, layout="wide")
     client = api(os.environ.get("UI_API_URL", DEFAULT_API_URL))
@@ -310,6 +545,10 @@ def main() -> None:
         show_ask(client)
     elif page == DOCUMENTS:
         show_documents(client)
+    elif page == MANAGE:
+        show_manage(client)
+    elif page == AUDIT:
+        show_audit(client)
     else:
         show_home(me)
 

@@ -10,9 +10,11 @@ import pytest
 from ui.client import Api, Login, Me
 from ui.session import (
     ASK,
+    AUDIT,
     DOCUMENTS,
     HOME,
     LOGIN,
+    MANAGE,
     ME,
     NOTICE,
     SESSION_ENDED,
@@ -245,8 +247,8 @@ def test_what_the_page_offers_follows_the_permissions_the_service_gave(
     [
         (["documents:read:general"], [HOME, ASK, DOCUMENTS]),
         (["documents:read:all_departments"], [HOME, ASK, DOCUMENTS]),
-        (["documents:manage"], [HOME]),
-        (["audit:read"], [HOME]),
+        (["documents:manage"], [HOME, MANAGE]),
+        (["audit:read"], [HOME, AUDIT]),
         ([], [HOME]),
     ],
 )

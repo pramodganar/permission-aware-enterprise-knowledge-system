@@ -92,7 +92,7 @@ def test_the_list_is_exactly_what_each_person_may_read(open_as: Open, name: str)
 def test_the_page_is_not_offered_to_someone_who_may_read_nothing(open_as: Open, name: str) -> None:
     page = open_as(name)
 
-    assert page.sidebar.radio[0].options == [HOME]
+    assert DOCUMENTS not in page.sidebar.radio[0].options
 
 
 def test_a_long_list_comes_a_page_at_a_time(open_as: Open, monkeypatch: pytest.MonkeyPatch) -> None:

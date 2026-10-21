@@ -127,7 +127,7 @@ def test_asking_is_offered_to_someone_who_may_read(open_as: Open) -> None:
 def test_asking_is_not_offered_to_someone_who_may_read_nothing(open_as: Open, name: str) -> None:
     page = open_as(name, FakeLLM())
 
-    assert page.sidebar.radio[0].options == [HOME]
+    assert ASK not in page.sidebar.radio[0].options
 
 
 @pytest.mark.parametrize("name", ["david", "carol", "grace"])

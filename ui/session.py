@@ -33,6 +33,8 @@ SIGNED_OUT = "You are signed out."
 HOME = "Home"
 ASK = "Ask and search"
 DOCUMENTS = "Documents"
+MANAGE = "Manage documents"
+AUDIT = "Audit trail"
 
 # Streamlit types its keys as str | int, so the key type is left open.
 State = MutableMapping[Any, Any]
@@ -116,6 +118,10 @@ def pages_for(me: Me) -> list[str]:
     pages = [HOME]
     if can_read(me):
         pages += [ASK, DOCUMENTS]
+    if me.can("documents:manage"):
+        pages.append(MANAGE)
+    if me.can("audit:read"):
+        pages.append(AUDIT)
     return pages
 
 
