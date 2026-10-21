@@ -54,6 +54,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Generation](docs/generation.md): from chunks to an answer with sources
 - [API](docs/api.md): the HTTP service, its errors, request IDs and logs
 - [Audit trail](docs/audit.md): what is recorded, who can read it, and why a request fails without it
+- [UI](docs/ui.md): the web UI, which only talks to the API
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made

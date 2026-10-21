@@ -7,6 +7,7 @@ the service as it runs. Log in as any of the nine people with ``headers``.
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
@@ -27,14 +28,14 @@ def email(name: str) -> str:
     return f"{name}@acmecorp.example"
 
 
-@contextmanager
-def company_client(
+def company_app(
     db: Session,
     engine: Engine,
     settings: Settings,
     provider: LLMProvider | None = None,
     reranker: Reranker | None = None,
-) -> Iterator[TestClient]:
+) -> FastAPI:
+    """The service over the seeded company, not yet started."""
     seed(db, settings, PASSWORD)
     embedder = FakeEmbedder()
     components = Components(
@@ -43,7 +44,18 @@ def company_client(
         provider=provider,
         reranker=reranker,
     )
-    app = create_app(settings, engine=engine, components=components)
+    return create_app(settings, engine=engine, components=components)
+
+
+@contextmanager
+def company_client(
+    db: Session,
+    engine: Engine,
+    settings: Settings,
+    provider: LLMProvider | None = None,
+    reranker: Reranker | None = None,
+) -> Iterator[TestClient]:
+    app = company_app(db, engine, settings, provider, reranker)
     with TestClient(app, raise_server_exceptions=False) as client:
         yield client
 
