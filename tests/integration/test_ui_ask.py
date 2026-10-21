@@ -8,7 +8,6 @@ the person may read.
 
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -25,10 +24,10 @@ from app.rag.prompt import Prompt
 from fakes import FakeLLM
 from liveserver import live_server
 from questions import FACTS, MAY_READ
+from shown import everything_shown, open_ui, unescape
 from ui.asking import CUT_OFF, EMPTY_QUESTION, NARROW, UNCITED
-from ui.session import ASK, HOME, LOGIN
+from ui.session import ASK, DOCUMENTS, HOME, LOGIN
 
-PAGE = Path(__file__).resolve().parents[2] / "ui" / "app.py"
 CITE_EVERYTHING = " ".join(f"[S{n}]" for n in range(1, 21))
 LEAVE = "How many days of annual leave do I get?"
 # Questions that between them reach every document someone may read.
@@ -65,9 +64,7 @@ def open_as(
                 }
             )
             url = stack.enter_context(live_server(company_app(db, engine, changed, provider)))
-            monkeypatch.setenv("UI_API_URL", url)
-            page = AppTest.from_file(str(PAGE), default_timeout=30)
-            page.run()
+            page = open_ui(url, monkeypatch)
             page.text_input[0].input(email(name))
             page.text_input[1].input(PASSWORD)
             page.button[0].click().run()
@@ -101,13 +98,6 @@ def search(page: AppTest, question: str, **filters: list[Any]) -> AppTest:
     return press(page, "Search only", question, **filters)
 
 
-def everything_shown(page: AppTest) -> str:
-    parts = [str(e.value) for e in page.main if hasattr(e, "value")]
-    parts += [str(e.label) for e in page.main if hasattr(e, "label")]
-    parts += [str(e.value) for e in page.sidebar if hasattr(e, "value")]
-    return "\n".join(parts)
-
-
 def passages(page: AppTest) -> list[Any]:
     """The sources or search results shown, each in its own expander."""
     return [e for e in page.expander if e.label != NARROW]
@@ -120,7 +110,8 @@ def shown_as_plain_text(page: AppTest) -> bool:
 
 def titles_shown(page: AppTest) -> set[str]:
     # Shown as "[S1] Title, version N" or "Title, version N · relevance 0.12".
-    return {e.label.split(", version ")[0].split("] ", 1)[-1] for e in passages(page)}
+    labels = [unescape(e.label) for e in passages(page)]
+    return {label.split(", version ")[0].split("] ", 1)[-1] for label in labels}
 
 
 # --- what is offered --------------------------------------------------------------------
@@ -129,7 +120,7 @@ def titles_shown(page: AppTest) -> set[str]:
 def test_asking_is_offered_to_someone_who_may_read(open_as: Open) -> None:
     page = open_as("david", FakeLLM())
 
-    assert page.sidebar.radio[0].options == [HOME, ASK]
+    assert page.sidebar.radio[0].options == [HOME, ASK, DOCUMENTS]
 
 
 @pytest.mark.parametrize("name", ["henry", "irene"])
@@ -158,7 +149,7 @@ def test_an_answer_is_shown_with_the_sources_it_cites(open_as: Open) -> None:
 
     assert page.text[0].value == "Twenty-five days [S1]."
     assert len(passages(page)) == 1
-    assert passages(page)[0].label == "[S1] Leave Policy, version 1"
+    assert unescape(passages(page)[0].label) == "[S1] Leave Policy, version 1"
     assert shown_as_plain_text(page)
     assert titles_shown(page) <= MAY_READ["david"]
     assert not page.warning
@@ -200,6 +191,20 @@ def test_the_models_words_are_shown_as_plain_text_never_markdown(open_as: Open) 
     assert all("evil.example" not in m.value for m in page.markdown)
 
 
+def test_a_source_title_with_markdown_in_it_is_shown_as_typed(open_as: Open, db: Session) -> None:
+    planted = "![x](https://evil.example/collect.png) **Leave** Policy"
+    page = go_to_ask(open_as("david", FakeLLM(["Twenty-five days [S1]."])))
+    leave = db.scalars(select(Document).where(Document.title == "Leave Policy")).one()
+    leave.title = planted
+    db.commit()
+
+    ask(page, LEAVE)
+
+    label = passages(page)[0].label
+    assert unescape(label) == f"[S1] {planted}, version 1"
+    assert "![" not in label
+
+
 def test_an_answer_that_cites_nothing_is_flagged(open_as: Open) -> None:
     page = go_to_ask(open_as("david", FakeLLM(["Twenty-five days."])))
 
@@ -223,7 +228,7 @@ def test_no_information_is_said_plainly(open_as: Open) -> None:
 
     ask(page, LEAVE)
 
-    assert [i.value for i in page.info] == [NO_INFORMATION_MESSAGE]
+    assert [unescape(i.value) for i in page.info] == [NO_INFORMATION_MESSAGE]
     assert len(passages(page)) == 0
 
 
@@ -267,7 +272,7 @@ def test_without_a_model_asking_says_so_and_search_still_works(open_as: Open) ->
     page = go_to_ask(open_as("david", None))
 
     ask(page, LEAVE)
-    assert [e.value for e in page.error] == [
+    assert [unescape(e.value) for e in page.error] == [
         "Answers are switched off on this service. Search still works."
     ]
 

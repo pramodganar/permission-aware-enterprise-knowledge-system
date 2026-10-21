@@ -10,6 +10,7 @@ import pytest
 from ui.client import Api, Login, Me
 from ui.session import (
     ASK,
+    DOCUMENTS,
     HOME,
     LOGIN,
     ME,
@@ -242,8 +243,8 @@ def test_what_the_page_offers_follows_the_permissions_the_service_gave(
 @pytest.mark.parametrize(
     ("permissions", "pages"),
     [
-        (["documents:read:general"], [HOME, ASK]),
-        (["documents:read:all_departments"], [HOME, ASK]),
+        (["documents:read:general"], [HOME, ASK, DOCUMENTS]),
+        (["documents:read:all_departments"], [HOME, ASK, DOCUMENTS]),
         (["documents:manage"], [HOME]),
         (["audit:read"], [HOME]),
         ([], [HOME]),

@@ -21,21 +21,24 @@ import streamlit as st
 # Started as a script from anywhere, the ui package lives one level up.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ui import asking
+from ui import asking, documents
 from ui.client import (
     DEFAULT_API_URL,
     Answer,
     Api,
     ApiError,
     Citation,
+    DocumentSummary,
     Filters,
     Me,
+    NotFound,
     NotSignedIn,
     Passage,
     SearchResult,
 )
 from ui.session import (
     ASK,
+    DOCUMENTS,
     NOTICE,
     SESSION_ENDED,
     current_user,
@@ -45,13 +48,15 @@ from ui.session import (
     token,
     what_they_can_do,
 )
+from ui.text import literal
 
 TITLE = "AcmeCorp Knowledge Assistant"
 
 
-@st.cache_resource
+@st.cache_resource(on_release=Api.close)
 def api(base_url: str) -> Api:
-    # One client, with its connection pool, shared by every visitor's session.
+    # One client, with its connection pool, shared by every visitor's session,
+    # and closed when the cache lets it go.
     return Api(base_url)
 
 
@@ -91,8 +96,10 @@ def show_sign_in(client: Api) -> None:
 def show_sidebar(me: Me) -> str:
     """Draw the sidebar and return the page chosen."""
     with st.sidebar:
-        st.subheader(me.full_name)
-        st.caption(f"{me.department.name} · {', '.join(me.roles) or 'no role'}")
+        # What the service sends is drawn escaped wherever Streamlit reads
+        # Markdown; see ui/text.py.
+        st.subheader(literal(me.full_name))
+        st.caption(literal(f"{me.department.name} · {', '.join(me.roles) or 'no role'}"))
         # Offered afresh on every interaction from what the service said, so a
         # page whose permission was taken away disappears on the next click.
         page = str(st.radio("Page", pages_for(me), key="page"))
@@ -107,12 +114,12 @@ def show_home(me: Me) -> None:
     notice = st.session_state.get(NOTICE)
     if notice:
         st.warning(notice)
-    st.write(f"Signed in as **{me.email}**.")
+    st.markdown(f"Signed in as **{literal(me.email)}**.")
     st.markdown("\n".join(f"- {line}" for line in what_they_can_do(me)))
 
 
 def show_passage(heading: str, text: str) -> None:
-    with st.expander(heading):
+    with st.expander(literal(heading)):
         # Plain text, never Markdown: a document could hold an image link
         # that the browser would fetch, carrying whatever is in its URL.
         st.text(text)
@@ -125,7 +132,7 @@ def show_citation(citation: Citation) -> None:
 
 def show_answer(answer: Answer) -> None:
     if not answer.answered:
-        st.info(answer.answer)
+        st.info(literal(answer.answer))
         return
     # The model's words are shown as plain text for the same reason as the
     # passages: they are made from the documents and could carry a link.
@@ -142,7 +149,7 @@ def show_answer(answer: Answer) -> None:
 
 def show_results(result: SearchResult) -> None:
     if not result.results:
-        st.info(result.message or "No results.")
+        st.info(literal(result.message or "No results."))
         return
     st.markdown(f"**{len(result.results)} passages you may read, best first**")
     for passage in result.results:
@@ -208,7 +215,87 @@ def show_ask(client: Api) -> None:
         sign_out(st.session_state, notice=SESSION_ENDED)
         st.rerun()
     except ApiError as error:
-        st.error(asking.explain(error))
+        st.error(literal(asking.explain(error)))
+
+
+def show_documents(client: Api) -> None:
+    st.title(DOCUMENTS)
+    st.caption("The documents you may read. Opening one is recorded in the audit trail.")
+    signed_in = token(st.session_state)
+    try:
+        offered = asking.choices(asking.readable_documents(client, signed_in))
+        if offered.empty:
+            st.info("There are no documents you may read yet.")
+            return
+        left, right = st.columns(2)
+        department = left.selectbox(
+            "Department",
+            [None, *offered.departments],
+            format_func=lambda code: "All" if code is None else offered.departments.get(code, code),
+            key="documents_department",
+        )
+        classification = right.selectbox(
+            "Classification",
+            [None, *offered.classifications],
+            format_func=lambda value: "All" if value is None else value,
+            key="documents_classification",
+        )
+        page = documents.listing(
+            client,
+            signed_in,
+            department=department,
+            classification=classification,
+            page=int(st.session_state.get("documents_page", 1)),
+        )
+        show_listing(page)
+        chosen = st.selectbox(
+            "Open a document",
+            [None, *(d.id for d in page.documents)],
+            format_func=lambda key: "" if key is None else title_of(page.documents, key),
+            key="documents_open",
+        )
+        if chosen is not None:
+            show_document(client, signed_in, int(chosen))
+    except NotSignedIn:
+        sign_out(st.session_state, notice=SESSION_ENDED)
+        st.rerun()
+    except ApiError as error:
+        st.error(literal(asking.explain(error)))
+
+
+def title_of(listed: list[DocumentSummary], document_id: int) -> str:
+    return next((d.title for d in listed if d.id == document_id), str(document_id))
+
+
+def show_listing(page: documents.Listing) -> None:
+    if not page.documents:
+        st.info("No documents you may read match these filters.")
+        return
+    shown = f"{len(page.documents)} of {page.total}" if page.pages > 1 else str(page.total)
+    st.caption(f"{shown} documents")
+    # A table draws its cells as plain text, so titles need no escaping here.
+    st.dataframe(documents.rows(page.documents), hide_index=True, width="stretch")
+    if page.pages > 1:
+        st.selectbox(
+            "Page",
+            list(range(1, page.pages + 1)),
+            index=page.page - 1,
+            key="documents_page",
+        )
+
+
+def show_document(client: Api, signed_in: str, document_id: int) -> None:
+    try:
+        # Fetched again on every interaction, never kept, so a document the
+        # person may no longer read is gone on their next click.
+        document = client.document(signed_in, document_id)
+    except NotFound:
+        st.warning(documents.UNAVAILABLE)
+        return
+    st.subheader(literal(document.title))
+    st.caption(literal(documents.about(document)))
+    # The whole text as plain text: no Markdown, so nothing in it is fetched.
+    st.text(document.content)
 
 
 def main() -> None:
@@ -221,6 +308,8 @@ def main() -> None:
     page = show_sidebar(me)
     if page == ASK:
         show_ask(client)
+    elif page == DOCUMENTS:
+        show_documents(client)
     else:
         show_home(me)
 

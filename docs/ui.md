@@ -77,7 +77,21 @@ An answer is flagged when it needs care:
 
 **Narrowing.** A question can be narrowed to some departments, classifications or documents. The choices are taken from the documents the service lists for that person, so they never name a document they may not read. They only narrow: the service applies them inside the person's access ([retrieval](retrieval.md)). An empty question, or more documents or departments than the service accepts, is caught before sending; a question over the service's length limit comes back with its reason.
 
-**Plain text only.** The answer and every passage are drawn as plain text, never Markdown. A document can hold an image link, and an answer can repeat it; drawn as Markdown, the reader's browser would fetch that URL, carrying whatever was put in it, without anyone clicking (threat T29 in the [threat model](threat-model.md)).
+**Plain text only.** The answer and every passage are drawn as plain text, never Markdown; see [Text from the service](#text-from-the-service).
 
 **Nothing is kept.** An answer is drawn in the interaction that asked for it and not stored, so the next click clears it. There is nothing left in the session for whoever uses the browser next, and nothing stale on screen after someone's access changes. Signing out leaves neither the question nor the answer behind; a test checks the whole session.
+
+## Documents
+
+The **Documents** page, offered with asking to anyone who may read, lists the documents the service says they may read, by title, with department, classification, version and when each was last updated. It is `GET /documents` a page of 20 at a time, with the service's department and classification filters; the filter choices come from the documents they may read, as on the ask page. A filter that leaves fewer pages than the one being looked at goes to the last page.
+
+**Opening a document** shows its whole text, with where it came from: department, classification, version, the file it was made from and its size. Only the choice of document is remembered between interactions, never its text: the document is fetched again on every interaction, so a grant taken away, or a document replaced or removed, shows on the next click. Each of those fetches is an opening as far as the service is concerned, and the audit trail records each one; that is accurate, because the text was sent again. A document that has gone between listing and opening says "This document isn't available. It may have been removed, or you may no longer have access." and nothing about which.
+
+## Text from the service
+
+A document, or an answer made from one, can hold an image link. Drawn as Markdown, the reader's browser would fetch that URL by itself, carrying whatever was put in it, without anyone clicking (threat T29 in the [threat model](threat-model.md)). Streamlit reads Markdown, images included, in headings, captions, messages and the labels of expanders, not only in `st.markdown`. So:
+
+- **Long text is drawn as plain text** with `st.text`: answers, passages and whole documents.
+- **Everything else from the service is escaped** before it is drawn anywhere Streamlit reads Markdown: titles, names, emails, department names and the service's messages. Every punctuation character gets a backslash, which in Markdown always shows the character itself, and line breaks are folded, so a title can't start a heading or a list ([ui/text.py](../ui/text.py)). A test renders each of eighteen hostile strings, images, links, raw HTML, tables, headings and Streamlit's own colour and maths syntax among them, through a Markdown parser and checks each comes out as exactly the text in one paragraph.
+- **Tables and choice lists** draw their cells and options as plain text and need neither.
 

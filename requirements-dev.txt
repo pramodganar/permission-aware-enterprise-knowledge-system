@@ -12,5 +12,8 @@ mypy==2.4.0
 # The demo page (ui/). Pinned the same in ui/requirements.txt.
 streamlit==1.65.0
 
+# A Markdown parser, to check what the UI escapes renders as plain text
+markdown-it-py==4.2.0
+
 # HTTP client used by FastAPI's test client
 httpx2==2.13.1

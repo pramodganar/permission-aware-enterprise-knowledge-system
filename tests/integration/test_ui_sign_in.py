@@ -2,7 +2,6 @@
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, select
@@ -13,10 +12,9 @@ from apiclient import PASSWORD, company_app, email
 from app.core.config import Settings
 from app.models import User
 from liveserver import live_server
+from shown import everything_shown, open_ui, unescape
 from ui.client import Login
 from ui.session import LOGIN, SESSION_ENDED, SIGN_IN_FAILED, SIGNED_OUT, UNREACHABLE
-
-PAGE = Path(__file__).resolve().parents[2] / "ui" / "app.py"
 
 
 @pytest.fixture
@@ -26,11 +24,7 @@ def service(db: Session, engine: Engine, settings: Settings) -> Iterator[str]:
 
 
 def open_page(url: str, monkeypatch: pytest.MonkeyPatch) -> AppTest:
-    monkeypatch.setenv("UI_API_URL", url)
-    page = AppTest.from_file(str(PAGE), default_timeout=30)
-    page.run()
-    assert not page.exception
-    return page
+    return open_ui(url, monkeypatch)
 
 
 @pytest.fixture
@@ -44,12 +38,6 @@ def sign_in(page: AppTest, address: str, password: str = PASSWORD) -> AppTest:
     page.button[0].click().run()
     assert not page.exception
     return page
-
-
-def everything_shown(page: AppTest) -> str:
-    parts = [str(element.value) for element in page.main if hasattr(element, "value")]
-    parts += [str(element.value) for element in page.sidebar if hasattr(element, "value")]
-    return "\n".join(parts)
 
 
 def test_the_page_starts_at_sign_in_and_says_the_company_is_made_up(page: AppTest) -> None:
@@ -163,3 +151,16 @@ def test_a_service_that_is_not_running_is_explained(monkeypatch: pytest.MonkeyPa
     sign_in(page, email("david"))
 
     assert [e.value for e in page.error] == [UNREACHABLE]
+
+
+def test_a_name_with_markdown_in_it_is_shown_as_typed(page: AppTest, db: Session) -> None:
+    planted = "![x](https://evil.example/a.png) **David**"
+    david = db.scalars(select(User).where(User.email == email("david"))).one()
+    david.full_name = planted
+    db.commit()
+
+    sign_in(page, email("david"))
+
+    heading = page.sidebar.subheader[0].value
+    assert unescape(heading) == planted
+    assert "![" not in heading
