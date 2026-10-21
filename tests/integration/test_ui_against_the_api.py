@@ -99,7 +99,10 @@ def test_too_many_failed_sign_ins_say_how_long_to_wait(api: Api) -> None:
     with pytest.raises(TooManyAttempts) as raised:
         api.login(email("frank"), PASSWORD)
 
-    assert raised.value.retry_after == 900
+    # The window runs from the first failure, and checking five passwords
+    # takes a moment, so the wait can be a few seconds under the 900.
+    assert raised.value.retry_after is not None
+    assert 880 <= raised.value.retry_after <= 900
 
 
 def test_who_am_i_says_what_the_ui_may_offer(api: Api) -> None:
