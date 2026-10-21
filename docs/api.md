@@ -36,13 +36,35 @@ At shutdown the connection to the language model provider is closed.
 | The wrong method | 405 | `method_not_allowed` | |
 | Anything unexpected | 500 | `internal_error` | "Something went wrong." and the request ID |
 
-FastAPI's own answer to a bad body includes the input, which here could be a password or a question. This one lists the fields only.
+FastAPI's own answer to a bad body includes the input, which here could be a password or a question. This one lists the fields only. The name of a field the client added is the client's own text too, so it is shown only if it looks like a field name (letters, digits and underscores, up to 64): `body.role` is shown, a key like `<script>…</script>` becomes `body.(unrecognised)`.
 
 **One log line per request**: method, route pattern (`/documents/{document_id}`, not the ID), status and milliseconds. Not the query string, which can hold a question, and not the client's address. A path that matches no route isn't logged either: it is whatever the client typed, and could be made to look like a log entry. uvicorn's own access log is switched off for the same reason; it writes the full URL.
 
 An unexpected error is logged with its type and where it happened, not its message: a library's error message can hold document text (NFR-9).
 
 The libraries that log one line per HTTP request they make (`httpx`, `huggingface_hub` and others) keep only their warnings. Running the service showed them logging every check of the embedding model's files at startup, and they would log every call to the language model.
+
+**Headers on every response**, errors and unknown paths included:
+
+| Header | Why |
+|---|---|
+| `Cache-Control: no-store` | Unless a route sets its own. Nearly every response differs per person, and a shared cache must not keep one |
+| `X-Content-Type-Options: nosniff` | A browser treats JSON as JSON, even when document text inside it looks like HTML |
+| `X-Frame-Options: DENY` | There are no pages to frame |
+| `Referrer-Policy: no-referrer` | No URL of the service travels in a Referer |
+
+There are no CORS headers: a page on another site can't call the service from a browser.
+
+## Every route, and who it is for
+
+| Route | For |
+|---|---|
+| `GET /health`, `POST /auth/login` | anyone |
+| `GET /auth/me`, `GET /documents`, `GET /documents/{id}`, `POST /search`, `POST /ask` | anyone logged in; what they get depends on what they may read |
+| `/admin/documents...` (seven routes) | `documents:manage` |
+| `GET /audit` | `audit:read` |
+
+The security tests read the routes off the app and fail for one that isn't in this table, so a new route can't be added without deciding who it is for. They also check each route depends on the check its row says, and call every route with no token, five kinds of bad token, a deactivated account and each of the nine people ([tests/security/test_api_routes.py](../tests/security/test_api_routes.py)).
 
 ## Health
 

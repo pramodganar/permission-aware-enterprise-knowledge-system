@@ -14,7 +14,7 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is being built: logging in, listing and opening documents, searching, asking, managing documents and the audit trail work so far.
+Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is complete: logging in, listing and opening documents, searching, asking, managing documents and the audit trail, with a security test that walks every route.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
@@ -25,7 +25,7 @@ Work in progress. Identity, authorization, document ingestion, permission-aware 
 - [x] Chunking, embeddings and the vector index, with versions and rollback
 - [x] Permission-aware retrieval: access scope, filters, relevance threshold, optional reranking, and end-to-end boundary tests
 - [x] Answer generation with citations, measured on two real models, and end-to-end answer boundary tests
-- [ ] API
+- [x] API: login, documents, search and ask, admin routes, audit trail, and a walk of every route for its authorization
 - [ ] UI (a demo page is done early: [docs/demo.md](docs/demo.md))
 - [ ] Evaluation, including permission leakage tests
 - [ ] Docker and CI

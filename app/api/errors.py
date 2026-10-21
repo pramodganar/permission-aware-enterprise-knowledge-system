@@ -19,6 +19,7 @@ Three kinds of error reach a client:
   request ID when an unexpected error escapes.
 """
 
+import re
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -34,6 +35,9 @@ from app.core.exceptions import (
     error_response,
 )
 from app.core.logging_setup import current_request_id
+
+UNRECOGNISED_FIELD = "(unrecognised)"
+_FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}|[0-9]{1,6}")
 
 
 def install_error_handlers(app: FastAPI) -> None:
@@ -59,9 +63,16 @@ async def _invalid_request(_: Request, error: Exception) -> JSONResponse:
     status_code, body = error_response(InvalidInputError(), current_request_id())
     # Where the problem is, never what was sent.
     body["error"]["fields"] = sorted(
-        {".".join(str(part) for part in item["loc"]) for item in error.errors()}
+        {".".join(_field_part(part) for part in item["loc"]) for item in error.errors()}
     )
     return _respond(status_code, body)
+
+
+def _field_part(part: object) -> str:
+    # The name of a field the client added is the client's own text: it is
+    # shown only if it looks like a field name.
+    text = str(part)
+    return text if _FIELD_NAME.fullmatch(text) else UNRECOGNISED_FIELD
 
 
 async def _http_error(_: Request, error: Exception) -> JSONResponse:

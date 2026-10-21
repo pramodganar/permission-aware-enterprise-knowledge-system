@@ -1,25 +1,34 @@
 """Attempts to reach documents and actions without the right to.
 
 Each test is something an attacker with a normal account, or no account,
-might try over HTTP. Every one of them has to fail.
+might try over HTTP against the real service. Every one of them has to fail.
+
+The company here is the test one from ``acmecorp.py``: the seven people of
+the personas, a knowledge admin, a security reviewer, and an account with no
+role at all. Tokens are made directly, so no password hashing slows it down.
 """
 
 import base64
 import json
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 from sqlalchemy import Engine
 
 from acmecorp import COMPANY_DOCUMENTS, PERSONAS, World
+from app.api.components import Components
 from app.auth.tokens import create_access_token
 from app.core.config import Settings
 from app.core.database import utc_now
+from app.main import create_app
 from app.models import RoleCode
-from testapp import build_test_app
+from app.retrieval.index import build_index
+from fakes import FakeEmbedder
 
 NON_READERS = ("admin", "reviewer", "nobody")
 ALL_TITLES = {title for title, _, _ in COMPANY_DOCUMENTS.values()}
@@ -28,8 +37,20 @@ NOT_FOUND = {"error": {"code": "not_found", "message": "Not found."}}
 
 
 @pytest.fixture
-def client(engine: Engine, settings: Settings) -> TestClient:
-    return TestClient(build_test_app(engine, settings))
+def client(engine: Engine, settings: Settings, company: World) -> Iterator[TestClient]:
+    embedder = FakeEmbedder()
+    components = Components(
+        embedder=embedder, index=build_index(company.db, embedder), provider=None
+    )
+    with TestClient(create_app(settings, engine=engine, components=components)) as client:
+        yield client
+
+
+def without_request_id(response: Response) -> object:
+    body = response.json()
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        body["error"].pop("request_id", None)
+    return body
 
 
 def bearer(token: str) -> dict[str, str]:
@@ -57,7 +78,8 @@ def claims_for(user_id: int, **extra: Any) -> dict[str, Any]:
 
 
 def titles_visible_to(client: TestClient, headers: dict[str, str]) -> set[str]:
-    return {document["title"] for document in client.get("/documents", headers=headers).json()}
+    listed = client.get("/documents", headers=headers).json()["documents"]
+    return {document["title"] for document in listed}
 
 
 def allowed_titles(company: World, user: str) -> set[str]:
@@ -77,7 +99,7 @@ def test_token_signed_with_the_attackers_own_key_is_rejected(
     response = client.get("/documents", headers=bearer(forged))
 
     assert response.status_code == 401
-    assert response.json() == AUTH_FAILED
+    assert without_request_id(response) == AUTH_FAILED
 
 
 def test_unsigned_token_claiming_to_be_the_executive_is_rejected(
@@ -118,11 +140,12 @@ def test_role_and_department_claims_inside_a_valid_token_are_ignored(
         algorithm="HS256",
     )
 
-    assert client.get("/whoami", headers=bearer(token)).json() == {
-        "id": company.users["alice"].id,
-        "department": "engineering",
-        "roles": ["employee"],
-    }
+    me = client.get("/auth/me", headers=bearer(token)).json()
+    assert (me["id"], me["department"]["code"], me["roles"]) == (
+        company.users["alice"].id,
+        "engineering",
+        ["employee"],
+    )
     assert titles_visible_to(client, bearer(token)) == allowed_titles(company, "alice")
 
 
@@ -145,14 +168,23 @@ def test_identity_claimed_in_headers_or_parameters_is_ignored(
     }
     hidden = company.documents["exec_comp"].id
 
-    listed = client.get("/documents", headers=spoof_headers, params=spoof_params).json()
-
+    listed = client.get("/documents", headers=spoof_headers, params=spoof_params).json()[
+        "documents"
+    ]
+    # "department" is a real filter on the list, so it narrows Alice's list to the
+    # executive documents she may read: none. It can only ever narrow.
+    assert {document["title"] for document in listed} == set()
+    unfiltered = {key: value for key, value in spoof_params.items() if key != "department"}
+    listed = client.get("/documents", headers=spoof_headers, params=unfiltered).json()["documents"]
     assert {document["title"] for document in listed} == allowed_titles(company, "alice")
     assert (
         client.get(f"/documents/{hidden}", headers=spoof_headers, params=spoof_params).status_code
         == 404
     )
-    assert client.post("/documents", headers=spoof_headers, params=spoof_params).status_code == 403
+    assert (
+        client.post("/admin/documents", headers=spoof_headers, params=spoof_params).status_code
+        == 403
+    )
 
 
 def test_token_is_only_accepted_in_the_authorization_header(
@@ -170,14 +202,14 @@ def test_token_is_only_accepted_in_the_authorization_header(
     assert client.get("/documents").status_code == 401
 
 
-@pytest.mark.parametrize("path", ["/whoami", "/documents", "/documents/1", "/audit"])
+@pytest.mark.parametrize("path", ["/auth/me", "/documents", "/documents/1", "/audit"])
 def test_nothing_is_served_without_authentication(
     client: TestClient, company: World, path: str
 ) -> None:
     response = client.get(path)
 
     assert response.status_code == 401
-    assert response.json() == AUTH_FAILED
+    assert without_request_id(response) == AUTH_FAILED
 
 
 # Reaching documents that are not yours
@@ -196,7 +228,7 @@ def test_no_account_can_fetch_any_document_it_may_not_read(
                 continue
             probes += 1
             response = client.get(f"/documents/{document.id}", headers=login[user])
-            if response.status_code != 404 or response.json() != NOT_FOUND:
+            if response.status_code != 404 or without_request_id(response) != NOT_FOUND:
                 exposed += 1
 
     # 76 forbidden pairs for the seven personas, plus 3 non-reader accounts x 17 documents.
@@ -226,7 +258,7 @@ def test_walking_every_id_finds_only_the_accounts_own_documents(
         if response.status_code == 200:
             found.add(response.json()["title"])
         else:
-            refusals.add(f"{response.status_code} {response.text}")
+            refusals.add(f"{response.status_code} {json.dumps(without_request_id(response))}")
 
     assert found == allowed_titles(company, "alice")
     # Hidden documents and IDs that don't exist give one and the same response,
@@ -245,7 +277,7 @@ def test_refusals_never_contain_a_hidden_title(
             f"/documents/{document.id}", headers=login["alice"]
         ).text
     everything_alice_received += client.get("/documents", headers=login["alice"]).text
-    everything_alice_received += client.post("/documents", headers=login["alice"]).text
+    everything_alice_received += client.post("/admin/documents", headers=login["alice"]).text
     everything_alice_received += client.get("/audit", headers=login["alice"]).text
 
     assert not [title for title in hidden_titles if title in everything_alice_received]
@@ -288,7 +320,7 @@ def test_adding_a_document_id_parameter_does_not_redirect_the_lookup(
 def test_non_reader_accounts_get_no_document_by_any_route(
     client: TestClient, company: World, login: Login, user: str
 ) -> None:
-    assert client.get("/documents", headers=login[user]).json() == []
+    assert client.get("/documents", headers=login[user]).json()["documents"] == []
     for document in company.documents.values():
         assert client.get(f"/documents/{document.id}", headers=login[user]).status_code == 404
 
@@ -296,8 +328,17 @@ def test_non_reader_accounts_get_no_document_by_any_route(
 def test_admin_who_can_ingest_still_cannot_read(
     client: TestClient, company: World, login: Login
 ) -> None:
-    assert client.post("/documents", headers=login["admin"]).status_code == 200
-    assert client.get("/documents", headers=login["admin"]).json() == []
+    uploaded = client.post(
+        "/admin/documents",
+        headers=login["admin"],
+        files={"file": ("note.txt", b"A general note for everyone.", "text/plain")},
+        data={"title": "Admin Note", "department": "hr", "classification": "general"},
+    )
+    assert uploaded.status_code == 201
+    new = uploaded.json()["id"]
+    assert client.get("/documents", headers=login["admin"]).json()["documents"] == []
+    assert client.get(f"/documents/{new}", headers=login["admin"]).status_code == 404
+    assert "Admin Note" in titles_visible_to(client, login["alice"])
     assert client.get("/audit", headers=login["admin"]).status_code == 403
 
 
@@ -305,8 +346,8 @@ def test_reviewer_who_can_read_the_audit_log_still_cannot_read_documents(
     client: TestClient, company: World, login: Login
 ) -> None:
     assert client.get("/audit", headers=login["reviewer"]).status_code == 200
-    assert client.get("/documents", headers=login["reviewer"]).json() == []
-    assert client.post("/documents", headers=login["reviewer"]).status_code == 403
+    assert client.get("/documents", headers=login["reviewer"]).json()["documents"] == []
+    assert client.post("/admin/documents", headers=login["reviewer"]).status_code == 403
 
 
 def test_grant_given_to_an_admin_does_not_let_them_read(
@@ -315,7 +356,7 @@ def test_grant_given_to_an_admin_does_not_let_them_read(
     company.grant("case_file", "admin")
     company.grant("exec_comp", "admin")
 
-    assert client.get("/documents", headers=login["admin"]).json() == []
+    assert client.get("/documents", headers=login["admin"]).json()["documents"] == []
     assert (
         client.get(
             f"/documents/{company.documents['case_file'].id}", headers=login["admin"]
@@ -328,7 +369,7 @@ def test_grant_given_to_an_admin_does_not_let_them_read(
 def test_only_the_admin_can_ingest(
     client: TestClient, company: World, login: Login, user: str
 ) -> None:
-    assert client.post("/documents", headers=login[user]).status_code == 403
+    assert client.post("/admin/documents", headers=login[user]).status_code == 403
 
 
 @pytest.mark.parametrize("user", [*PERSONAS, "admin", "nobody"])
@@ -377,7 +418,7 @@ def test_deactivated_user_is_locked_out_with_a_still_valid_token(
     company.users["grace"].is_active = False
     company.db.commit()
 
-    for path in ("/whoami", "/documents", f"/documents/{company.documents['exec_comp'].id}"):
+    for path in ("/auth/me", "/documents", f"/documents/{company.documents['exec_comp'].id}"):
         assert client.get(path, headers=login["grace"]).status_code == 401
 
 

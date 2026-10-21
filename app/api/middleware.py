@@ -21,6 +21,16 @@ make the service spool a body of any size. A body over the limit gets 413.
 A body that doesn't say how long it is (chunked) gets 411, because its size
 can only be known by reading it. The server holds a client to the length it
 declared, so the declared length is a real bound.
+
+Every response, errors included, gets a few headers that cost nothing:
+
+- ``Cache-Control: no-store`` unless the route set its own. Nearly every
+  response here is different per person, and a cache shared between people
+  must not keep one. A route that wants caching has to say so.
+- ``X-Content-Type-Options: nosniff``, so a browser treats JSON as JSON even
+  when a document's text inside it looks like HTML.
+- ``X-Frame-Options: DENY`` and ``Referrer-Policy: no-referrer``. The API
+  has no pages to frame, and no URL of it should travel in a Referer.
 """
 
 import logging
@@ -43,6 +53,11 @@ from app.core.logging_setup import bind_request_id, clear_request_id
 logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
 UNMATCHED = "(no matching route)"
 _SAFE_REQUEST_ID = re.compile(r"[A-Za-z0-9-]{1,64}")
 
@@ -91,6 +106,9 @@ async def _around_request(request: Request, call_next: Handler, max_body_bytes: 
             status_code, body = error_response(RuntimeError(), request_id)
             response = JSONResponse(body, status_code=status_code)
         response.headers[REQUEST_ID_HEADER] = request_id
+        response.headers.update(SECURITY_HEADERS)
+        if "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         route = request.scope.get("route")
         logger.info(
             "request handled",
