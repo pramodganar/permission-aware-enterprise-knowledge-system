@@ -38,3 +38,27 @@ A question gets a longer timeout than other calls, six minutes, because a local 
 ## Tested against the real service
 
 The client's integration tests start the service on a free local port and talk to it over real HTTP, as the UI will: every call, as each kind of person, and every way a call can fail ([tests/integration/test_ui_against_the_api.py](../tests/integration/test_ui_against_the_api.py)).
+
+## Running it
+
+The UI needs the service running, and finds it at `UI_API_URL` (default `http://127.0.0.1:8000`):
+
+```
+uvicorn app.main:serve --factory --no-access-log
+streamlit run ui/app.py
+```
+
+## Signing in
+
+The page starts at a sign-in form. Once signed in, the sidebar shows who the person is, with their department and roles, and a sign-out button, and the page says what their account can do: ask and search, manage documents, or review the audit trail. Those lines come from the permissions the service reports, not from the UI's own idea of the roles.
+
+**What is kept.** The token, with when it stops working, and who the service last said the person is, in that browser's session on the Streamlit server. Not in the URL, a cookie or the browser's storage, and never shown on the page.
+
+**The password is used once and dropped.** A widget's value stays in the visitor's session on the server even when the form is cleared in the browser, which testing showed: after a failed sign-in the password was still there. So the sign-in runs in the submit button's callback, which blanks the field before calling the service. The browser's message for that one redraw carries the password, as any form submission does, and by the next interaction there is no trace of it. A test checks every part of the session for it.
+
+**Who they are is asked again on every interaction.** So a role taken away or an account deactivated applies on the person's next click, as it does in the API. A token that has expired, or that the service no longer accepts, signs them out: "Your session has ended. Sign in again." A service that can't be reached doesn't sign anyone out; the page says it's unreachable and carries on when it's back.
+
+**A failed sign-in says the same whatever was wrong**: "Sign-in failed. Check your email and password." for a wrong password, an unknown email or a deactivated account, as the service does. Only two failures say more, because they tell the person what to do and nothing about anyone's account: too many attempts, with how many minutes to wait, and a service that can't be reached.
+
+**Signing out** forgets the token and who the person was. The token itself still works at the service until it expires, because tokens here can't be withdrawn early ([decision record 0004](adr/0004-identity-only-token.md)); with 30-minute tokens that is the window. A shared computer should be signed out of, and the browser closed.
+

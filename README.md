@@ -137,6 +137,16 @@ uvicorn app.main:serve --factory --no-access-log
 
 It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`. See [docs/api.md](docs/api.md).
 
+
+## Running the UI
+
+With the API running (above), in a second terminal:
+
+```
+streamlit run ui/app.py
+```
+
+Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. The UI only talks to the API; see [docs/ui.md](docs/ui.md).
 ## Checks
 
 ```
