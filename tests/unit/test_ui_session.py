@@ -9,6 +9,8 @@ import pytest
 
 from ui.client import Api, Login, Me
 from ui.session import (
+    ASK,
+    HOME,
     LOGIN,
     ME,
     NOTICE,
@@ -17,6 +19,7 @@ from ui.session import (
     SIGNED_OUT,
     UNREACHABLE,
     current_user,
+    pages_for,
     sign_in,
     sign_out,
     token,
@@ -234,3 +237,21 @@ def test_what_the_page_offers_follows_the_permissions_the_service_gave(
 
     assert len(lines) == len(expected)
     assert all(line.startswith(start) for line, start in zip(lines, expected, strict=True))
+
+
+@pytest.mark.parametrize(
+    ("permissions", "pages"),
+    [
+        (["documents:read:general"], [HOME, ASK]),
+        (["documents:read:all_departments"], [HOME, ASK]),
+        (["documents:manage"], [HOME]),
+        (["audit:read"], [HOME]),
+        ([], [HOME]),
+    ],
+)
+def test_asking_is_offered_only_to_someone_who_may_read(
+    permissions: list[str], pages: list[str]
+) -> None:
+    me = Me.model_validate({**DAVID, "permissions": permissions})
+
+    assert pages_for(me) == pages

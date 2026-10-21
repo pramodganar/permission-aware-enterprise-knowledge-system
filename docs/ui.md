@@ -62,3 +62,22 @@ The page starts at a sign-in form. Once signed in, the sidebar shows who the per
 
 **Signing out** forgets the token and who the person was. The token itself still works at the service until it expires, because tokens here can't be withdrawn early ([decision record 0004](adr/0004-identity-only-token.md)); with 30-minute tokens that is the window. A shared computer should be signed out of, and the browser closed.
 
+## Asking and searching
+
+Someone who may read documents gets an **Ask and search** page. The pages in the sidebar are offered afresh on every interaction from the permissions the service reports, so the page disappears on the next click once that permission is taken away, and Henry and Irene, who may read nothing, aren't offered it. The API answers them with "no information" anyway.
+
+**Ask** sends the question to `/ask` and shows the answer with the sources it cites, each opening to the passage it came from. **Search only** sends it to `/search` and shows the passages, best first, with how relevant each was, without asking the model. With no model configured, asking says "Answers are switched off on this service. Search still works." and search does.
+
+An answer is flagged when it needs care:
+
+- **cut off**: it reached the length limit and stops part way;
+- **cites nothing**: no source backs it, so check the documents before relying on it.
+
+"No information available to answer this question." is shown as it comes, whatever the reason; the service doesn't say, and neither does the UI.
+
+**Narrowing.** A question can be narrowed to some departments, classifications or documents. The choices are taken from the documents the service lists for that person, so they never name a document they may not read. They only narrow: the service applies them inside the person's access ([retrieval](retrieval.md)). An empty question, or more documents or departments than the service accepts, is caught before sending; a question over the service's length limit comes back with its reason.
+
+**Plain text only.** The answer and every passage are drawn as plain text, never Markdown. A document can hold an image link, and an answer can repeat it; drawn as Markdown, the reader's browser would fetch that URL, carrying whatever was put in it, without anyone clicking (threat T29 in the [threat model](threat-model.md)).
+
+**Nothing is kept.** An answer is drawn in the interaction that asked for it and not stored, so the next click clears it. There is nothing left in the session for whoever uses the browser next, and nothing stale on screen after someone's access changes. Signing out leaves neither the question nor the answer behind; a test checks the whole session.
+

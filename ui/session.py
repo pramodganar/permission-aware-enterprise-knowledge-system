@@ -30,6 +30,9 @@ SESSION_ENDED = "Your session has ended. Sign in again."
 UNREACHABLE = "The service can't be reached right now. Try again in a moment."
 SIGNED_OUT = "You are signed out."
 
+HOME = "Home"
+ASK = "Ask and search"
+
 # Streamlit types its keys as str | int, so the key type is left open.
 State = MutableMapping[Any, Any]
 
@@ -100,10 +103,25 @@ def sign_out(state: State, notice: str | None = SIGNED_OUT) -> None:
         state[NOTICE] = notice
 
 
+def can_read(me: Me) -> bool:
+    return any(p.startswith("documents:read:") for p in me.permissions)
+
+
+def pages_for(me: Me) -> list[str]:
+    """The pages to offer, from the permissions the service gave.
+
+    Only so nobody is offered what they'd be refused: the API is the check.
+    """
+    pages = [HOME]
+    if can_read(me):
+        pages.append(ASK)
+    return pages
+
+
 def what_they_can_do(me: Me) -> list[str]:
     """What the account may do, in words, from the permissions the service gave."""
     can = []
-    if any(p.startswith("documents:read:") for p in me.permissions):
+    if can_read(me):
         can.append("Ask questions and search the documents you may read.")
     if me.can("documents:manage"):
         can.append("Upload and manage documents. Managing a document doesn't let you read it.")
