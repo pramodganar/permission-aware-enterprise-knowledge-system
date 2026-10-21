@@ -14,7 +14,7 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is complete: logging in, listing and opening documents, searching, asking, managing documents and the audit trail, with a security test that walks every route.
+Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is complete: logging in, listing and opening documents, searching, asking, managing documents and the audit trail, with a security test that walks every route. The web UI covers all of it, talks only to the API, and starts with the API in one command.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
@@ -26,7 +26,7 @@ Work in progress. Identity, authorization, document ingestion, permission-aware 
 - [x] Permission-aware retrieval: access scope, filters, relevance threshold, optional reranking, and end-to-end boundary tests
 - [x] Answer generation with citations, measured on two real models, and end-to-end answer boundary tests
 - [x] API: login, documents, search and ask, admin routes, audit trail, and a walk of every route for its authorization
-- [ ] UI (a demo page is done early: [docs/demo.md](docs/demo.md))
+- [x] UI: signing in, asking and searching, documents, managing documents and the audit trail, each offered by permission (and a public demo page: [docs/demo.md](docs/demo.md))
 - [ ] Evaluation, including permission leakage tests
 - [ ] Docker and CI
 
@@ -137,16 +137,20 @@ uvicorn app.main:serve --factory --no-access-log
 
 It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`. See [docs/api.md](docs/api.md).
 
+## Running the API and the UI
 
-## Running the UI
-
-With the API running (above), in a second terminal:
+One command starts both:
 
 ```
-streamlit run ui/app.py
+python -m scripts.run
 ```
 
-Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. The UI only talks to the API; see [docs/ui.md](docs/ui.md).
+It starts the API, waits until it answers its health check, then starts the UI pointed at it, and prints where to go: http://127.0.0.1:8501 by default. Ctrl+C stops both, and if either stops the other is stopped too. `--api-port`, `--ui-port` and `--host` change where they listen; both listen on this machine only unless told otherwise.
+
+Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. Each person sees the pages their role allows: David asks and reads, Henry manages documents by ID without reading them, Irene reviews the audit trail. The UI only talks to the API; see [docs/ui.md](docs/ui.md).
+
+To run them separately, start the API as above and, in a second terminal, `streamlit run ui/app.py`; the UI finds the API at `UI_API_URL`, `http://127.0.0.1:8000` by default.
+
 ## Checks
 
 ```
@@ -178,6 +182,6 @@ For fast answers, Groq has a free tier: create a key at [console.groq.com](https
 
 ## Stack
 
-In use now: Python 3.11, FastAPI (with python-multipart for uploads), SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, pytest, ruff, mypy.
+In use now: Python 3.11, FastAPI (with python-multipart for uploads), SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, Streamlit and httpx for the UI, pytest, ruff, mypy.
 
-Planned: PostgreSQL as the target database, Streamlit, Docker. Libraries are added to the requirements files when the part that needs them is built.
+Planned: PostgreSQL as the target database, Docker. Libraries are added to the requirements files when the part that needs them is built.

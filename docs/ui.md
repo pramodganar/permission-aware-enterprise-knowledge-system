@@ -41,7 +41,15 @@ The client's integration tests start the service on a free local port and talk t
 
 ## Running it
 
-The UI needs the service running, and finds it at `UI_API_URL` (default `http://127.0.0.1:8000`):
+One command starts the API and the UI together:
+
+```
+python -m scripts.run
+```
+
+The UI is started only once the API answers `GET /health`, so it never comes up talking to nothing; an API that fails to start (no data, no index) is reported with what it needs, and the UI isn't started. If either stops, the other is stopped too, and Ctrl+C stops both. They listen on 127.0.0.1 unless `--host` says otherwise, which prints a warning: both are plain HTTP. Streamlit's usage statistics are switched off.
+
+To run them separately, the UI finds the service at `UI_API_URL` (default `http://127.0.0.1:8000`):
 
 ```
 uvicorn app.main:serve --factory --no-access-log
@@ -119,4 +127,22 @@ A document, or an answer made from one, can hold an image link. Drawn as Markdow
 - **Long text is drawn as plain text** with `st.text`: answers, passages and whole documents.
 - **Everything else from the service is escaped** before it is drawn anywhere Streamlit reads Markdown: titles, names, emails, department names and the service's messages. Every punctuation character gets a backslash, which in Markdown always shows the character itself, and line breaks are folded, so a title can't start a heading or a list ([ui/text.py](../ui/text.py)). A test renders each of eighteen hostile strings, images, links, raw HTML, tables, headings and Streamlit's own colour and maths syntax among them, through a Markdown parser and checks each comes out as exactly the text in one paragraph.
 - **Tables and choice lists** draw their cells and options as plain text and need neither.
+
+## How the UI is tested
+
+Every page is tested the way someone would use it: Streamlit's `AppTest` runs the page headless, signs in, clicks and types, against the real service started on a free local port and reached over HTTP. Only the language model is a stand-in, one that repeats everything it was given, so a leak would show.
+
+| Tests | What they check |
+|---|---|
+| [test_ui_against_the_api.py](../tests/integration/test_ui_against_the_api.py) | The client: every call, as each kind of person, and every way a call can fail |
+| [test_ui_sign_in.py](../tests/integration/test_ui_sign_in.py) | Signing in and out, the password dropped, sessions that end |
+| [test_ui_ask.py](../tests/integration/test_ui_ask.py) | Asking and searching as every person, with no fact from a document they may not read anywhere on the page |
+| [test_ui_reading_documents.py](../tests/integration/test_ui_reading_documents.py) | The documents page as every person, and access taken away while a document is open |
+| [test_ui_manage_page.py](../tests/integration/test_ui_manage_page.py) | Every managing action, with no title or text shown to the admin |
+| [test_ui_audit_page.py](../tests/integration/test_ui_audit_page.py) | The trail, its filters, and every look at it recorded |
+| [test_ui_journey.py](../tests/integration/test_ui_journey.py) | Three people at once: Henry gives David access to the HR case file and takes it away while David has it open and Irene watches the trail |
+| [test_run_script_processes.py](../tests/integration/test_run_script_processes.py) | The launcher with real processes standing in for the API and the UI: started in order, the UI pointed at the API, nothing left running |
+| [test_run_everything.py](../tests/integration/test_run_everything.py) | With the model tests: the company loaded, the index built, `python -m scripts.run` started, both answering, a sign-in, and both gone after Ctrl+C |
+
+The logic behind the pages, which needs no browser, has unit tests of its own (`tests/unit/test_ui_*.py`), and a test checks the UI never imports the service.
 
