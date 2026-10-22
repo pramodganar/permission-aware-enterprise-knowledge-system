@@ -226,7 +226,8 @@ def table(numbers: dict[str, Any]) -> list[str]:
 
 def write(numbers: dict[str, Any], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8")
+    # The same bytes on every system, so a rerun shows no line-ending diff.
+    path.write_text(json.dumps(numbers, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def main(argv: Iterable[str] | None = None) -> int:
