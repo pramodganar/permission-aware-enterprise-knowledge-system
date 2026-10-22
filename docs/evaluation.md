@@ -161,3 +161,88 @@ Groq's free tier allows 8,000 tokens a minute, and a question with its sources a
 
 A detector that can't see a leak reports zero for the wrong reason, so the detector has tests of its own: responses built to leak each way (a secret in the answer, the title in a search response, a citation to the forbidden document, a chunk of it or of any unreadable document given to the model) are all caught, and a clean refusal, a control answered from another document, and a refusal worded differently from the standard one are each told apart. In the normal test run the whole measurement runs over the fake embedder with the gate off and the model that repeats everything, and must find zero leaks with every request audited.
 
+## Answer quality
+
+```
+python -m evaluation.answers              # Groq answers the set: evaluation/results/answers-groq.json
+python -m evaluation.judge                # a judge model scores them: evaluation/results/judged-groq.json
+python -m evaluation.judge --rescore      # after changing a hand label: recount, judge nothing
+```
+
+Every answerable, related and off-topic question (55) is asked by its asker through `answer_question`, the service's one path to the model, with Groq's gpt-oss-20b, over a freshly loaded company with the default settings. Forbidden and injection questions belong to [leakage](#leakage-and-over-blocking) and aren't asked again.
+
+**Each answer is written down with everything its model was given**: every source, its document, its chunk IDs and its text. Scoring, judging and labelling then all work from the file, and whoever reads an answer (the judge, or me) sees exactly what the model saw. Every source is a passage the asker may read; a test checks every source in the committed file against the access rule, so the file holds nothing beyond what its asker could have been shown.
+
+### Scored by rule
+
+| Metric | Counts |
+|---|---|
+| given the evidence | a source contains one of the question's evidence quotes, in its own document: the most the model could do |
+| citing the evidence | a cited source contains an evidence quote |
+| citing its document | a cited source is from the question's document |
+| uncited, cut off, made-up citations | as the service marks them |
+| abstained | a related or off-topic question got exactly the no-information response, and whether the relevance gate or the model gave it |
+
+### Judged, and checked by hand
+
+The 33 answered answerable questions are each given to a judge model, openai/gpt-oss-120b on Groq, with the question, its reference answer, the answer's sources and the answer, and judged on four things, each true or false:
+
+| Criterion | True when |
+|---|---|
+| correct | it says what the reference says, or enough of it to answer the question, and contradicts none of it |
+| faithful | everything it states is in its sources |
+| relevant | it answers the question asked |
+| citations supported | every citation points to a source that supports the statement it follows; an answer with no citations is false |
+
+Faithfulness is judged per answer, not as a share of claims as [the requirements](requirements.md#answer-quality) first put it: one unsupported statement makes an answer unfaithful. That's stricter, and it's what matters to the reader, who can't tell which statement is the wrong one.
+
+A judge is a model, and it can be wrong in ways that look like a result. So I labelled the same 33 answers by hand on the same four things, reading each one against its sources, **before running the judge**, and the judge is reported next to the labels. The labels are in [evaluation/labels.json](../evaluation/labels.json), each with a note where the call was close. A label names its answer by a digest of the answer's text: regenerated answers make the old labels stale, and stale labels are listed, never compared. A verdict not in exactly the form asked for (a missing field, "yes" for true) is unjudged, never guessed.
+
+The judge reads only what the answering model read, the reference and the answer, so judging doesn't widen what leaves the service.
+
+### Results
+
+Groq gpt-oss-20b, prompt version 1, 22 October 2026. No request failed.
+
+| | |
+|---|---|
+| Answerable questions answered | 33 of 34 |
+| given the evidence | 33 of 34 |
+| answered citing the evidence | 31 of 33 |
+| answered citing its document | 31 of 33 |
+| citations to the question's own document | 37 of 37 |
+| uncited / cut off / made-up citations | 2 / 0 / 0 |
+| Related questions abstained from | 9 of 10 (gate 2, model 7) |
+| Off-topic questions abstained from | 11 of 11 (gate 10, model 1) |
+
+| Criterion | By hand | By the judge | Agreed |
+|---|---|---|---|
+| correct | 33 of 33 | 31 of 33 | 31 of 33 |
+| faithful | 32 of 33 | 33 of 33 | 32 of 33 |
+| relevant | 33 of 33 | 33 of 33 | 33 of 33 |
+| citations supported | 30 of 33 | 30 of 33 | 33 of 33 |
+
+What the numbers say:
+
+- **When it answers, it's right.** Every answered question says what its reference says, by my labels. The one answerable question without an answer is Carol's "Which employees are on a performance improvement plan?", the [retrieval](#retrieval-quality) miss: the chunk with the employee number wasn't given, and the model said so instead of guessing.
+- **One answer is unfaithful, in a way that's easy to miss.** Frank's warehouse SOP answer says equipment returns to service "after maintenance inspection and supervisor confirmation". The SOP says equipment returns after inspection by maintenance; it's the operator who needs the supervisor before driving again. Two rules merged into one, in a long answer that is otherwise exact.
+- **Citations are the weak part.** Two answers cite nothing, though what they say is right and from their sources (Alice on the outage's cause and on what happened when payments went down, both from the postmortem). One cites a source that doesn't support it: "Poland and Spain. [S1][S2]", where S2 is about the other two priorities. The service marks an uncited answer as such, so the reader is told; a wrong extra citation isn't caught by anything in the service.
+- **Related questions depend on the model, not the gate.** The gate stops only 2 of the 10 related questions, since by design they are near something the asker may read; the model abstains on 7 more. The one it answers is Emma's "What is our customer data retention design?", with the retention obligations, the same answer every model gave in phase 8. It's faithful to its sources, and it answers a question that wasn't asked: there is no design. Off-topic questions are nearly all stopped by the gate, before any model is asked.
+
+### What checking the judge found
+
+- **The judge missed the one unfaithful answer.** It judged all 33 faithful, Frank's included. Of everything here, that's the reason not to report a judge's faithfulness on its own: the error it misses is the subtle kind, and the subtle kind is the one a reader would believe.
+- **It's stricter than I am on correctness.** It marked two answers wrong for leaving something out: Grace's strategy answer gives the three priorities without the 2029 targets, and her compensation answer leaves out the peer-group median. My labels say they answer the question. Both readings fit the instruction; I've kept mine, with the reason in the label's note.
+- **It caught a label I got wrong.** I first labelled "Poland and Spain. [S1][S2]" as correctly cited. The judge said S2 doesn't support it, and by the rule as written it's right, so I changed the label and said so in its note. Before that change the two agreed on citations 32 of 33; the table shows the count after it. Changing a label after seeing the judge is a step towards agreeing with it, which is why it's written down.
+- **Kappa says little here.** Cohen's kappa corrects agreement for chance, and when one side never says false (I labelled every answer correct and relevant), chance explains all of the agreement, and kappa is 0 or undefined however many answers agree. With 33 answers, nearly all of them good, the lists of disagreements in [judged-groq.json](../evaluation/results/judged-groq.json) say more than the coefficient, so they're kept with it.
+
+So the judge is good enough to flag missing citations and omissions in new answers, and not good enough to be trusted on faithfulness without someone reading the answers it passes.
+
+Neither the answers nor the verdicts are rerun by the tests: a hosted model's output varies even at temperature 0. What is tested ([tests/integration/test_evaluation_answer_results.py](../tests/integration/test_evaluation_answer_results.py)) is that every number in both files is what the code computes from the answers, labels and verdicts committed with them, that the labels are for exactly these answers, and that no source in the file is one its asker may not read. Without a network, the same code runs over the fake embedder with scripted models: a rate-limited provider is waited for, a refused request isn't retried, a failed question is listed and counted as neither an answer nor an abstention, and only exactly the no-information response counts as abstaining.
+
+### What this doesn't cover
+
+- **One run, one model, 33 answers, labelled by one person who also wrote the documents and the questions.** The labels are as careful as I could make them, and the judge has already found one mistake in them.
+- **Answers to forbidden questions aren't judged here.** That they say nothing from the forbidden document is [measured](#leakage-and-over-blocking) by rule, which is stronger than any judge.
+- **The judge is from the same family as the answering model**, the larger gpt-oss. A judge that prefers answers like its own would show up as agreeing too easily; here it disagreed in the stricter direction, but 33 answers can't rule that out.
+

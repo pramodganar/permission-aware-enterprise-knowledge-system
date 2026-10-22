@@ -45,6 +45,7 @@ def measuring_settings(
     retrieval_min_score: float | None = None,
     llm_provider: Literal["none", "ollama", "groq"] = "none",
     llm_api_key: SecretStr | None = None,
+    llm_model: str | None = None,
     llm_max_output_tokens: int | None = None,
 ) -> Settings:
     """The service's defaults, with a throwaway key and nothing from the environment.
@@ -64,6 +65,7 @@ def measuring_settings(
             "reranker_model": reranker_model,
             "llm_provider": llm_provider,
             "llm_api_key": llm_api_key,
+            "llm_model": llm_model,
             **changes,
         }
     )

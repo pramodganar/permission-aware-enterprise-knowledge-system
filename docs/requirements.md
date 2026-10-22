@@ -249,7 +249,7 @@ Measured against a labelled set of questions with known relevant chunks.
 | Citation correctness | share of citations that point to a chunk which supports the claim it is attached to |
 | Correct abstention | questions with no answer in the user's accessible documents where the system declines instead of guessing |
 
-How faithfulness and relevance are judged (by hand, by an LLM judge, or both) is decided in the evaluation phase.
+How faithfulness and relevance are judged was decided in the evaluation phase: both, an LLM judge checked against labels written by hand, per answer rather than per claim. See [evaluation](evaluation.md#answer-quality).
 
 ### Latency
 

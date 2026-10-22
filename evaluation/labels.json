@@ -1,0 +1,301 @@
+{
+  "labels": [
+    {
+      "id": "alice-annual-leave",
+      "digest": "a4333de6c48dd382",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "alice-outage-cause",
+      "digest": "c5e4501b79acd928",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": false,
+      "note": "Right and in the sources, but cites nothing."
+    },
+    {
+      "id": "alice-receipts",
+      "digest": "cb8a018eae1138f9",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "alice-payments-down",
+      "digest": "76f03ac677e66aee",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": false,
+      "note": "Right and in the sources, but cites nothing."
+    },
+    {
+      "id": "alice-deploy-window",
+      "digest": "0831403c6ddd696e",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "alice-rollbacks",
+      "digest": "8ea9c87fa2728617",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "alice-auto-rollback",
+      "digest": "4a439b7206656a9c",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "bob-vendor-limit",
+      "digest": "b633721dca7a7582",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "bob-large-payment",
+      "digest": "dbcad73075d36fee",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "bob-headcount",
+      "digest": "c09607e8116b2846",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "bob-meals",
+      "digest": "1f4904ba1a88d2f8",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "bob-bank-details",
+      "digest": "a69e1e1e97e174da",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": "'After the change is confirmed' for 'after the change': the change follows the confirmation, so not a new claim."
+    },
+    {
+      "id": "carol-pip-process",
+      "digest": "adee251a60116920",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "carol-salary-senior",
+      "digest": "0de5c1259e2a5d2b",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "carol-parental-leave",
+      "digest": "33d67a205687835d",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "carol-offer-midpoint",
+      "digest": "e5f8d8070f1488d9",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "david-discount",
+      "digest": "9b632b5d2b773b39",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "david-gift",
+      "digest": "1f12eec72616406d",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "david-enterprise-floor",
+      "digest": "85bb1ee21ef4813a",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": "Bare: doesn't say the floor is a maximum or that it applies above 250,000 EUR a year, but contradicts nothing."
+    },
+    {
+      "id": "david-multi-year",
+      "digest": "8878b69c771ec829",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "emma-dispute",
+      "digest": "c7e2622023f8b616",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "emma-contract-retention",
+      "digest": "e68e8d7894824fcd",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "emma-acquisitions",
+      "digest": "b026cee46177a861",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "emma-legal-hold",
+      "digest": "4ad4d18f5857c747",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "frank-incident-sop",
+      "digest": "fb5614cd450bfa2b",
+      "correct": true,
+      "faithful": false,
+      "relevant": true,
+      "citations_supported": true,
+      "note": "Says equipment returns to service after inspection and the supervisor's confirmation; the SOP says after inspection by maintenance, and it's the operator who needs the supervisor before driving again."
+    },
+    {
+      "id": "frank-hotel",
+      "digest": "5ac3b7506b7470cd",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "frank-someone-hurt",
+      "digest": "1023484a0e120e14",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "frank-level-3",
+      "digest": "c4a7ac4a48327de2",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "grace-rollbacks",
+      "digest": "8f867ee72164c323",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "grace-executive-bonus",
+      "digest": "d2f142c62ed0d5ca",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": ""
+    },
+    {
+      "id": "grace-executive-pay",
+      "digest": "8fd0f7d730f6b572",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": "Leaves out the peer-group median; the rest is there."
+    },
+    {
+      "id": "grace-strategy",
+      "digest": "4cc23ab752c3a696",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": true,
+      "note": "Gives the three priorities and leaves out the 2029 targets; still answers the question."
+    },
+    {
+      "id": "grace-new-markets",
+      "digest": "8fcabe7043a4dd83",
+      "correct": true,
+      "faithful": true,
+      "relevant": true,
+      "citations_supported": false,
+      "note": "S2 is about priorities 2 and 3 and doesn't name the markets. I labelled this true at first; the judge caught it, and the rule as written makes it false."
+    }
+  ]
+}

@@ -1,0 +1,421 @@
+{
+  "judge_model": "openai/gpt-oss-120b",
+  "judge_version": "1",
+  "answers_model": "openai/gpt-oss-20b",
+  "answered": 33,
+  "unjudged": [],
+  "unlabelled": [],
+  "stale_labels": [],
+  "by_the_judge": {
+    "correct": "31 of 33",
+    "faithful": "33 of 33",
+    "relevant": "33 of 33",
+    "citations_supported": "30 of 33"
+  },
+  "by_hand": {
+    "correct": "33 of 33",
+    "faithful": "32 of 33",
+    "relevant": "33 of 33",
+    "citations_supported": "30 of 33"
+  },
+  "agreement": {
+    "correct": {
+      "compared": 33,
+      "agreed": 31,
+      "kappa": 0.0,
+      "judge_true_hand_false": [],
+      "judge_false_hand_true": [
+        "grace-executive-pay",
+        "grace-strategy"
+      ]
+    },
+    "faithful": {
+      "compared": 33,
+      "agreed": 32,
+      "kappa": 0.0,
+      "judge_true_hand_false": [
+        "frank-incident-sop"
+      ],
+      "judge_false_hand_true": []
+    },
+    "relevant": {
+      "compared": 33,
+      "agreed": 33,
+      "kappa": null,
+      "judge_true_hand_false": [],
+      "judge_false_hand_true": []
+    },
+    "citations_supported": {
+      "compared": 33,
+      "agreed": 33,
+      "kappa": 1.0,
+      "judge_true_hand_false": [],
+      "judge_false_hand_true": []
+    }
+  },
+  "verdicts": [
+    {
+      "id": "alice-annual-leave",
+      "digest": "a4333de6c48dd382",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, and directly answers the question"
+      }
+    },
+    {
+      "id": "alice-outage-cause",
+      "digest": "c5e4501b79acd928",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": false,
+        "reason": "The answer provides no citations, violating the citations_supported requirement"
+      }
+    },
+    {
+      "id": "alice-receipts",
+      "digest": "cb8a018eae1138f9",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, addresses the question, and citation is correct"
+      }
+    },
+    {
+      "id": "alice-payments-down",
+      "digest": "76f03ac677e66aee",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": false,
+        "reason": "The answer provides no source citations, violating the citations_supported requirement."
+      }
+    },
+    {
+      "id": "alice-deploy-window",
+      "digest": "0831403c6ddd696e",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference, all claims are in S1, and the citation covers them."
+      }
+    },
+    {
+      "id": "alice-rollbacks",
+      "digest": "8ea9c87fa2728617",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer accurately reflects the reference and all statements are directly supported by source S1."
+      }
+    },
+    {
+      "id": "alice-auto-rollback",
+      "digest": "4a439b7206656a9c",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, addresses the question, and citation is appropriate"
+      }
+    },
+    {
+      "id": "bob-vendor-limit",
+      "digest": "b633721dca7a7582",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference and source S1, and the citation correctly supports the listed limits."
+      }
+    },
+    {
+      "id": "bob-large-payment",
+      "digest": "dbcad73075d36fee",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference and is fully supported by S1"
+      }
+    },
+    {
+      "id": "bob-headcount",
+      "digest": "c09607e8116b2846",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference and all claims are directly supported by source S1"
+      }
+    },
+    {
+      "id": "bob-meals",
+      "digest": "1f4904ba1a88d2f8",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, and directly addresses the question"
+      }
+    },
+    {
+      "id": "bob-bank-details",
+      "digest": "a69e1e1e97e174da",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference, is fully supported by S1, addresses the question, and the citation correctly backs the statement"
+      }
+    },
+    {
+      "id": "carol-pip-process",
+      "digest": "adee251a60116920",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is fully supported by sources, addresses the question, and all citations are appropriate"
+      }
+    },
+    {
+      "id": "carol-salary-senior",
+      "digest": "0de5c1259e2a5d2b",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference, is fully supported by source S1, addresses the question, and the citation correctly backs the statement."
+      }
+    },
+    {
+      "id": "carol-parental-leave",
+      "digest": "33d67a205687835d",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference, is fully supported by S1, addresses the question, and the citation backs the statement."
+      }
+    },
+    {
+      "id": "carol-offer-midpoint",
+      "digest": "e5f8d8070f1488d9",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, addresses the question, and citation is correct"
+      }
+    },
+    {
+      "id": "david-discount",
+      "digest": "9b632b5d2b773b39",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, addresses the question, and citation is correct"
+      }
+    },
+    {
+      "id": "david-gift",
+      "digest": "1f12eec72616406d",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference and all statements are directly supported by source S1."
+      }
+    },
+    {
+      "id": "david-enterprise-floor",
+      "digest": "85bb1ee21ef4813a",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "All criteria are satisfied"
+      }
+    },
+    {
+      "id": "david-multi-year",
+      "digest": "8878b69c771ec829",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference and is fully supported by S1"
+      }
+    },
+    {
+      "id": "emma-dispute",
+      "digest": "c7e2622023f8b616",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "All statements match reference, are in sources, answer addresses question, and citations cover them"
+      }
+    },
+    {
+      "id": "emma-contract-retention",
+      "digest": "e68e8d7894824fcd",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer accurately reflects the reference and all statements are backed by S1, and it stays on topic."
+      }
+    },
+    {
+      "id": "emma-acquisitions",
+      "digest": "b026cee46177a861",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by source S2, addresses the question, and citation is appropriate"
+      }
+    },
+    {
+      "id": "emma-legal-hold",
+      "digest": "4ad4d18f5857c747",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is supported by S1, addresses the question, and citation is appropriate"
+      }
+    },
+    {
+      "id": "frank-incident-sop",
+      "digest": "fb5614cd450bfa2b",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, is fully supported by S1, addresses the question, and all citations are appropriate"
+      }
+    },
+    {
+      "id": "frank-hotel",
+      "digest": "5ac3b7506b7470cd",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference and is fully supported by S1"
+      }
+    },
+    {
+      "id": "frank-someone-hurt",
+      "digest": "1023484a0e120e14",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, all statements are in S1, and citation correctly supports them"
+      }
+    },
+    {
+      "id": "frank-level-3",
+      "digest": "c4a7ac4a48327de2",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "The answer matches the reference and is fully supported by source S1."
+      }
+    },
+    {
+      "id": "grace-rollbacks",
+      "digest": "8f867ee72164c323",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer matches reference, all details are in S1, and citation covers them"
+      }
+    },
+    {
+      "id": "grace-executive-bonus",
+      "digest": "d2f142c62ed0d5ca",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "All statements match the reference, are in the source, answer the question, and citation supports them"
+      }
+    },
+    {
+      "id": "grace-executive-pay",
+      "digest": "8fd0f7d730f6b572",
+      "verdict": {
+        "correct": false,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer omits the reference's statement that target pay is set at the peer\u2011group median"
+      }
+    },
+    {
+      "id": "grace-strategy",
+      "digest": "4cc23ab752c3a696",
+      "verdict": {
+        "correct": false,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": true,
+        "reason": "Answer omits the revenue (450\u202fM\u202fEUR) and margin (18%) targets stated in the reference."
+      }
+    },
+    {
+      "id": "grace-new-markets",
+      "digest": "8fcabe7043a4dd83",
+      "verdict": {
+        "correct": true,
+        "faithful": true,
+        "relevant": true,
+        "citations_supported": false,
+        "reason": "Citation S2 does not support the statement about Poland and Spain"
+      }
+    }
+  ]
+}
