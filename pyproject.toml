@@ -12,7 +12,7 @@ markers = [
 filterwarnings = ["error"]
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "evaluation"]
 branch = true
 
 [tool.coverage.report]
@@ -45,7 +45,7 @@ select = [
 
 [tool.mypy]
 python_version = "3.11"
-files = ["app", "scripts", "tests", "ui"]
+files = ["app", "evaluation", "scripts", "tests", "ui"]
 mypy_path = "tests"
 strict = true
 plugins = ["pydantic.mypy"]
@@ -56,4 +56,4 @@ module = ["faiss"]
 ignore_missing_imports = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "scripts", "ui", "acmecorp", "apiclient", "liveserver", "files", "fakes", "logcheck", "questions", "shown"]
+known-first-party = ["app", "evaluation", "scripts", "ui", "acmecorp", "apiclient", "liveserver", "files", "fakes", "logcheck", "questions", "shown"]
