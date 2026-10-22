@@ -246,3 +246,69 @@ Neither the answers nor the verdicts are rerun by the tests: a hosted model's ou
 - **Answers to forbidden questions aren't judged here.** That they say nothing from the forbidden document is [measured](#leakage-and-over-blocking) by rule, which is stronger than any judge.
 - **The judge is from the same family as the answering model**, the larger gpt-oss. A judge that prefers answers like its own would show up as agreeing too easily; here it disagreed in the stricter direction, but 33 answers can't rule that out.
 
+## Latency
+
+```
+python -m evaluation.latency                  # no model: the service's own work, 5 rounds
+python -m evaluation.latency --rerank         # the same with the cross-encoder
+python -m evaluation.latency --model groq     # with the hosted model, one paced round
+python -m evaluation.latency --scale 1755     # the scope and search at about 100,000 chunks
+```
+
+All 73 questions are asked by their askers through `answer_question`, over a freshly loaded company with the real embedding model. **The stages are timed by wrapping the functions the service calls**, for the length of the measurement only, so what's timed is the service's own path rather than a copy of it; a test checks that every function is put back, including when the measurement fails. Without a model, a first round warms up and isn't counted, and five more are: 365 timings. The model in that run is the one that repeats its prompt, which takes no time, so the run measures everything the service does itself.
+
+**What the permission filter costs** (NFR-2) is the work a system without one wouldn't do: working out the scope, the second check with `can_read`, and searching inside the scope rather than over every vector. The last is measured with a search that has no allowed list, on the same vector, next to every question. That search exists only in the measurement; the service has no way to search without one.
+
+On this laptop (Intel, 8 logical CPUs, Windows 11, Python 3.11), 57 chunks indexed, 22 October 2026:
+
+| Stage, ms | p50 | p95 |
+|---|---|---|
+| embed the question | 16.6 | 21.2 |
+| scope (SQL) | 2.0 | 2.2 |
+| search inside the scope | 2.4 | 2.7 |
+| load the chunks and check each with `can_read` | 2.3 | 2.9 |
+| (of which `can_read`) | 0.1 | 0.1 |
+| context | 0.1 | 0.1 |
+| **retrieval** (scope, search, load and check) | **6.7** | **7.4** |
+| **the whole question without a model**, audit records included | **25.0** | **29.7** |
+| the permission filter | 2.6 | 3.0 |
+| a search of every vector, for comparison | 1.9 | 2.2 |
+| reranking, when on (230 questions passing the gate) | 711.1 | 817.0 |
+| retrieval with reranking | 573.3 | 817.9 |
+| the model, Groq gpt-oss-20b (46 questions reaching it) | 972.0 | 1,533.9 |
+| **an answered question, end to end, with Groq** | **1,016.5** | **1,580.2** |
+
+Against the targets in [requirements](requirements.md#performance-and-cost):
+
+- **Retrieval, under 500 ms at p95: 7.4 ms.** Embedding the question is two thirds of the service's own time.
+- **End to end, under 5 s at p95: 1.6 s** with Groq; the slowest of 46 took 2.1 s. Nearly all of it is the model. The Groq run was one round paced to its rate limit, on one afternoon; a hosted model's time varies with its load, and the 5 s target is for the provider as much as for the code.
+- **The filter costs 2.6 ms, a tenth of the service's own time and under 0.4 percent of an answered question.** The scope query and the second check together are 2.1 ms; searching inside the scope costs half a millisecond more than searching everything.
+- **Reranking alone misses the retrieval target**, and stays off: [decision record 0012](adr/0012-reranking-off-by-default.md#revisited-in-phase-11) weighs it against what it gains.
+
+### At a larger size
+
+57 chunks says nothing about what the filter costs a company with a hundred thousand, and that's where it would matter. `--scale` copies every chunk of the company 1,755 times, into the same documents, so who may read what is the company's own rule at about 100,000 chunks, and indexes them with random vectors, since only the time matters. Then each person's scope and scoped search are timed 20 times, next to a search of everything:
+
+| | chunks in scope | scope p50, ms | scoped search p50, ms | search of everything p50, ms |
+|---|---|---|---|---|
+| Grace | 93,015 | 296.4 | 42.6 | 7.1 |
+| Carol, Emma | 35,100 | 84.2, 85.3 | 23.2, 23.1 | 6.9 |
+| Alice | 31,590 | 82.1 | 22.4 | 7.5 |
+| Bob | 28,080 | 72.4 | 20.7 | 7.1 |
+| Frank | 24,570 | 60.1 | 18.9 | 6.8 |
+| David | 22,815 | 55.3 | 18.0 | 6.8 |
+| Henry, Irene | 0 | 0.1 | 0.0 | 6.6 |
+
+**At this size, the filter is most of retrieval for anyone who reads widely.** Every question works out the person's scope as the set of chunk IDs they may read, and then gives the index that set. Both grow with the scope, at about 3 µs per chunk for the scope and a fraction of that for the search. For Grace it's about 340 ms of every question before anything else, against 7 ms for a search with no filter. That's still under the 500 ms target, but by about 160 ms before embedding the question and loading the chunks are counted, and it grows with the corpus.
+
+The ways out, for when the corpus is that size, change the design rather than tune it: decide the scope by document, of which there are far fewer, and let the index filter by document ID; or split the index by department and classification, so a person searches the parts they may read. Each has to keep both checks of [decision record 0003](adr/0003-pre-filter-vector-search.md). At 57 chunks none of it is worth doing, and it's written down here so the limit isn't found in production.
+
+### What the timings don't cover
+
+- **One machine, one afternoon.** Times depend on what else the machine is doing: a first run, made while type checking ran alongside, put the reranker at 1,436 ms, twice the clean figure, and the timings here were measured again with nothing else running. The Groq run's own stages ran while I was writing tests, and its embedding p50 was 25.6 ms against 16.6 alone; next to the model's second, that's small.
+- **An in-memory database.** The service uses SQLite on disk, so the scope query is likely a little slower there. Not measured.
+- **The API around it** (HTTP, the token check, JSON) isn't timed; these are the times of `answer_question`.
+- **Random vectors at scale.** The search time of a flat index doesn't depend on what the vectors say, but the copies' text and documents are the company's own, so the database side is realistic in size and not in variety.
+
+None of these numbers is checked by a test, since times change from run to run. What's tested is how they're taken ([tests/integration/test_evaluation_latency.py](../tests/integration/test_evaluation_latency.py)): each stage's time lands in that stage, a slow model shows up as model time, a failed question is listed and timed for nothing, the warm-up round is left out, and the service's functions are put back however the measurement ends. The arithmetic (nearest-rank percentiles, the filter's cost) has unit tests of its own.
+

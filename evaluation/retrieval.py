@@ -51,6 +51,8 @@ from evaluation.dataset import Kind, Question, QuestionSet, contains, default_se
 
 KS = (1, 3, 5)
 DEPTH = max(KS)
+# The cross-encoder measured when reranking is on.
+RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
 RESULTS = Path(__file__).with_name("results")
 NO_GATE = -1.0
 
@@ -236,7 +238,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, help="where to write the results (JSON)")
     arguments = parser.parse_args(list(argv) if argv is not None else None)
 
-    reranker_model = "cross-encoder/ms-marco-MiniLM-L6-v2" if arguments.rerank else None
+    reranker_model = RERANKER_MODEL if arguments.rerank else None
     settings = measuring_settings(reranker_model=reranker_model)
     output = arguments.output or RESULTS / (
         "retrieval-reranked.json" if arguments.rerank else "retrieval.json"

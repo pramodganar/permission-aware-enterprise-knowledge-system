@@ -44,3 +44,20 @@ FR-9 is reworded to match: chunks can be reranked, and whether they are is decid
 ## Revisit when
 
 The corpus grows enough that the right document is often not first, the evaluation set in phase 11 shows ranking problems, or a GPU is available.
+
+## Revisited in phase 11
+
+The evaluation set measured both sides again, on 34 answerable questions by chunk rather than by document, and on all 73 questions for time ([evaluation](../evaluation.md#latency)):
+
+| | Search only | Search and reranking |
+|---|---|---|
+| Chunk with the answer ranked first | 23 of 34 | 25 of 34 |
+| Chunk with the answer in the five given to the model | 33 of 34 | 34 of 34 |
+| Answer document ranked first | 33 of 34 | 33 of 34 |
+| Retrieval, p50 / p95 | 6.7 / 7.4 ms | 573 / 818 ms |
+
+The gain is real and small: two questions get their answer chunk first, and one, Carol's case-file question, gets it into the model's sources at all, which might let the model answer it (not measured). Four questions move down as well. The cost is the reranker's 711 ms median on this laptop's CPU, on every question that passes the gate, which takes retrieval's p95 over the 500 ms target in NFR-1 by itself.
+
+**The decision stands: off by default.** One question in 34 doesn't pay for missing the retrieval target on all of them. The case-file question is better served where it fails, in which chunks are retrieved, than by reranking everything.
+
+Measuring this also found that timings taken while the machine does other work are not to be trusted: a first run, with type checking going on at the same time, put the reranker at 1,436 ms, twice the clean figure.

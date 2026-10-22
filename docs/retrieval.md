@@ -103,7 +103,7 @@ cross-encoder/ms-marco-MiniLM-L6-v2, locally on the CPU, reranking the 20 closes
 
 With 17 documents, the search already puts the right document first for 21 of 22 questions. The miss is the case-file question, where both put the process document first. The reranker moved the case file up one place and added nearly a second per question. The times are from one run on a laptop under varying load; an earlier run of the reranker alone took about 600 ms for 20 chunks.
 
-Measured again in phase 11 by chunk instead of by document, on 34 questions, reranking puts the chunk with the answer first a little more often (25 of 34 instead of 23) and brings the case-file chunk into the top five, but moves four questions down as well; see [evaluation](evaluation.md#retrieval-quality). It stays off until the latency and answer measurements weigh that against the time.
+Measured again in phase 11 by chunk instead of by document, on 34 questions, reranking puts the chunk with the answer first a little more often (25 of 34 instead of 23) and brings the case-file chunk into the top five, but moves four questions down as well; see [evaluation](evaluation.md#retrieval-quality). Weighed against the time in the same phase, it stays off: 711 ms per question at the median takes retrieval over its 500 ms target ([decision record 0012](adr/0012-reranking-off-by-default.md#revisited-in-phase-11)).
 
 Its scores would also make a poor relevance threshold. On its own scale, the worst answerable question and the best off-topic one are almost level, so the gate stays on the search score even when reranking is on.
 

@@ -122,8 +122,8 @@ Answers come with citations, and every query goes into an audit log.
 
 ### Performance and cost
 
-- NFR-1 Latency: aiming for p95 under 5 s end to end and under 500 ms for retrieval, on the AcmeCorp data on my own machine. End to end mostly depends on the LLM provider, so the retrieval number is the one I control. First guess, not measured yet.
-- NFR-2 Filter overhead: the time added by the permission filter is measured separately, so I can say what the security costs in latency.
+- NFR-1 Latency: aiming for p95 under 5 s end to end and under 500 ms for retrieval, on the AcmeCorp data on my own machine. End to end mostly depends on the LLM provider, so the retrieval number is the one I control. Measured in phase 11: 7.4 ms retrieval and 1.6 s end to end at p95, with Groq; see [evaluation](evaluation.md#latency).
+- NFR-2 Filter overhead: the time added by the permission filter is measured separately, so I can say what the security costs in latency. Measured in phase 11: 2.6 ms at p50 on the AcmeCorp data, and about 340 ms for someone who reads 93,000 of 100,000 chunks; see [evaluation](evaluation.md#at-a-larger-size).
 - NFR-3 Cost per query: the context sent to the LLM is capped (number of chunks and total tokens), so one question can't run up an unbounded bill.
 
 ### Reliability
