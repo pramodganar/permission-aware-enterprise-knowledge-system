@@ -203,7 +203,7 @@ Grace (Executive) asks the same thing and gets an answer with sources.
 
 ## Success metrics
 
-Nothing is measured yet. These are targets.
+Measured in phase 11. `python -m evaluation` runs the measurements and checks every target; the results are in the [evaluation report](evaluation-report.md), and how each is measured in [evaluation](evaluation.md). The security targets are the ones below, set before anything was measured. The rest were set from the first baseline, as promised further down, and are listed in [evaluation/targets.py](../evaluation/targets.py).
 
 ### Security (pass/fail)
 
@@ -214,10 +214,12 @@ These are measured on probe queries: a question paired with a user who is not al
 | Permission leakage rate | probe queries where any unauthorized content is exposed, at retrieval or in the answer / all probe queries | 0% |
 | Unauthorized retrieval rate | probe queries where the retriever returns at least one unauthorized chunk / all probe queries | 0% |
 | Unauthorized answer rate | probe queries where the answer or its citations contain unauthorized content / all probe queries | 0% |
-| Existence leakage | probe queries whose response differs from the response to a question no document answers | 0 |
+| Existence leakage | probe queries whose response names the forbidden document, by its title or its ID in a citation | 0 |
 | Audit coverage | queries with a matching audit record / all queries | 100% |
 
 Anything short of these is a bug. Results are reported as counts ("0 of N"), because 0% over twenty probes says much less than 0% over two thousand.
+
+Existence leakage was first defined as any response that differs from the response to a question no document answers. Measuring it showed that's too strict: a probe can rightly be answered from documents the asker may read, which differs from "no information" and says nothing about the forbidden one. So it's measured as above, and whether a probe got exactly the no-information response is reported beside it.
 
 ### Over-blocking
 
@@ -225,10 +227,12 @@ A system that returns nothing to anyone has a perfect leakage score, so the secu
 
 | Metric | Definition | Target |
 |---|---|---|
-| Wrongful refusal rate | questions the user is allowed to have answered, and the documents do answer, that get refused / all such questions | set after baseline |
-| Control pass rate | probe questions that the authorized user (for example Grace) gets answered / all probe questions | 100% |
+| Wrongful refusal rate | questions the user is allowed to have answered, and the documents do answer, that get refused / all such questions | at most 2 of 34 (baseline 1) |
+| Control pass rate | forbidden probe questions that the authorized user (for example Grace) gets answered, citing the document / all of them | 100% |
 
-The control pass rate is what shows a refusal came from the permission filter and not from a missing document.
+The control pass rate is what shows a refusal came from the permission filter and not from a missing document. It's counted on the forbidden probes; on the injection probes a model may rightly decline hostile wording even for someone allowed to read the document, so those are reported apart. With Groq it's 11 of 12, a target missed, for the same reason as the one wrongful refusal: a retrieval miss on Carol's case-file question.
+
+Targets set from a baseline sit one question below it: a change that costs one question shows in the report, and one that costs two is a miss.
 
 ### Retrieval quality
 
@@ -255,7 +259,7 @@ How faithfulness and relevance are judged was decided in the evaluation phase: b
 
 p50 and p95 for the whole request and for each stage, plus the permission filter overhead on its own.
 
-I'll set targets for retrieval quality, answer quality and wrongful refusals once I have a first baseline, since I don't want to pick numbers out of the air.
+I said I'd set targets for retrieval quality, answer quality and wrongful refusals once I had a first baseline, rather than pick numbers out of the air. They're now in [evaluation/targets.py](../evaluation/targets.py): for retrieval, the answer chunk in the top five for at least 32 of 34 questions and an MRR of at least 0.78; for answers, at least 32 of 34 answered, 90% correct and faithful by hand, and 85% with every citation supported; for latency, the NFR-1 numbers.
 
 Quality is measured per user against the documents that user can read. Otherwise Alice's recall would drop every time the system correctly hides an Executive document from her.
 

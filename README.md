@@ -27,10 +27,10 @@ Work in progress. Identity, authorization, document ingestion, permission-aware 
 - [x] Answer generation with citations, measured on two real models, and end-to-end answer boundary tests
 - [x] API: login, documents, search and ask, admin routes, audit trail, and a walk of every route for its authorization
 - [x] UI: signing in, asking and searching, documents, managing documents and the audit trail, each offered by permission (and a public demo page: [docs/demo.md](docs/demo.md))
-- [ ] Evaluation, including permission leakage tests
+- [x] Evaluation: a labelled set of 73 questions, retrieval, leakage through the API, answer quality checked by hand, latency, and one command that checks every target
 - [ ] Docker and CI
 
-Measurements so far are in [retrieval](docs/retrieval.md) and [generation](docs/generation.md). End-to-end quality and latency numbers come with the evaluation.
+Measured on the AcmeCorp data ([evaluation report](docs/evaluation-report.md)): no leak in 18 forbidden and injection probes, in any configuration, including a model that repeats everything it was given; 1 wrongful refusal in 34 answerable questions with Groq; the answer chunk in the top five for 33 of 34; 33 answers of which, by hand, all are correct and 32 faithful; retrieval 7.4 ms and an answered question 1.6 s at p95, and the permission filter 2.6 ms at the median. How each is measured, and what it doesn't cover, is in [evaluation](docs/evaluation.md).
 
 ## The idea in one example
 
@@ -57,6 +57,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [UI](docs/ui.md): the web UI, which only talks to the API
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
 - [Evaluation](docs/evaluation.md): the labelled question set and how the system is measured
+- [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Decision records](docs/adr/README.md): why the main design choices were made
 

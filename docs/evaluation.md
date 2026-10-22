@@ -1,6 +1,25 @@
 # Evaluation
 
-How the system is measured (FR-17), against the success metrics in [requirements](requirements.md#success-metrics). Being built in phase 11; this page grows with it.
+How the system is measured (FR-17), against the success metrics in [requirements](requirements.md#success-metrics). The numbers and whether each target is met are in the [evaluation report](evaluation-report.md); this page is how they're measured and what they say.
+
+## Running it
+
+```
+python -m evaluation                  # retrieval and leakage, then the report
+python -m evaluation --latency        # and the timings on this machine
+python -m evaluation --groq           # and everything that needs the hosted model
+python -m evaluation --report-only    # the report from the results there are
+```
+
+Without options the command runs what needs no network and comes out the same every time: retrieval with and without reranking, and leakage with the model that repeats everything, with the relevance gate on and off. Run twice, it leaves every results file byte for byte as it was. Each measurement writes its own file in [evaluation/results](../evaluation/results), and the [report](evaluation-report.md) is written from those files, every target with what was measured and whether it's met.
+
+**Some targets are gates and some are reported.** A gate is a measurement that comes out the same every time: leaks and audit coverage in every run, Groq's included, because anything short of zero is a bug; the worst-case model's controls; and retrieval. The command fails when a gate is missed, or when one wasn't measured at all, because a gate nobody ran isn't passed. Everything that depends on a hosted model's answers, on labels written for one run of them, or on the machine is reported as met or missed and never fails the command. A gate that fails at random is one people learn to ignore.
+
+`--groq` takes about an hour on Groq's free tier and answers the set again. The new answers no longer match the hand labels, which are tied to the exact text they were written for, so the report then says the answers aren't labelled instead of quietly counting the judge on its own.
+
+The targets set from the first baseline sit one question below it. A change that costs one question shows up in the report; one that costs two is a miss. The report itself is committed, and a test fails if it isn't the one the committed results give, so it can't drift from them.
+
+The one target missed is the forbidden control pass rate with Groq, 11 of 12. It's the same question as Groq's one wrongful refusal, Carol's case-file question, and the cause is the [retrieval](#retrieval-quality) miss, not the permission system.
 
 ## The evaluation set
 
