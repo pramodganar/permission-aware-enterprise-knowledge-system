@@ -46,3 +46,58 @@ Writing the checks found a gap straight away: the personas give Alice the rollba
 - **It's small and written by me.** 73 questions over 17 documents, worded by the person who wrote the documents, so it's likely easier than questions from real employees. Some answerable questions are deliberately worded unlike their documents, and they're marked.
 - **One turn, in English.** No follow-up questions and no other languages.
 - **The answer to a forbidden question isn't in two places.** Each secret is in one document only, which the checks enforce. Leaks through a document someone may read that repeats restricted facts (threat T12) are out of the set's reach by design.
+
+## Retrieval quality
+
+```
+python -m evaluation.retrieval            # writes evaluation/results/retrieval.json
+python -m evaluation.retrieval --rerank   # writes evaluation/results/retrieval-reranked.json
+```
+
+Every answerable question is asked by its asker through the same `retrieve` the service uses, inside that person's access scope, with the real embedding model over a freshly loaded company. Nothing on disk is read or changed: the company is seeded into an in-memory database and indexed for the run. The measurement uses the service's default settings and ignores this machine's `.env`, so it describes the code, not a local configuration.
+
+**The relevance gate is off for the ranking**, so the ranking is judged on its own. Whether the gate would have let each question through is reported separately: an answerable question it stops is a wrongful refusal at retrieval.
+
+| Metric | Meaning |
+|---|---|
+| hit@K | a relevant chunk is in the top K |
+| doc_hit@K | a chunk of the right document is in the top K: tells a wrong document apart from the wrong part of the right one |
+| recall@K | relevant chunks in the top K / relevant chunks |
+| precision@K | relevant chunks in the top K / K. Most questions have one relevant chunk, so precision@5 is at most 0.2 for them: it says how much of what the model is given is beside the point |
+| MRR | 1 / rank of the first relevant chunk, 0 if none is in the top 5 |
+
+### Results
+
+34 answerable questions, all-MiniLM-L6-v2, 800-character chunks with 120 overlapping:
+
+| | hit@1 | hit@3 | hit@5 | doc_hit@1 | recall@5 | precision@5 | MRR | stopped by the gate |
+|---|---|---|---|---|---|---|---|---|
+| Similarity only (the default) | 0.676 | 0.971 | 0.971 | 0.971 | 0.971 | 0.206 | 0.814 | 0 of 34 |
+| Reranked by the cross-encoder | 0.735 | 0.971 | 1.0 | 0.971 | 1.0 | 0.212 | 0.855 | 0 of 34 |
+
+By person, similarity only:
+
+| | questions | hit@1 | hit@5 | MRR |
+|---|---|---|---|---|
+| Alice | 7 | 0.714 | 1.0 | 0.857 |
+| Bob | 5 | 0.8 | 1.0 | 0.9 |
+| Carol | 5 | 0.4 | 0.8 | 0.6 |
+| David | 4 | 1.0 | 1.0 | 1.0 |
+| Emma | 4 | 0.25 | 1.0 | 0.542 |
+| Frank | 4 | 1.0 | 1.0 | 1.0 |
+| Grace | 5 | 0.6 | 1.0 | 0.8 |
+
+What the numbers say:
+
+- **The right document almost always comes first; the right part of it often doesn't.** doc_hit@1 is 0.971 but hit@1 is 0.676: in ten of the eleven questions where the first chunk isn't relevant, it is still from the right document, usually the neighbouring chunk. With five chunks given to the model, 33 of 34 answers are in what it sees.
+- **The one real miss is Carol's "Which employees are on a performance improvement plan?"**, the same one phase 8 found. The plan-process document, which she may also read, comes first, and the chunk of the case file with the employee number isn't in the top 5. The model can only say the sources don't answer it.
+- **Emma's low hit@1 is the right documents, not quite the right parts.** Three of her four questions rank the relevant chunk second or third, under another chunk of the same document. Her MRR is 0.542.
+- **The gate stops no answerable question.** The lowest best score among them is 0.424, the same margin over the 0.35 threshold that [retrieval](retrieval.md) measured when the threshold was set.
+- **Reranking isn't a uniform win.** It moves seven questions' first relevant chunk up and four down. Its one clear gain is the case-file question: it brings the employee-number chunk in at rank 4, so hit@5 becomes 34 of 34. Phase 7 left reranking off because it judged by document and saw no change, which this agrees with: doc_hit@1 is the same with and without. At chunk level it helps a little, for about thirty times the retrieval time measured then. Whether that's worth it is decided with the latency and answer measurements.
+
+### The baseline
+
+The results are written rounded, so a rerun on the same code gives the same file: two runs here were byte for byte identical. `evaluation/results/` is committed, and a model test reruns both measurements and fails if the numbers differ from the files ([tests/integration/test_evaluation_baseline.py](../tests/integration/test_evaluation_baseline.py), `pytest -m model`). A change to chunking, embedding or retrieval that moves the numbers has to commit the new results with it, so this page never quotes numbers the code no longer gives. On another machine, tiny floating-point differences in the embeddings could in principle swap two close chunks; that hasn't been checked.
+
+Without the model, the same code runs over the fake embedder to check everything around the numbers: every question has relevant chunks, every chunk ranked is one the asker may read, a quote found in many documents counts only its own document's chunks, and the report is the same twice.
+

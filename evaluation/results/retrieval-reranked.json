@@ -1,0 +1,456 @@
+{
+  "set_version": 1,
+  "settings": {
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "chunk_max_characters": 800,
+    "chunk_overlap_characters": 120,
+    "relevance_threshold": 0.35,
+    "reranker": "cross-encoder/ms-marco-MiniLM-L6-v2"
+  },
+  "overall": {
+    "questions": 34,
+    "hit@1": 0.735,
+    "doc_hit@1": 0.971,
+    "recall@1": 0.706,
+    "precision@1": 0.735,
+    "hit@3": 0.971,
+    "doc_hit@3": 0.971,
+    "recall@3": 0.971,
+    "precision@3": 0.343,
+    "hit@5": 1.0,
+    "doc_hit@5": 1.0,
+    "recall@5": 1.0,
+    "precision@5": 0.212,
+    "mrr": 0.855,
+    "stopped_by_gate": 0
+  },
+  "by_person": {
+    "alice": {
+      "questions": 7,
+      "hit@1": 0.714,
+      "doc_hit@1": 1.0,
+      "recall@1": 0.643,
+      "precision@1": 0.714,
+      "hit@3": 1.0,
+      "doc_hit@3": 1.0,
+      "recall@3": 1.0,
+      "precision@3": 0.381,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.229,
+      "mrr": 0.857,
+      "stopped_by_gate": 0
+    },
+    "bob": {
+      "questions": 5,
+      "hit@1": 0.6,
+      "doc_hit@1": 1.0,
+      "recall@1": 0.6,
+      "precision@1": 0.6,
+      "hit@3": 1.0,
+      "doc_hit@3": 1.0,
+      "recall@3": 1.0,
+      "precision@3": 0.333,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.2,
+      "mrr": 0.8,
+      "stopped_by_gate": 0
+    },
+    "carol": {
+      "questions": 5,
+      "hit@1": 0.8,
+      "doc_hit@1": 0.8,
+      "recall@1": 0.8,
+      "precision@1": 0.8,
+      "hit@3": 0.8,
+      "doc_hit@3": 0.8,
+      "recall@3": 0.8,
+      "precision@3": 0.267,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.2,
+      "mrr": 0.85,
+      "stopped_by_gate": 0
+    },
+    "david": {
+      "questions": 4,
+      "hit@1": 0.75,
+      "doc_hit@1": 1.0,
+      "recall@1": 0.75,
+      "precision@1": 0.75,
+      "hit@3": 1.0,
+      "doc_hit@3": 1.0,
+      "recall@3": 1.0,
+      "precision@3": 0.333,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.2,
+      "mrr": 0.875,
+      "stopped_by_gate": 0
+    },
+    "emma": {
+      "questions": 4,
+      "hit@1": 0.75,
+      "doc_hit@1": 1.0,
+      "recall@1": 0.75,
+      "precision@1": 0.75,
+      "hit@3": 1.0,
+      "doc_hit@3": 1.0,
+      "recall@3": 1.0,
+      "precision@3": 0.333,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.2,
+      "mrr": 0.833,
+      "stopped_by_gate": 0
+    },
+    "frank": {
+      "questions": 4,
+      "hit@1": 1.0,
+      "doc_hit@1": 1.0,
+      "recall@1": 1.0,
+      "precision@1": 1.0,
+      "hit@3": 1.0,
+      "doc_hit@3": 1.0,
+      "recall@3": 1.0,
+      "precision@3": 0.333,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.2,
+      "mrr": 1.0,
+      "stopped_by_gate": 0
+    },
+    "grace": {
+      "questions": 5,
+      "hit@1": 0.6,
+      "doc_hit@1": 1.0,
+      "recall@1": 0.5,
+      "precision@1": 0.6,
+      "hit@3": 1.0,
+      "doc_hit@3": 1.0,
+      "recall@3": 1.0,
+      "precision@3": 0.4,
+      "hit@5": 1.0,
+      "doc_hit@5": 1.0,
+      "recall@5": 1.0,
+      "precision@5": 0.24,
+      "mrr": 0.8,
+      "stopped_by_gate": 0
+    }
+  },
+  "questions": [
+    {
+      "id": "alice-annual-leave",
+      "asker": "alice",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.643,
+      "passes_gate": true
+    },
+    {
+      "id": "alice-outage-cause",
+      "asker": "alice",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 2,
+      "best_score": 0.482,
+      "passes_gate": true
+    },
+    {
+      "id": "alice-receipts",
+      "asker": "alice",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.456,
+      "passes_gate": true
+    },
+    {
+      "id": "alice-payments-down",
+      "asker": "alice",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.653,
+      "passes_gate": true
+    },
+    {
+      "id": "alice-deploy-window",
+      "asker": "alice",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.482,
+      "passes_gate": true
+    },
+    {
+      "id": "alice-rollbacks",
+      "asker": "alice",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.67,
+      "passes_gate": true
+    },
+    {
+      "id": "alice-auto-rollback",
+      "asker": "alice",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.609,
+      "passes_gate": true
+    },
+    {
+      "id": "bob-vendor-limit",
+      "asker": "bob",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.796,
+      "passes_gate": true
+    },
+    {
+      "id": "bob-large-payment",
+      "asker": "bob",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.547,
+      "passes_gate": true
+    },
+    {
+      "id": "bob-headcount",
+      "asker": "bob",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.683,
+      "passes_gate": true
+    },
+    {
+      "id": "bob-meals",
+      "asker": "bob",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.5,
+      "passes_gate": true
+    },
+    {
+      "id": "bob-bank-details",
+      "asker": "bob",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.658,
+      "passes_gate": true
+    },
+    {
+      "id": "carol-pip-process",
+      "asker": "carol",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.664,
+      "passes_gate": true
+    },
+    {
+      "id": "carol-salary-senior",
+      "asker": "carol",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.66,
+      "passes_gate": true
+    },
+    {
+      "id": "carol-who-is-on-a-plan",
+      "asker": "carol",
+      "first_relevant": 4,
+      "right_document_first": false,
+      "relevant": 1,
+      "best_score": 0.643,
+      "passes_gate": true
+    },
+    {
+      "id": "carol-parental-leave",
+      "asker": "carol",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.6,
+      "passes_gate": true
+    },
+    {
+      "id": "carol-offer-midpoint",
+      "asker": "carol",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.506,
+      "passes_gate": true
+    },
+    {
+      "id": "david-discount",
+      "asker": "david",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.71,
+      "passes_gate": true
+    },
+    {
+      "id": "david-gift",
+      "asker": "david",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.424,
+      "passes_gate": true
+    },
+    {
+      "id": "david-enterprise-floor",
+      "asker": "david",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.639,
+      "passes_gate": true
+    },
+    {
+      "id": "david-multi-year",
+      "asker": "david",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.586,
+      "passes_gate": true
+    },
+    {
+      "id": "emma-dispute",
+      "asker": "emma",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.68,
+      "passes_gate": true
+    },
+    {
+      "id": "emma-contract-retention",
+      "asker": "emma",
+      "first_relevant": 3,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.759,
+      "passes_gate": true
+    },
+    {
+      "id": "emma-acquisitions",
+      "asker": "emma",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.468,
+      "passes_gate": true
+    },
+    {
+      "id": "emma-legal-hold",
+      "asker": "emma",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.621,
+      "passes_gate": true
+    },
+    {
+      "id": "frank-incident-sop",
+      "asker": "frank",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.746,
+      "passes_gate": true
+    },
+    {
+      "id": "frank-hotel",
+      "asker": "frank",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.698,
+      "passes_gate": true
+    },
+    {
+      "id": "frank-someone-hurt",
+      "asker": "frank",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.619,
+      "passes_gate": true
+    },
+    {
+      "id": "frank-level-3",
+      "asker": "frank",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.536,
+      "passes_gate": true
+    },
+    {
+      "id": "grace-rollbacks",
+      "asker": "grace",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.67,
+      "passes_gate": true
+    },
+    {
+      "id": "grace-executive-bonus",
+      "asker": "grace",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 2,
+      "best_score": 0.772,
+      "passes_gate": true
+    },
+    {
+      "id": "grace-executive-pay",
+      "asker": "grace",
+      "first_relevant": 1,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.743,
+      "passes_gate": true
+    },
+    {
+      "id": "grace-strategy",
+      "asker": "grace",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.575,
+      "passes_gate": true
+    },
+    {
+      "id": "grace-new-markets",
+      "asker": "grace",
+      "first_relevant": 2,
+      "right_document_first": true,
+      "relevant": 1,
+      "best_score": 0.463,
+      "passes_gate": true
+    }
+  ]
+}
