@@ -12,8 +12,9 @@ import json
 
 import pytest
 
+from app.retrieval.embeddings import load_embedder
 from app.retrieval.reranking import load_reranker
-from evaluation import retrieval, security
+from evaluation import injection, retrieval, security
 from evaluation.company import loaded_company, measuring_settings
 from evaluation.dataset import default_set
 
@@ -66,3 +67,17 @@ def test_the_committed_security_results_are_what_the_code_measures(
     committed = json.loads((retrieval.RESULTS / baseline).read_text(encoding="utf-8"))
     assert measured == committed
     assert measured["leaks"] == 0
+
+
+def test_the_committed_injection_results_are_what_the_code_measures() -> None:
+    # The model that obeys every planted instruction is deterministic too.
+    settings = security.settings_for("worst")
+    embedder = load_embedder(settings)
+    tried = injection.run(lambda: loaded_company(settings, embedder), injection.Obedient())
+    measured = injection.summary(tried, model="obedient")
+
+    committed = json.loads(
+        (retrieval.RESULTS / "injection-obedient.json").read_text(encoding="utf-8")
+    )
+    assert measured == committed
+    assert measured["access_harm"] == measured["link_harm"] == 0

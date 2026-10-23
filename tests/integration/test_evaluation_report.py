@@ -60,16 +60,18 @@ def test_without_options_it_runs_what_needs_no_network(calls: Calls) -> None:
         ("retrieval, reranked", ["--rerank"]),
         ("leakage, gate on", []),
         ("leakage, gate off", ["--no-gate"]),
+        ("planted instructions", []),
     ]
 
 
 def test_timings_and_groq_are_asked_for(calls: Calls) -> None:
     command.main(["--latency", "--groq"])
     names = [name for name, _ in calls]
-    assert names[4:] == [
+    assert names[5:] == [
         "latency",
         "latency, reranked",
         "leakage, Groq",
+        "planted instructions, Groq",
         "answers, Groq",
         "judging the answers",
         "latency, Groq",
@@ -82,7 +84,7 @@ def test_the_report_alone_runs_nothing(calls: Calls, capsys: pytest.CaptureFixtu
     assert calls == []
     printed = capsys.readouterr().out
     assert "missed: Forbidden controls answered (Groq) (11 of 12)" in printed
-    assert "Gates: 12 met, 0 not" in printed
+    assert "Gates: 14 met, 0 not" in printed
 
 
 def test_a_measurement_that_finds_a_leak_doesnt_stop_the_others(
@@ -91,7 +93,7 @@ def test_a_measurement_that_finds_a_leak_doesnt_stop_the_others(
     name, _, args = command.OFFLINE[0]
     command.OFFLINE[0] = (name, recording(calls, name, returns=1), args)
     command.main([])
-    assert len(calls) == 4
+    assert len(calls) == 5
 
 
 def test_a_missed_gate_fails_the_command(calls: Calls, monkeypatch: pytest.MonkeyPatch) -> None:

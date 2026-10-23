@@ -6,9 +6,10 @@
     python -m evaluation --report-only    # the report from the results there are
 
 Without options it runs what needs no network and gives the same numbers
-every time: retrieval with and without reranking, and leakage with the
-model that repeats everything, with the relevance gate on and off. Those
-are the measurements the gates are made of.
+every time: retrieval with and without reranking, leakage with the model
+that repeats everything, with the relevance gate on and off, and
+instructions planted in documents, with a model that obeys them. Those are
+the measurements the gates are made of.
 
 ``--groq`` sends AcmeCorp text to Groq and takes about an hour on the free
 tier, paced to its rate limit. It answers the set again, which leaves the
@@ -25,7 +26,7 @@ import argparse
 import sys
 from collections.abc import Callable, Iterable
 
-from evaluation import answers, judge, latency, retrieval, security
+from evaluation import answers, injection, judge, latency, retrieval, security
 from evaluation.report import REPORT, failed_gates, outcomes, write_report
 from evaluation.targets import load_results
 
@@ -36,6 +37,7 @@ OFFLINE: list[Step] = [
     ("retrieval, reranked", retrieval.main, ["--rerank"]),
     ("leakage, gate on", security.main, []),
     ("leakage, gate off", security.main, ["--no-gate"]),
+    ("planted instructions", injection.main, []),
 ]
 TIMINGS: list[Step] = [
     ("latency", latency.main, []),
@@ -43,6 +45,7 @@ TIMINGS: list[Step] = [
 ]
 GROQ: list[Step] = [
     ("leakage, Groq", security.main, ["--model", "groq"]),
+    ("planted instructions, Groq", injection.main, ["--model", "groq"]),
     ("answers, Groq", answers.main, []),
     ("judging the answers", judge.main, []),
     ("latency, Groq", latency.main, ["--model", "groq"]),

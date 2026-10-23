@@ -86,6 +86,8 @@ def test_every_target_names_a_results_file_and_the_gates_are_the_reproducible_on
         "security-worst.json",
         "security-worst-no-gate.json",
         "security-groq.json",
+        "injection-obedient.json",
+        "injection-groq.json",
     }
 
 

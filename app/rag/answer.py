@@ -30,7 +30,10 @@ sources; the person is told the rest is missing.
 
 An answer's citations are resolved against its own context only
 (``app/rag/citations.py``), so a cited source is always one the person may
-read. A label the model made up is removed from the text.
+read. A label the model made up is removed from the text. Before that, any
+link in the answer that its sources don't contain is taken out
+(``app/rag/links.py``), so an instruction planted in a document can't make
+the answer carry the reader's content to someone else's server.
 
 Every question that reaches retrieval is audited: the question, the chunks
 the person was given, and what came of it (FR-13). That includes a question
@@ -58,6 +61,7 @@ from app.core.config import Settings
 from app.models import AuditAction, User
 from app.rag.citations import resolve_citations
 from app.rag.context import Context, Source, build_context
+from app.rag.links import remove_foreign_links
 from app.rag.llm import LLMError, LLMProvider, StopReason, complete
 from app.rag.prompt import NOT_IN_SOURCES, Prompt, build_prompt
 from app.retrieval.embeddings import Embedder
@@ -107,6 +111,8 @@ class Answer:
     citations: tuple[Source, ...] = ()
     # Labels the model cited that weren't in the context, removed from the text.
     unknown_citations: int = 0
+    # Links the sources don't contain, removed from the text.
+    removed_links: int = 0
     # True when the answer stopped at the length cap.
     cut_off: bool = False
     model: str | None = None
@@ -218,13 +224,16 @@ def _generate(
         reason = NoAnswerReason.NOT_IN_SOURCES
 
     if reason is None:
-        cited = resolve_citations(completion.text, context)
+        # Links first: a citation written as a link stays a citation.
+        links = remove_foreign_links(completion.text, context)
+        cited = resolve_citations(links.text, context)
         if not cited.text:
             # Nothing but citations the model made up.
             raise LLMError("the model's answer was only citations")
         text, citations, unknown = cited.text, cited.sources, cited.unknown
+        removed_links = links.removed
     else:
-        text, citations, unknown = NO_INFORMATION_MESSAGE, (), 0
+        text, citations, unknown, removed_links = NO_INFORMATION_MESSAGE, (), 0, 0
 
     return Answer(
         user_id=user.id,
@@ -235,6 +244,7 @@ def _generate(
         reason=reason,
         citations=citations,
         unknown_citations=unknown,
+        removed_links=removed_links,
         cut_off=reason is None and completion.stop_reason is StopReason.MAX_TOKENS,
         model=completion.model,
         prompt_version=prompt.version,
@@ -269,6 +279,7 @@ def _audit(db: Session, answer: Answer, filters: SearchFilters | None) -> None:
             "reason": None if answer.reason is None else answer.reason.value,
             "cited_documents": [source.document_id for source in answer.citations],
             "unknown_citations": answer.unknown_citations,
+            "removed_links": answer.removed_links,
             "cut_off": answer.cut_off,
             "model": answer.model,
             "prompt_version": answer.prompt_version,
@@ -290,6 +301,7 @@ def _log(answer: Answer, started: float, retrieved: float, generated: float | No
             "sources": len(answer.context.sources),
             "citations": len(answer.citations),
             "unknown_citations": answer.unknown_citations,
+            "removed_links": answer.removed_links,
             "cut_off": answer.cut_off,
             "retrieval_milliseconds": round((retrieved - started) * 1000),
             "generation_milliseconds": (

