@@ -301,7 +301,7 @@ def test_pages_split_the_list_and_the_total_counts_every_page(client: TestClient
 # --- what is logged ---------------------------------------------------------------------
 
 
-def test_a_denied_lookup_is_logged_and_a_missing_one_is_not_but_no_title_is_logged(
+def test_a_denied_lookup_and_a_missing_one_are_each_logged_once_and_no_title_is_logged(
     client: TestClient, db: Session, caplog: pytest.LogCaptureFixture
 ) -> None:
     auth = headers(client, "david")
@@ -312,8 +312,12 @@ def test_a_denied_lookup_is_logged_and_a_missing_one_is_not_but_no_title_is_logg
         client.get(f"/documents/{case_file}", headers=auth)
         client.get(f"/documents/{MISSING}", headers=auth)
 
-    denied = [r for r in caplog.records if r.message == "document access denied"]
-    assert [r.document_id for r in denied] == [case_file]  # type: ignore[attr-defined]
+    refused = [
+        (r.document_id, r.exists)  # type: ignore[attr-defined]
+        for r in caplog.records
+        if r.message == "document not returned"
+    ]
+    assert refused == [(case_file, True), (MISSING, False)]
     service = "\n".join(str(vars(r)) for r in caplog.records if r.name.startswith("app."))
     every_title = {title for readable in MAY_READ.values() for title in readable}
     assert every_title, "nothing to look for"

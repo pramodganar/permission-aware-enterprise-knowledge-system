@@ -51,7 +51,7 @@ from ui.session import (
     token,
     what_they_can_do,
 )
-from ui.text import literal
+from ui.text import ERROR_DETAILS, literal
 
 TITLE = "AcmeCorp Knowledge Assistant"
 
@@ -534,6 +534,7 @@ def show_audit(client: Api) -> None:
 
 
 def main() -> None:
+    st.set_option("client.showErrorDetails", ERROR_DETAILS)
     st.set_page_config(page_title=TITLE, layout="wide")
     client = api(os.environ.get("UI_API_URL", DEFAULT_API_URL))
     me = current_user(client, st.session_state)

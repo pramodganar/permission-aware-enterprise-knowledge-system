@@ -40,7 +40,7 @@ FastAPI's own answer to a bad body includes the input, which here could be a pas
 
 **One log line per request**: method, route pattern (`/documents/{document_id}`, not the ID), status and milliseconds. Not the query string, which can hold a question, and not the client's address. A path that matches no route isn't logged either: it is whatever the client typed, and could be made to look like a log entry. uvicorn's own access log is switched off for the same reason; it writes the full URL.
 
-An unexpected error is logged with its type and where it happened, not its message: a library's error message can hold document text (NFR-9).
+An unexpected error is logged with its type and where it happened, not its message: a library's error message can hold document text (NFR-9). A test reads every line written at DEBUG, from every logger, over a session of use in which a model and a reranker fail with text in their errors, and finds no piece of any document, no question, password or token.
 
 The libraries that log one line per HTTP request they make (`httpx`, `huggingface_hub` and others) keep only their warnings. Running the service showed them logging every check of the embedding model's files at startup, and they would log every call to the language model.
 
@@ -111,7 +111,11 @@ GET /documents/{id}  -> the same fields, plus source_filename, size_bytes, creat
 
 **The list is the documents the caller may read, and nothing else** (FR-5). It is the same `readable_documents` query that retrieval filters by, so the list and search can't disagree. Someone with no reading role, such as a knowledge admin or a security reviewer, gets an empty list, not an error. Documents come in title order; `total` counts every page.
 
-**A document the caller may not read gets exactly the 404 of one that doesn't exist**: the same body and the same headers. Trying IDs one by one tells nobody which documents exist. A replaced or deleted document, or one whose grant has expired, is gone from the list and gives the same 404 on the next request. The log records a denied attempt, with the document's ID, so a security reviewer can see someone trying; a missing ID isn't logged, and no title is ever logged.
+**A document the caller may not read gets exactly the 404 of one that doesn't exist**: the same body and the same headers. Trying IDs one by one tells nobody which documents exist. A replaced or deleted document, or one whose grant has expired, is gone from the list and gives the same 404 on the next request. Each refused lookup leaves one log line with the ID and whether a document with it exists, so a security reviewer can see someone trying; no title is ever logged.
+
+Nor does the time taken tell the two apart, as far as measured. Both do the same work: the scope query, a lookup of the ID alone, one log line and one audit record. The lookup used to load the whole document to see that it exists, so a hidden document's 404 took longer the bigger it was: for one of 2 MB, the median was 12.5 ms against 9.2 ms for a missing ID, over 1,000 requests each on the development laptop. Reading the ID alone, it was 9.4 ms, against 8.9 ms for a hidden document of 4 bytes and 9.3 ms for a missing ID, within the noise. A test holds the cause rather than the timing: a refused lookup runs the same queries either way and never loads a document.
+
+The **IDs themselves** are numbered in the order documents were stored, so a reader who sees documents 3 and 7 knows three others were stored between them: not their titles, departments or text. This is the one thing about hidden documents a reader can learn (threat model T36).
 
 An ID that can't be a document ID (not a whole number, below 1, or too big for the database) is invalid input (422), not a database error.
 

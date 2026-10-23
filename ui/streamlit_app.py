@@ -23,6 +23,7 @@ from app.rag.answer import Answer
 from app.rag.context import Context, Source
 from app.rag.providers import load_provider
 from ui.demo import Demo, Person, build_demo
+from ui.text import ERROR_DETAILS
 
 # A page anyone with the link can open spends the model's free quota.
 QUESTIONS_PER_VISIT = 30
@@ -113,6 +114,7 @@ def respond(app: Demo, person: Person, question: str) -> None:
         st.error(error.detail if error.expose_detail else error.public_message)
 
 
+st.set_option("client.showErrorDetails", ERROR_DETAILS)
 st.set_page_config(page_title="Permission-Aware Knowledge Assistant", layout="wide")
 st.title("Permission-Aware Knowledge Assistant")
 st.caption(

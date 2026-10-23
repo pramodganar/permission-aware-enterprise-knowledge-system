@@ -17,6 +17,14 @@ import re
 # $maths$) to pick up.
 _PUNCTUATION = re.compile(r"""([!"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~])""")
 
+# How much a browser is shown of an error nothing on the page caught: its
+# type and Streamlit's own "the original error message is redacted". By
+# default Streamlit shows the message and the traceback. A message holds
+# whatever the code was working with, which on the demo page, where the
+# service runs in the page's process, can be any document; the traceback is
+# the source. Both still go to the console the page was started from.
+ERROR_DETAILS = "type"
+
 
 def literal(text: str) -> str:
     """``text`` as Markdown that shows exactly ``text``, on one line."""

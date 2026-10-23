@@ -214,21 +214,21 @@ def test_grant_makes_a_restricted_document_fetchable_until_it_expires(
     assert client.get(url, headers=as_user["carol"]).status_code == 404
 
 
-def test_denied_document_is_logged_but_a_missing_one_is_not(
+def test_a_denied_document_and_a_missing_one_each_leave_one_line_that_tells_them_apart(
     client: TestClient, world: World, as_user: Headers, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.WARNING, logger="app.authorization.checks")
     exec_comp = world.documents["exec_comp"]
 
     client.get("/documents/999999", headers=as_user["alice"])
-    assert caplog.records == []
-
     client.get(f"/documents/{exec_comp.id}", headers=as_user["alice"])
-    record = caplog.records[-1]
-    assert record.getMessage() == "document access denied"
-    assert record.__dict__["user_id"] == world.users["alice"].id
-    assert record.__dict__["document_id"] == exec_comp.id
-    assert "Executive" not in str(vars(record))
+
+    missing, denied = caplog.records
+    assert missing.getMessage() == denied.getMessage() == "document not returned"
+    assert (missing.__dict__["document_id"], missing.__dict__["exists"]) == (999999, False)
+    assert (denied.__dict__["document_id"], denied.__dict__["exists"]) == (exec_comp.id, True)
+    assert denied.__dict__["user_id"] == world.users["alice"].id
+    assert "Executive" not in "".join(str(vars(record)) for record in caplog.records)
 
 
 def test_unauthenticated_document_request_is_401(client: TestClient, world: World) -> None:
