@@ -17,6 +17,7 @@ from pydantic import SecretStr
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
+from app.audit.seals import seal_key
 from app.core.config import Settings
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.models import User
@@ -81,7 +82,7 @@ def loaded_company(
     Base.metadata.create_all(engine)
     password = secrets.token_urlsafe(16)
     try:
-        with create_session_factory(engine)() as db:
+        with create_session_factory(engine, seal_key(chosen))() as db:
             seed(db, chosen, password)
             model = embedder or load_embedder(chosen)
             yield Company(db, chosen, model, build_index(db, model), engine, password)

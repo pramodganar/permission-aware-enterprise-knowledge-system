@@ -81,7 +81,7 @@ GET  /auth/me      Authorization: Bearer <token>
 
 **The token holds only the user's ID** and when it expires ([decision record 0004](adr/0004-identity-only-token.md)). Every request loads the user from the database, so a role change, a move to another department or a deactivated account takes effect on the next request with the same token. `/auth/me` shows exactly what the next request will be decided on: the department and roles as they are now, and the permissions the authorization service gives them.
 
-**Every failed login is the same 401**, with the same body: an unknown email, a wrong password and a deactivated account can't be told apart by the response. Nor, as far as measured, by its timing: an unknown email is checked against a dummy password hash, so it costs the same work. Over 30 attempts each on the development laptop, the median time was 72.9 ms for the right password, 72.0 ms for a wrong one and 73.3 ms for an unknown email. That is a check on one machine, not a proof against a patient attacker measuring thousands of attempts. The reason a login failed is logged, never the email or password typed.
+**Every failed login is the same 401**, with the same body: an unknown email, a wrong password and a deactivated account can't be told apart by the response. Nor, as far as measured, by its timing: an unknown email is checked against a dummy password hash, so it costs the same work. Over 30 attempts each on the development laptop, the median time was 72.9 ms for the right password, 72.0 ms for a wrong one and 73.3 ms for an unknown email. That is a check on one machine, not a proof against a patient attacker measuring thousands of attempts. The reason a login failed is logged, never the email or password typed. Every login is in the audit trail, the ones that succeed included, and so is every attempt refused for too many failures.
 
 **The body is checked strictly.** Unknown fields are refused, so a client can't send `"role": "executive"` alongside its password and hope something reads it. A password over 1,024 characters is refused before hashing, so a huge one can't keep the server busy. As everywhere, a refused body names the fields and never echoes what was in them.
 
@@ -167,7 +167,7 @@ Not built yet: a limit on questions per person. Every `/ask` can cost a model ca
 
 ## Managing documents
 
-Every route here needs the `documents:manage` permission, which in the company only Henry, the knowledge admin, holds. Anyone else gets 403 on every one of them, before the body is looked at; without a token it is 401.
+Every route here needs the `documents:manage` permission, which in the company only Henry, the knowledge admin, holds. Anyone else gets 403 on every one of them, before the body is looked at, and the refusal is recorded in the audit trail; without a token it is 401, and only the application log has it.
 
 ```
 POST   /admin/documents                       multipart: file, title, department, classification, readers (repeated)

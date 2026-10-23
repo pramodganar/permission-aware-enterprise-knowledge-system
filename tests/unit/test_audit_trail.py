@@ -107,6 +107,8 @@ def test_when_a_record_can_not_be_stored_write_says_so_and_logs_no_values(
     db: Session, engine: Engine, people: dict[str, User], caplog: pytest.LogCaptureFixture
 ) -> None:
     with engine.begin() as connection:
+        # The seals first: they refer to the records.
+        connection.execute(text("DROP TABLE audit_seals"))
         connection.execute(text("DROP TABLE audit_records"))
 
     with caplog.at_level(logging.ERROR), pytest.raises(AuditWriteError) as raised:

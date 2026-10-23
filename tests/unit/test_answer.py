@@ -520,6 +520,8 @@ def test_a_failed_model_call_leaves_what_was_sent_and_that_it_failed(acme: Compa
 def test_without_an_audit_store_the_model_is_never_called(acme: Company, engine: Engine) -> None:
     llm = FakeLLM([ANSWER])
     with engine.begin() as connection:
+        # The seals first: they refer to the records.
+        connection.execute(text("DROP TABLE audit_seals"))
         connection.execute(text("DROP TABLE audit_records"))
 
     with pytest.raises(AuditWriteError):

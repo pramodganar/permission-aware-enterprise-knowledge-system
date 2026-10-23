@@ -28,11 +28,11 @@ from typing import Any
 
 import jwt
 import pytest
-from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from httpx2 import Response
+from routes import INTERACTIVE_DOCS, routes_of
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
@@ -71,8 +71,6 @@ ACCESS: dict[tuple[str, str], str | Permission] = {
     ("DELETE", "/admin/documents/{document_id}/grants/{email}"): Permission.MANAGE_DOCUMENTS,
     ("GET", "/audit"): Permission.READ_AUDIT_LOG,
 }
-# FastAPI's own pages, switched off in production (tested in test_api_app.py).
-INTERACTIVE_DOCS = {("GET", "/openapi.json"), ("GET", "/docs"), ("GET", "/docs/oauth2-redirect")}
 PROTECTED = [route for route, access in ACCESS.items() if access != PUBLIC]
 
 
@@ -143,27 +141,6 @@ def client(db: Session, engine: Engine, settings: Settings) -> Iterator[TestClie
     walk = settings.model_copy(update={"retrieval_min_score": -1.0, "llm_max_output_tokens": 4000})
     with company_client(db, engine, walk, FakeLLM(repeat_everything)) as client:
         yield client
-
-
-def routes_of(app: FastAPI) -> dict[tuple[str, str], Any]:
-    """Every route the app serves, by method and path pattern.
-
-    Included routers are kept whole in this FastAPI version, so their routes
-    are read from the router they came from.
-    """
-    found: dict[tuple[str, str], Any] = {}
-
-    def walk(routes: list[Any]) -> None:
-        for route in routes:
-            if hasattr(route, "original_router"):
-                walk(route.original_router.routes)
-                continue
-            for method in getattr(route, "methods", None) or ():
-                if method != "HEAD":
-                    found[(method, route.path)] = route
-
-    walk(list(app.routes))
-    return found
 
 
 def every_dependency(dependant: Dependant) -> list[Any]:
@@ -479,14 +456,19 @@ def test_a_refused_path_or_query_never_echoes_what_was_sent(client: TestClient) 
         assert "zq-marker" not in response.text
 
 
-def test_the_refusals_were_not_recorded_as_reads(client: TestClient, db: Session) -> None:
+def test_a_refusal_is_recorded_as_one_and_never_as_a_read(client: TestClient, db: Session) -> None:
+    david = headers(client, "david")
     before = db.scalar(select(func.count()).select_from(AuditRecord))
 
+    # No token: nobody to record, and anyone could fill the trail with these.
     client.get("/documents/1")
-    client.get("/audit", headers=headers(client, "david"))
+    client.get("/audit", headers=david)
 
     db.expire_all()
-    assert db.scalar(select(func.count()).select_from(AuditRecord)) == before
+    added = db.scalars(select(AuditRecord).where(AuditRecord.id > (before or 0))).all()
+    assert [(r.action, r.details["route"], r.details["permission"]) for r in added] == [
+        ("action.denied", "GET /audit", "audit:read")
+    ]
 
 
 def test_a_field_the_client_added_is_named_only_if_it_looks_like_a_field_name(

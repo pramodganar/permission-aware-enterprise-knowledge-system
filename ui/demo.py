@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.audit.seals import seal_key
 from app.authorization.service import readable_documents
 from app.core.config import Settings
 from app.core.database import Base, create_db_engine, create_session_factory
@@ -138,7 +139,7 @@ def build_demo(
     """Load the company into a new in-memory database and index it. Slow: do it once."""
     engine = create_db_engine("sqlite://")
     Base.metadata.create_all(engine)
-    db = create_session_factory(engine)()
+    db = create_session_factory(engine, seal_key(settings))()
     # Nobody logs in to the demo, so the password is never used or shown.
     seed(db, settings, secrets.token_urlsafe(24))
     embedder = embedder or load_embedder(settings)

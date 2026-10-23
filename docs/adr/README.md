@@ -18,3 +18,4 @@ A decision is not edited after it is accepted. If it changes, a new record repla
 | [0010](0010-restricted-documents-need-a-grant.md) | Restricted documents need a named grant, even for executives | Accepted |
 | [0011](0011-pack-lines-into-bounded-chunks.md) | Pack lines into size-bounded chunks with overlap | Accepted |
 | [0012](0012-reranking-off-by-default.md) | Build reranking, but leave it off by default | Accepted |
+| [0013](0013-seal-each-audit-record.md) | Seal each audit record with a keyed hash, rather than chaining them | Accepted |

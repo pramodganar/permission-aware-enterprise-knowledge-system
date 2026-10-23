@@ -20,6 +20,7 @@ from app.api import admin, audit, auth, documents, health, questions
 from app.api.components import Components, close_components, load_components
 from app.api.errors import install_error_handlers
 from app.api.middleware import install_middleware
+from app.audit.seals import seal_key
 from app.auth.throttle import LoginThrottle
 from app.core.config import Settings, get_settings
 from app.core.database import Base, create_db_engine, create_session_factory
@@ -37,7 +38,7 @@ def create_app(
     current = settings or get_settings()
     owns_engine = engine is None
     database = engine or create_db_engine(current.database_url)
-    session_factory = create_session_factory(database)
+    session_factory = create_session_factory(database, seal_key(current))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

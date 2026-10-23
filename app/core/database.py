@@ -15,6 +15,9 @@ IN_MEMORY_SQLITE = ("sqlite://", "sqlite:///:memory:")
 # reaching the database and failing there with a 500.
 MAX_ID = 2**63 - 1
 
+# The name of the key that seals audit records, in each session's info.
+AUDIT_KEY = "audit_key"
+
 
 class Base(DeclarativeBase):
     pass
@@ -76,5 +79,7 @@ def create_db_engine(database_url: str) -> Engine:
     return engine
 
 
-def create_session_factory(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(bind=engine, expire_on_commit=False)
+def create_session_factory(engine: Engine, audit_key: bytes | None = None) -> sessionmaker[Session]:
+    """Sessions for ``engine``. With ``audit_key``, every audit record they write is sealed."""
+    info = {} if audit_key is None else {AUDIT_KEY: audit_key}
+    return sessionmaker(bind=engine, expire_on_commit=False, info=info)

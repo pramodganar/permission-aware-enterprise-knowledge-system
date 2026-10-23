@@ -87,6 +87,8 @@ def count(db: Session) -> int:
 
 def break_the_audit_store(engine: Engine) -> None:
     with engine.begin() as connection:
+        # The seals first: they refer to the records.
+        connection.execute(text("DROP TABLE audit_seals"))
         connection.execute(text("DROP TABLE audit_records"))
 
 
@@ -243,12 +245,19 @@ def test_a_failed_login_is_recorded_without_what_was_typed(client: TestClient, d
     assert "typo.d4vid" not in everything
 
 
-def test_a_successful_login_is_not_a_failed_one(client: TestClient, db: Session) -> None:
+def test_a_successful_login_is_recorded_as_one(client: TestClient, db: Session) -> None:
     before = count(db)
 
     client.post("/auth/login", json={"email": email("david"), "password": PASSWORD})
 
-    assert count(db) == before
+    assert count(db) == before + 1
+    entry = db.scalars(select(AuditRecord).order_by(AuditRecord.id.desc())).first()
+    assert entry is not None
+    assert (entry.action, entry.outcome, entry.actor_id) == (
+        "login.succeeded",
+        "allowed",
+        user_id(db, "david"),
+    )
 
 
 # --- changes ----------------------------------------------------------------------------
@@ -383,10 +392,32 @@ def test_without_an_audit_store_a_failed_login_is_refused_with_503(
     assert response.status_code == 503
 
 
+def test_without_an_audit_store_a_good_login_gets_no_token(
+    client: TestClient, engine: Engine
+) -> None:
+    break_the_audit_store(engine)
+
+    response = client.post("/auth/login", json={"email": email("david"), "password": PASSWORD})
+
+    assert response.status_code == 503
+    assert "access_token" not in response.text
+
+
+def test_without_an_audit_store_a_refusal_is_a_503(client: TestClient, engine: Engine) -> None:
+    david = headers(client, "david")
+    break_the_audit_store(engine)
+
+    response = client.get("/audit", headers=david)
+
+    assert response.status_code == 503
+
+
 def test_without_an_audit_store_a_change_is_not_made(
     client: TestClient, engine: Engine, db: Session
 ) -> None:
     henry = headers(client, "henry")
+    # Signed in first: a login is recorded too, so it would fail once the store is gone.
+    frank = headers(client, "frank")
     leave = document_id(db, "Leave Policy")
     break_the_audit_store(engine)
 
@@ -398,25 +429,29 @@ def test_without_an_audit_store_a_change_is_not_made(
     assert leave_policy is not None
     assert leave_policy.status == "active"
     # Lists aren't audited, so Frank's still works, and still has it.
-    frank = client.get("/documents", headers=headers(client, "frank")).json()["documents"]
-    assert "Leave Policy" in {document["title"] for document in frank}
+    listed = client.get("/documents", headers=frank).json()["documents"]
+    assert "Leave Policy" in {document["title"] for document in listed}
 
 
 def test_startup_adds_the_audit_trail_to_a_database_seeded_before_it_existed(
     db: Session, engine: Engine, settings: Settings
 ) -> None:
-    with engine.begin() as connection:
-        connection.execute(text("DROP TABLE audit_records"))
+    break_the_audit_store(engine)
     embedder = FakeEmbedder()
     components = Components(embedder=embedder, index=build_index(db, embedder), provider=None)
 
     with TestClient(create_app(settings, engine=engine, components=components)):
         pass
 
-    assert "audit_records" in inspect(engine).get_table_names()
-    # And with the triggers that keep it append-only.
+    assert {"audit_records", "audit_seals"} <= set(inspect(engine).get_table_names())
+    # And with the triggers that keep both append-only.
     with engine.connect() as connection:
         triggers = connection.execute(
             text("SELECT name FROM sqlite_master WHERE type = 'trigger'")
         ).scalars()
-        assert set(triggers) == {"audit_records_no_update", "audit_records_no_delete"}
+        assert set(triggers) == {
+            "audit_records_no_update",
+            "audit_records_no_delete",
+            "audit_seals_no_update",
+            "audit_seals_no_delete",
+        }

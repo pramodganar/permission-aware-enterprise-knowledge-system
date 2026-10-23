@@ -26,7 +26,9 @@ ACTIONS = (
     "documents.rechunked",
     "grant.given",
     "grant.revoked",
+    "login.succeeded",
     "login.failed",
+    "action.denied",
     "audit.read",
 )
 PAGE_SIZE = 50

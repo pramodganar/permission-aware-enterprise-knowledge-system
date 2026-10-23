@@ -7,7 +7,11 @@ Every error response has the same shape, from ``error_response``:
 Three kinds of error reach a client:
 
 - The service's own errors (``AppError``): a fixed public message per type,
-  so a response can't say which document, user or rule was involved.
+  so a response can't say which document, user or rule was involved. A
+  refusal with 403 is recorded in the audit trail first: someone trying
+  what their roles don't allow, or trying to give themselves access, is
+  what a reviewer looks for. If it can't be recorded, the response is the
+  503 of any request that can't be audited.
 - Requests FastAPI rejects before an endpoint runs: a body that doesn't
   match its schema, an unknown route, the wrong method. FastAPI's default
   answer to a bad body includes the input itself, which here can be a
@@ -25,16 +29,20 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 
+from app.audit.trail import AuditWriteError, write
 from app.core.exceptions import (
     AppError,
     InvalidInputError,
     NotFoundError,
+    PermissionDeniedError,
     TooManyRequestsError,
     error_response,
 )
 from app.core.logging_setup import current_request_id
+from app.models import AuditAction
 
 UNRECOGNISED_FIELD = "(unrecognised)"
 _FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}|[0-9]{1,6}")
@@ -50,7 +58,9 @@ def _respond(status_code: int, body: dict[str, Any]) -> JSONResponse:
     return JSONResponse(body, status_code=status_code)
 
 
-async def _app_error(_: Request, error: Exception) -> JSONResponse:
+async def _app_error(request: Request, error: Exception) -> JSONResponse:
+    if isinstance(error, PermissionDeniedError):
+        error = await run_in_threadpool(_record_refusal, request, error)
     response = _respond(*error_response(error, current_request_id()))
     if isinstance(error, TooManyRequestsError) and error.retry_after:
         response.headers["Retry-After"] = str(error.retry_after)
@@ -66,6 +76,30 @@ async def _invalid_request(_: Request, error: Exception) -> JSONResponse:
         {".".join(_field_part(part) for part in item["loc"]) for item in error.errors()}
     )
     return _respond(status_code, body)
+
+
+def _record_refusal(request: Request, error: PermissionDeniedError) -> AppError:
+    """Record a 403 in the audit trail. Returns the error to respond with."""
+    route = request.scope.get("route")
+    permission = error.context.get("permission")
+    try:
+        with request.app.state.session_factory() as db:
+            write(
+                db,
+                AuditAction.ACTION_DENIED,
+                "denied",
+                actor_id=error.context.get("user_id"),
+                document_id=error.context.get("document_id"),
+                details={
+                    # The route's pattern, as in the request log: never the path typed.
+                    "route": f"{request.method} {getattr(route, 'path', '')}",
+                    "permission": None if permission is None else permission.value,
+                    "reason": error.detail,
+                },
+            )
+    except AuditWriteError as failed:
+        return failed
+    return error
 
 
 def _field_part(part: object) -> str:

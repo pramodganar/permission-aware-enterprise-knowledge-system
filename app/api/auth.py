@@ -22,12 +22,12 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth.dependencies import CurrentUser, DbSession
-from app.auth.service import MAX_PASSWORD_LENGTH, authenticate
+from app.auth.service import MAX_PASSWORD_LENGTH, authenticate, record_throttled
 from app.auth.throttle import LoginThrottle
 from app.auth.tokens import create_access_token
 from app.authorization.permissions import permissions_for
 from app.core.config import Settings, get_settings
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, TooManyRequestsError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -74,7 +74,11 @@ def login(
     throttle: Annotated[LoginThrottle, Depends(get_login_throttle)],
     response: Response,
 ) -> TokenResponse:
-    throttle.check(body.email)
+    try:
+        throttle.check(body.email)
+    except TooManyRequestsError:
+        record_throttled(db, body.email)
+        raise
     try:
         user = authenticate(db, body.email, body.password)
     except AuthenticationError:

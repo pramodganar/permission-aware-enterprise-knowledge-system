@@ -30,7 +30,8 @@ def authenticate(db: Session, email: str, password: str) -> User:
     Every failure raises the same error, so a caller can't learn whether the
     email exists, the password was wrong or the account is deactivated. The
     reason is logged and audited, without the email or password that was
-    typed. If the audit record can't be stored, this raises AuditWriteError
+    typed. A login that succeeds is audited too: it is where looking into a
+    stolen password starts. If the audit record can't be stored, this raises AuditWriteError
     instead (decision record 0006).
     """
     if len(password) > MAX_PASSWORD_LENGTH:
@@ -46,8 +47,15 @@ def authenticate(db: Session, email: str, password: str) -> User:
     if not user.is_active:
         raise _failed(db, "inactive account", user.id)
 
+    write(db, AuditAction.LOGIN_SUCCEEDED, "allowed", actor_id=user.id)
     logger.info("login succeeded", extra={"user_id": user.id})
     return user
+
+
+def record_throttled(db: Session, email: str) -> None:
+    """Audit a login refused for too many failures, before its password was looked at."""
+    user_id = db.scalar(select(User.id).where(User.email == email.strip().lower()))
+    _failed(db, "too many attempts", user_id)
 
 
 def user_from_token(db: Session, token: str, settings: Settings) -> User:

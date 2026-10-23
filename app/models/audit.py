@@ -1,11 +1,28 @@
-from datetime import datetime
+import hashlib
+import hmac
+import json
+import logging
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Connection, ForeignKey, String, Table, Text, event, text
-from sqlalchemy.orm import Mapped, Session, UOWTransaction, mapped_column, validates
+from sqlalchemy import JSON, Connection, ForeignKey, String, Table, Text, event, insert, text
+from sqlalchemy.orm import (
+    Mapped,
+    Mapper,
+    Session,
+    UOWTransaction,
+    mapped_column,
+    object_session,
+    validates,
+)
 
-from app.core.database import Base, UtcDateTime, utc_now
+from app.core.database import AUDIT_KEY, Base, UtcDateTime, utc_now
+
+logger = logging.getLogger(__name__)
+
+# Where a session keeps the records it sealed, until they are committed.
+_SEALED = "audit_sealed"
 
 
 class AuditAction(StrEnum):
@@ -23,7 +40,11 @@ class AuditAction(StrEnum):
     DOCUMENTS_RECHUNKED = "documents.rechunked"
     GRANT_GIVEN = "grant.given"
     GRANT_REVOKED = "grant.revoked"
+    LOGIN_SUCCEEDED = "login.succeeded"
     LOGIN_FAILED = "login.failed"
+    # Refused with 403: an action the person's roles don't allow, or giving
+    # themselves access.
+    ACTION_DENIED = "action.denied"
     AUDIT_READ = "audit.read"
 
 
@@ -63,31 +84,93 @@ class AuditRecord(Base):
         return f"AuditRecord(id={self.id!r}, action={self.action!r}, outcome={self.outcome!r})"
 
 
+class AuditSeal(Base):
+    """A keyed hash of one audit record, written with it (decision record 0013).
+
+    Whoever can change the database can change a record, but without the
+    service's key can't make a seal that matches. The seal covers the
+    record's ID, so a record moved to another ID doesn't match either, and a
+    record deleted leaves a gap in the IDs. It has a table of its own because
+    a record can't be updated once written, and its ID isn't known until it is.
+    """
+
+    __tablename__ = "audit_seals"
+
+    record_id: Mapped[int] = mapped_column(ForeignKey("audit_records.id"), primary_key=True)
+    # HMAC-SHA256, as 64 hex characters.
+    mac: Mapped[str] = mapped_column(String(64))
+
+
 class AuditRecordChangedError(Exception):
-    """Something tried to change or delete an audit record."""
+    """Something tried to change or delete an audit record or its seal."""
+
+
+def seal_of(record: AuditRecord, key: bytes) -> str:
+    """The seal a record should have: HMAC-SHA256 of every field, its ID included."""
+    fields = {
+        "id": record.id,
+        "created_at": record.created_at.astimezone(UTC).isoformat(),
+        "request_id": record.request_id,
+        "actor_id": record.actor_id,
+        "action": record.action,
+        "outcome": record.outcome,
+        "document_id": record.document_id,
+        "question": record.question,
+        "chunk_ids": list(record.chunk_ids),
+        "details": record.details,
+    }
+    text = json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hmac.new(key, text.encode(), hashlib.sha256).hexdigest()
 
 
 @event.listens_for(Session, "before_flush")
 def _refuse_changes(session: Session, _: UOWTransaction, __: object) -> None:
     # The service only ever adds records. Anything else is a bug, or worse.
-    changed = [r for r in session.dirty if isinstance(r, AuditRecord) and session.is_modified(r)]
-    deleted = [r for r in session.deleted if isinstance(r, AuditRecord)]
+    kept = (AuditRecord, AuditSeal)
+    changed = [r for r in session.dirty if isinstance(r, kept) and session.is_modified(r)]
+    deleted = [r for r in session.deleted if isinstance(r, kept)]
     if changed or deleted:
         raise AuditRecordChangedError("audit records are never changed or deleted")
+
+
+@event.listens_for(AuditRecord, "after_insert")
+def _seal(_: Mapper[AuditRecord], connection: Connection, record: AuditRecord) -> None:
+    # In the same transaction as the record: stored together or not at all.
+    session = object_session(record)
+    key = None if session is None else session.info.get(AUDIT_KEY)
+    if session is None or key is None:
+        return
+    connection.execute(insert(AuditSeal).values(record_id=record.id, mac=seal_of(record, key)))
+    session.info.setdefault(_SEALED, []).append((record.id, record.action))
+
+
+@event.listens_for(Session, "after_commit")
+def _log_sealed(session: Session) -> None:
+    # Logged once stored, so the log never names a record that isn't there.
+    # The log is kept apart from the database, so it shows the newest
+    # records even if they are deleted from the trail.
+    for record_id, action in session.info.pop(_SEALED, []):
+        logger.info("audit record sealed", extra={"audit_id": record_id, "action": action})
+
+
+@event.listens_for(Session, "after_rollback")
+def _forget_sealed(session: Session) -> None:
+    session.info.pop(_SEALED, None)
 
 
 # The same rule in the database, for anything that doesn't go through the
 # ORM. SQLite here; PostgreSQL would use a trigger function or revoke UPDATE
 # and DELETE from the service's role.
 @event.listens_for(AuditRecord.__table__, "after_create")
-def _add_triggers(_: Table, connection: Connection, **__: Any) -> None:
+@event.listens_for(AuditSeal.__table__, "after_create")
+def _add_triggers(table: Table, connection: Connection, **__: Any) -> None:
     if connection.dialect.name != "sqlite":
         return
     for operation in ("UPDATE", "DELETE"):
         connection.execute(
             text(
-                f"CREATE TRIGGER audit_records_no_{operation.lower()} "
-                f"BEFORE {operation} ON audit_records "
+                f"CREATE TRIGGER {table.name}_no_{operation.lower()} "
+                f"BEFORE {operation} ON {table.name} "
                 "BEGIN SELECT RAISE(ABORT, 'audit records are append-only'); END"
             )
         )

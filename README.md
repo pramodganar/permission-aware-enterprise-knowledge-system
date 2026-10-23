@@ -131,6 +131,14 @@ Each version has a manifest with the embedding model, the chunk settings, a chec
 
 The index holds vectors of every document, restricted ones included. It is not committed, and it needs the same protection as the database.
 
+## Audit trail
+
+```
+python -m scripts.audit check   # every record against its seal; exit code 2 if anything doesn't match
+```
+
+Every record is sealed with a keyed hash when it is written, so a record changed, added, deleted or moved by someone with the database but not the service's key is found. The check prints the highest record ID; the application log has each one too, which is what shows the newest records deleted. See [docs/audit.md](docs/audit.md) and [decision record 0013](docs/adr/0013-seal-each-audit-record.md).
+
 ## Running the API
 
 ```

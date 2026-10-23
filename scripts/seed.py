@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.audit.seals import seal_key
 from app.auth.passwords import hash_password
 from app.authorization.document_access import GrantRequest
 from app.core.config import Settings, get_settings
@@ -249,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     engine = create_db_engine(settings.database_url)
     try:
         Base.metadata.create_all(engine)
-        with create_session_factory(engine)() as db:
+        with create_session_factory(engine, seal_key(settings))() as db:
             result = seed(db, settings, password)
     except SeedError as error:
         print(f"error: {error}", file=sys.stderr)
