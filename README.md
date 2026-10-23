@@ -59,6 +59,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Evaluation](docs/evaluation.md): the labelled question set and how the system is measured
 - [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
+- [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made
 
 ## Setup
@@ -168,6 +169,12 @@ ruff check .
 ruff format --check .
 mypy
 pytest --cov
+```
+
+To look for secrets in every tracked file and every commit, the local `.env`'s own values included (it prints where, never what):
+
+```
+python -m scripts.scan_secrets
 ```
 
 To run only the security tests:

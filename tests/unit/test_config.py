@@ -1,3 +1,5 @@
+import secrets
+
 import pytest
 from pydantic import ValidationError
 
@@ -15,6 +17,9 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "APP_DATABASE_URL",
         "APP_JWT_SECRET_KEY",
         "APP_ACCESS_TOKEN_EXPIRE_MINUTES",
+        "APP_LLM_PROVIDER",
+        "APP_LLM_API_KEY",
+        "APP_LLM_BASE_URL",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -76,6 +81,94 @@ def test_secret_is_not_shown_when_settings_are_printed(monkeypatch: pytest.Monke
     assert VALID_SECRET not in str(settings)
     assert VALID_SECRET not in settings.model_dump_json()
     assert settings.jwt_secret_key.get_secret_value() == VALID_SECRET
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://api.groq.com/openai/v1",
+        "http://10.0.0.5:11434/v1",
+        "ftp://example.com",
+        "api.groq.com/openai/v1",
+    ],
+)
+def test_an_api_key_is_never_sent_without_tls_to_another_machine(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    monkeypatch.setenv("APP_LLM_API_KEY", "model-key-in-a-header")
+    monkeypatch.setenv("APP_LLM_BASE_URL", url)
+
+    with pytest.raises(ValidationError, match="https") as error:
+        load()
+
+    assert "model-key-in-a-header" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.groq.com/openai/v1",
+        "http://localhost:11434/v1",
+        "http://127.0.0.1:11434/v1",
+        "http://[::1]:11434/v1",
+    ],
+)
+def test_an_api_key_may_go_over_tls_or_to_this_machine(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    monkeypatch.setenv("APP_LLM_API_KEY", "model-key-in-a-header")
+    monkeypatch.setenv("APP_LLM_BASE_URL", url)
+
+    assert load().llm_base_url == url
+
+
+def test_without_an_api_key_a_plain_http_address_is_fine(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    monkeypatch.setenv("APP_LLM_BASE_URL", "http://10.0.0.5:11434/v1")
+
+    assert load().llm_api_key is None
+
+
+@pytest.mark.parametrize("key", ["x" * 40, "changeme" * 5, "password1234" * 3])
+def test_production_refuses_a_signing_key_that_was_typed(
+    monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    monkeypatch.setenv("APP_ENVIRONMENT", "production")
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", key + "a" * max(0, 32 - len(key)))
+
+    with pytest.raises(ValidationError, match="generated") as error:
+        load()
+
+    assert key not in str(error.value)
+
+
+def test_production_takes_a_generated_signing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    key = secrets.token_urlsafe(48)
+    monkeypatch.setenv("APP_ENVIRONMENT", "production")
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", key)
+
+    assert load().jwt_secret_key.get_secret_value() == key
+
+
+def test_a_typed_phrase_with_enough_different_characters_still_gets_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The limit of counting characters: this is guessable, and passes.
+    monkeypatch.setenv("APP_ENVIRONMENT", "production")
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", "my-production-secret-key-2026!xyz")
+
+    assert load().environment == "production"
+
+
+def test_a_typed_signing_key_is_still_taken_outside_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Tests and local runs use keys like this one.
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+
+    assert load().environment == "local"
 
 
 def test_short_secret_error_does_not_echo_the_value(monkeypatch: pytest.MonkeyPatch) -> None:

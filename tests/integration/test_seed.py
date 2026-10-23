@@ -1,6 +1,7 @@
 """The seed script and the AcmeCorp data it loads."""
 
 import json
+import secrets
 import shutil
 from collections import Counter
 from datetime import timedelta
@@ -244,8 +245,11 @@ def test_text_documents_are_plain_ascii() -> None:
 
 
 def test_refuses_a_production_environment(db: Session) -> None:
+    # A generated key: production refuses one that was typed.
     production = Settings(
-        _env_file=None, environment="production", jwt_secret_key=SecretStr("x" * 64)
+        _env_file=None,
+        environment="production",
+        jwt_secret_key=SecretStr(secrets.token_urlsafe(48)),
     )
 
     with pytest.raises(SeedError, match="production"):

@@ -91,6 +91,27 @@ def test_the_ui_is_pointed_at_the_api_and_keeps_the_rest_of_the_environment() ->
     assert env == {"PATH": "/bin", "UI_API_URL": "http://127.0.0.1:8000"}
 
 
+def test_the_ui_is_not_handed_the_services_settings_or_secrets() -> None:
+    env = ui_environment(
+        HERE,
+        {
+            "PATH": "/bin",
+            "APP_JWT_SECRET_KEY": "signing-key-the-ui-never-needs",
+            "APP_LLM_API_KEY": "model-key-the-ui-never-needs",
+            "app_database_url": "sqlite:///./data/app.db",
+            "SEED_PASSWORD": "seed-password-the-ui-never-needs",
+            "APPDATA": "C:/Users/someone/AppData",
+        },
+    )
+
+    # APPDATA is Windows' own, and only looks like one of ours.
+    assert env == {
+        "PATH": "/bin",
+        "APPDATA": "C:/Users/someone/AppData",
+        "UI_API_URL": "http://127.0.0.1:8000",
+    }
+
+
 def test_an_ipv6_host_is_bracketed_in_urls() -> None:
     assert Addresses("::1", 8000, 8501).api_url == "http://[::1]:8000"
 

@@ -99,7 +99,18 @@ def ui_command(addresses: Addresses) -> list[str]:
 
 
 def ui_environment(addresses: Addresses, environ: Mapping[str, str]) -> dict[str, str]:
-    return {**environ, "UI_API_URL": addresses.api_url}
+    """The UI's environment: this one, without the service's settings.
+
+    The UI needs only the API's address. The service's settings hold its
+    secrets, the signing key and the model's API key, and a process that
+    doesn't need a secret shouldn't be handed it.
+    """
+    kept = {name: value for name, value in environ.items() if not _service_setting(name)}
+    return {**kept, "UI_API_URL": addresses.api_url}
+
+
+def _service_setting(name: str) -> bool:
+    return name.upper().startswith("APP_") or name.upper() == "SEED_PASSWORD"
 
 
 def healthy(api_url: str) -> bool:

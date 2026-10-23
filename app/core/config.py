@@ -7,9 +7,16 @@ in the project root. Environment variables win over the file.
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Where an API key may go without TLS: this machine, as Ollama runs.
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# A signing key made by secrets.token_urlsafe(48) has around 40 different
+# characters. One with fewer than this was typed, not generated.
+MIN_DISTINCT_KEY_CHARACTERS = 16
 
 
 class Settings(BaseSettings):
@@ -110,6 +117,24 @@ class Settings(BaseSettings):
             raise ValueError("context_max_characters must be at least chunk_max_characters")
         if self.llm_provider == "groq" and self.llm_api_key is None:
             raise ValueError("llm_provider groq needs llm_api_key")
+        return self
+
+    @model_validator(mode="after")
+    def check_secrets(self) -> "Settings":
+        # The key goes in a header on every call, so over plain HTTP anyone
+        # on the way can read it.
+        if self.llm_api_key is not None and self.llm_base_url is not None:
+            address = urlsplit(self.llm_base_url)
+            if address.scheme != "https" and address.hostname not in LOCAL_HOSTS:
+                raise ValueError("llm_base_url must use https when an llm_api_key is set")
+        # Not a measure of randomness, only a stop for a key someone typed,
+        # such as a word repeated to reach the length.
+        key = self.jwt_secret_key.get_secret_value()
+        if self.environment == "production" and len(set(key)) < MIN_DISTINCT_KEY_CHARACTERS:
+            raise ValueError(
+                "jwt_secret_key looks typed rather than generated; make one with "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
         return self
 
 
