@@ -5,9 +5,12 @@ someone decide a document's audience without being able to read the document,
 so these functions look documents up directly and not through the caller's
 own reading scope.
 
-One limit is built in: nobody can grant access to themselves. Someone who is
+One limit is built in: nobody can give themselves access. Someone who is
 both an admin and a reader would otherwise be able to open any restricted
-document on their own.
+document on their own. A grant can't name its admin, and a label change
+can't make a document readable by the admin making it: relabelling a
+restricted document "general", or moving it into their own department, was
+a way round the first rule that the second closes.
 
 Every change is audited in the same transaction as the change.
 """
@@ -23,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.audit.trail import record
 from app.authorization.checks import ensure_permission
 from app.authorization.permissions import Permission, permissions_for
+from app.authorization.service import can_read
 from app.core.database import utc_now
 from app.core.exceptions import InvalidInputError, NotFoundError, PermissionDeniedError
 from app.models import (
@@ -172,7 +176,9 @@ def change_labels(
 ) -> Document:
     """Change a document's classification, its owning department, or both.
 
-    Takes effect on the next request. Nothing is re-indexed.
+    Takes effect on the next request. Nothing is re-indexed. Refused, with
+    nothing changed, if the change would let the admin read a document they
+    can't read now.
     """
     ensure_permission(admin, Permission.MANAGE_DOCUMENTS)
     if classification is None and department_code is None:
@@ -182,11 +188,21 @@ def change_labels(
     new_classification = parse_classification(classification) if classification else None
     new_department = find_department(db, department_code) if department_code else None
     before = {"classification": document.classification, "department": document.department.code}
+    could_read = can_read(admin, document)
 
     if new_classification is not None:
         document.classification = new_classification
     if new_department is not None:
         document.department = new_department
+    # The department is compared by its ID, which is set when this is flushed.
+    db.flush()
+    if can_read(admin, document) and not could_read:
+        db.rollback()
+        raise PermissionDeniedError(
+            f"user {admin.id} tried to relabel document {document_id} so they could read it",
+            user_id=admin.id,
+            document_id=document_id,
+        )
     record(
         db,
         AuditAction.DOCUMENT_RELABELLED,

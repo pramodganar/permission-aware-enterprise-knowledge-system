@@ -45,6 +45,7 @@ from app.authorization.document_access import (
 )
 from app.authorization.permissions import Permission
 from app.core.config import Settings, get_settings
+from app.core.database import MAX_ID
 from app.core.exceptions import NotFoundError
 from app.ingestion.pipeline import Upload, delete_document, ingest, replace_document
 from app.models import Document, DocumentGrant, User
@@ -53,7 +54,7 @@ router = APIRouter(prefix="/admin/documents", tags=["admin"])
 
 CanManage = Annotated[User, Depends(require_permission(Permission.MANAGE_DOCUMENTS))]
 AppSettings = Annotated[Settings, Depends(get_settings)]
-DocumentId = Annotated[int, Path(ge=1, le=2**63 - 1)]
+DocumentId = Annotated[int, Path(ge=1, le=MAX_ID)]
 MAX_READERS = 50
 
 

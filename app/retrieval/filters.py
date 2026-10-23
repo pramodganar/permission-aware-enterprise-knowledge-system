@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.database import MAX_ID
 from app.models import Chunk, Classification, Department, Document
 from app.retrieval.scope import AccessScope
 
@@ -31,7 +32,7 @@ MAX_DEPARTMENTS = 20
 MAX_DOCUMENTS = 50
 
 DepartmentCode = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,49}$")]
-DocumentId = Annotated[int, Field(ge=1)]
+DocumentId = Annotated[int, Field(ge=1, le=MAX_ID)]
 
 
 class SearchFilters(BaseModel):

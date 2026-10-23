@@ -210,11 +210,11 @@ Access is set when a document is ingested and can be changed afterwards. All of 
 | Ingest with labels | Department and classification are required. A `restricted` document must name at least one reader, otherwise it would be stored and readable by nobody. |
 | Grant access | The user must be active and hold a role that can read documents. An expiry must be in the future. Granting again replaces the expiry. |
 | Revoke access | Removes the grant. |
-| Change labels | Classification, owning department, or both. |
+| Change labels | Classification, owning department, or both. Refused if it would let the admin making it read a document they can't read now. |
 
 Two rules are worth calling out:
 
-- Nobody can grant access to themselves. Someone who is both a knowledge admin and an employee could otherwise open any restricted document alone. It now takes a second person. Two admins can still do it for each other, which only the audit trail shows.
+- Nobody can give themselves access. Someone who is both a knowledge admin and an employee could otherwise open any restricted document alone. A grant can't name its admin, and a label change can't make a document readable by the admin making it. The second rule came later: relabelling a restricted document `general`, or moving it into the admin's own department, opened it to them without any grant, and a test that tries every label change on every document they can't read found it. It now takes a second person. Two admins can still do it for each other, which only the audit trail shows.
 - A grant to someone who can't read documents is refused. It would be stored and never honoured, and the admin would believe access had been given.
 
 Managing a document does not require being able to read it. An admin looks a document up by its ID to change its audience, without that giving them its content.

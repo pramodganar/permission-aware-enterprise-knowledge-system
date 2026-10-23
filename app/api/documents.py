@@ -39,14 +39,12 @@ from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.authorization.checks import get_readable_document
 from app.authorization.service import readable_documents
+from app.core.database import MAX_ID
 from app.core.exceptions import NotFoundError
 from app.models import AuditAction, Classification, Department, Document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-# The largest ID the database can hold. A bigger number is refused as invalid
-# input rather than reaching the database and failing there.
-MAX_ID = 2**63 - 1
 MAX_PAGE = 100
 MAX_OFFSET = 1_000_000
 

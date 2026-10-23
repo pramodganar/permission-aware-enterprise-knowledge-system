@@ -20,6 +20,7 @@ from app.audit.trail import AuditQuery, read_trail
 from app.auth.dependencies import DbSession
 from app.authorization.dependencies import require_permission
 from app.authorization.permissions import Permission
+from app.core.database import MAX_ID
 from app.models import AuditAction, User
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -60,7 +61,7 @@ def read_audit_trail(
     response: Response,
     actor: Annotated[str | None, Query(max_length=255)] = None,
     action: AuditAction | None = None,
-    document_id: Annotated[int | None, Query(ge=1, le=2**63 - 1)] = None,
+    document_id: Annotated[int | None, Query(ge=1, le=MAX_ID)] = None,
     since: AwareDatetime | None = None,
     until: AwareDatetime | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 100,

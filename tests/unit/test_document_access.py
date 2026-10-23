@@ -119,6 +119,31 @@ def test_admin_who_is_also_a_reader_cannot_grant_themselves_access(world: World)
     assert not world.can_read("admin", "case_file")
 
 
+@pytest.mark.parametrize(
+    ("document", "change"),
+    [
+        ("case_file", {"classification": "general"}),
+        ("salary_bands", {"department_code": "engineering"}),
+        ("case_file", {"classification": "departmental", "department_code": "engineering"}),
+    ],
+)
+def test_admin_who_is_also_a_reader_cannot_relabel_a_document_open_to_themselves(
+    world: World, document: str, change: dict[str, str]
+) -> None:
+    make_admin_a_reader_too(world)
+    before = (world.documents[document].classification, world.documents[document].department_id)
+
+    with pytest.raises(PermissionDeniedError):
+        change_labels(world.db, world.users["admin"], world.documents[document].id, **change)
+    # A caller that goes on with the same session can't store what was refused.
+    world.db.commit()
+    world.db.expire_all()
+
+    assert not world.can_read("admin", document)
+    after = (world.documents[document].classification, world.documents[document].department_id)
+    assert after == before
+
+
 def test_admin_who_is_also_a_reader_can_still_grant_to_others(world: World) -> None:
     make_admin_a_reader_too(world)
 

@@ -10,6 +10,11 @@ from sqlalchemy.types import TypeDecorator
 
 IN_MEMORY_SQLITE = ("sqlite://", "sqlite:///:memory:")
 
+# The largest ID the database can hold. Every ID a client sends is checked
+# against it, so a bigger number is refused as invalid input rather than
+# reaching the database and failing there with a 500.
+MAX_ID = 2**63 - 1
+
 
 class Base(DeclarativeBase):
     pass

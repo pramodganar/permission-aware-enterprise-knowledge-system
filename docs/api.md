@@ -185,6 +185,8 @@ The work is done by the ingestion pipeline and the document access module ([auth
 
 **Changes apply on the next request**, because access is decided from the database. A deleted or replaced document stops appearing in anyone's list, lookups and search at once. A relabelled one moves to its new audience at once.
 
+**Nobody can give themselves access** through these routes. A grant, or an upload's list of readers, that names the admin is refused with 403, and so is a label change that would let the admin read a document they can't read now: relabelling a restricted document `general`, or moving one into their own department. Henry holds no reading role, so this only matters for an admin who is also a reader; for them it was a way round the rule on grants, until a test that tries every label change on every document found it. A change that leaves the document closed to them is made as before.
+
 **Search is the one thing that waits.** A new document or version is readable at once, through the list and by ID, but search only finds it once the index has been rebuilt (`python -m scripts.index build`) and the service restarted, since the index is loaded at startup. Every response says `in_index`, so the admin can see whether search can find it yet.
 
 ### The size of a request
