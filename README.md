@@ -58,6 +58,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
 - [Evaluation](docs/evaluation.md): the labelled question set and how the system is measured
 - [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
+- [Security](docs/security.md): the promise, where it is kept, what shows it, and how to run it safely; start here for a review
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made

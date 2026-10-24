@@ -11,7 +11,7 @@ What the service has to keep secret, where each secret lives, who reads it, what
 | Seed password | `SEED_PASSWORD`, or `--password` | `python -m scripts.seed`, once | Sign in as any of the nine AcmeCorp people | Makes one up and prints it once |
 | Demo secrets | Streamlit Cloud's secrets, copied into `APP_` settings | The demo page | As above, for the demo's own key and model key | Makes up a signing key for the process; no model key means passages without answers |
 
-Users' passwords aren't secrets the service holds: they are stored as bcrypt hashes and checked, never kept or logged (SR-7).
+Users' passwords aren't secrets the service holds: they are stored as Argon2id hashes and checked, never kept or logged (SR-7).
 
 ## Where they live
 

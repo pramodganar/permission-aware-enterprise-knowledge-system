@@ -12,14 +12,13 @@ import re
 from pathlib import Path
 
 import pytest
+from docrefs import REFERENCE, ROOT, check_references, defines
 
-ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "docs" / "threat-model.md"
 SECTION = "## Where each check lives"
 
 _ROW = re.compile(r"^\| (T\d+) \|")
 _ENTRY = re.compile(r"^- \*\*(T\d+)\*\*: (.+)$")
-_REFERENCE = re.compile(r"`(tests/[\w/]+\.py)::(test_\w+)`")
 UNTESTED = "not tested"
 
 
@@ -50,12 +49,6 @@ def entries(document: str) -> dict[str, str]:
     return found
 
 
-def defines(path: Path, name: str) -> bool:
-    return (
-        re.search(rf"^\s*def {name}\(", path.read_text(encoding="utf-8"), re.MULTILINE) is not None
-    )
-
-
 def test_every_threat_in_the_tables_is_in_the_list_and_nothing_else_is() -> None:
     document = text()
     assert sorted(rows(document)) == sorted(entries(document))
@@ -74,16 +67,10 @@ def check_entry(threat: str, said: str) -> None:
     if said.startswith(UNTESTED):
         reason = said.split(":", 1)[1].strip() if ":" in said else ""
         assert len(reason) > 20, f"{threat} is untested and must say why"
-        assert not _REFERENCE.search(said), f"{threat} says it's untested and names a test"
+        assert not REFERENCE.search(said), f"{threat} says it's untested and names a test"
         return
-    named = _REFERENCE.findall(said)
-    assert named, f"{threat} names no test and doesn't say it's untested"
-    # Nothing but test names, so a reason can't hide among them.
-    assert re.fullmatch(r"(`[^`]+`)(, `[^`]+`)*", said), f"{threat}: {said}"
-    for file, name in named:
-        path = ROOT / file
-        assert path.is_file(), f"{threat} names {file}, which doesn't exist"
-        assert defines(path, name), f"{threat} names {name}, which {file} doesn't define"
+    assert REFERENCE.search(said), f"{threat} names no test and doesn't say it's untested"
+    check_references(threat, said)
 
 
 @pytest.mark.parametrize("threat", THREATS)
@@ -145,7 +132,7 @@ def test_the_reader_finds_what_it_should(tmp_path: Path) -> None:
     assert list(rows(sample)) == ["T1", "T2"]
     assert rows(sample)["T1"][3] == "Not tested here"
     assert entries(sample)["T1"].startswith(UNTESTED)
-    assert _REFERENCE.findall(entries(sample)["T2"]) == [
+    assert REFERENCE.findall(entries(sample)["T2"]) == [
         ("tests/unit/test_threat_model.py", "test_the_reader_finds_what_it_should")
     ]
     assert defines(ROOT / "tests/unit/test_threat_model.py", "test_the_reader_finds_what_it_should")
