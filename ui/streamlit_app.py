@@ -18,14 +18,16 @@ from pydantic import SecretStr
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import Settings
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, TooManyRequestsError
 from app.rag.answer import Answer
 from app.rag.context import Context, Source
 from app.rag.providers import load_provider
 from ui.demo import Demo, Person, build_demo
 from ui.text import ERROR_DETAILS
 
-# A page anyone with the link can open spends the model's free quota.
+# A page anyone with the link can open spends the model's free quota. This
+# keeps one visit from using up the budget every visitor shares (ui/demo.py);
+# reloading starts a new visit, but not a new budget.
 QUESTIONS_PER_VISIT = 30
 
 EXAMPLES = [
@@ -109,6 +111,13 @@ def respond(app: Demo, person: Person, question: str) -> None:
                 show_answer(app.ask(person.key, question))
         else:
             show_search(app.search(person.key, question))
+    except TooManyRequestsError as error:
+        minutes = -(-error.retry_after // 60)
+        st.warning(
+            "The demo has answered as many questions as it will for now, for everyone "
+            f"together. Try again in {minutes} minute{'s' * (minutes != 1)}. "
+            "Questions already answered are still shown."
+        )
     except AppError as error:
         # The fixed public message only, as the API will show it.
         st.error(error.detail if error.expose_detail else error.public_message)

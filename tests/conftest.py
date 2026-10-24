@@ -64,11 +64,16 @@ def engineering(db: Session) -> Department:
 
 @pytest.fixture
 def settings() -> Settings:
-    # In memory, never the default file: see LOCAL_DATABASE.
+    # In memory, never the default file: see LOCAL_DATABASE. Tests that walk
+    # every question as one person would be limited after ten, so the limits
+    # are as high as they go; the tests of the limits set their own.
     return Settings(
         _env_file=None,
         jwt_secret_key=SecretStr("conftest-secret-" + "x" * 60),
         database_url="sqlite://",
+        ask_limit_per_minute=10_000,
+        ask_limit_per_day=100_000,
+        search_limit_per_minute=10_000,
     )
 
 

@@ -160,7 +160,17 @@ def started(
         index=company.index,
         provider=provider_for(choice, company.settings),
     )
-    app = create_app(company.settings, engine=company.engine, components=components)
+    # One client asking every question in seconds is what the rate limits are
+    # for. This measures leakage, so they are lifted here; a 429 would only be
+    # a request that measured nothing. The limits are tested on their own.
+    unlimited = company.settings.model_copy(
+        update={
+            "ask_limit_per_minute": 10_000,
+            "ask_limit_per_day": 100_000,
+            "search_limit_per_minute": 10_000,
+        }
+    )
+    app = create_app(unlimited, engine=company.engine, components=components)
     with TestClient(app, raise_server_exceptions=False) as client:
         yield Service(company, client, pause, retry_wait, retries)
 

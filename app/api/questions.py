@@ -25,21 +25,30 @@ that is down or too slow gives the same 503 after its retries.
 
 Responses must not be stored: they are different for every person.
 
+Each person may ask and search only so often (threat T24): a call over
+the limit gets 429 with Retry-After, before the body is looked at. Every
+call with a valid token counts, whatever it asks and however it ends, so
+the count says nothing about what the person may or may not read. A
+limited call is logged, not audited: it was given nothing, and a flood of
+them would otherwise be a flood of records.
+
 Both are audited with the question and the chunks the caller was given:
 ``/ask`` inside ``answer_question``, ``/search`` here. If the record can't be
 stored, the caller gets 503 instead of the results (decision record 0006).
 """
 
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.components import Loaded
 from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.core.config import Settings, get_settings
-from app.core.exceptions import AnswersSwitchedOffError
+from app.core.exceptions import AnswersSwitchedOffError, TooManyRequestsError
+from app.core.rate_limit import RateLimiter
 from app.models import AuditAction
 from app.rag.answer import NO_INFORMATION_MESSAGE, answer_question
 from app.retrieval.filters import SearchFilters
@@ -47,6 +56,7 @@ from app.retrieval.query import process_question
 from app.retrieval.retriever import retrieve
 
 router = APIRouter(tags=["questions"])
+logger = logging.getLogger(__name__)
 
 # A cap on the body before anything is done with it. The real limit,
 # APP_MAX_QUESTION_CHARACTERS, is checked with the question's other rules and
@@ -105,7 +115,23 @@ class AskResponse(BaseModel):
 AppSettings = Annotated[Settings, Depends(get_settings)]
 
 
-@router.post("/search")
+def limit_searching(request: Request, user: CurrentUser) -> None:
+    _take(request.app.state.search_limiter, user.id, "/search")
+
+
+def limit_asking(request: Request, user: CurrentUser) -> None:
+    _take(request.app.state.ask_limiter, user.id, "/ask")
+
+
+def _take(limiter: RateLimiter, user_id: int, route: str) -> None:
+    try:
+        limiter.take(user_id)
+    except TooManyRequestsError:
+        logger.warning("request limited", extra={"user_id": user_id, "route": route})
+        raise
+
+
+@router.post("/search", dependencies=[Depends(limit_searching)])
 def search(
     body: QuestionRequest,
     user: CurrentUser,
@@ -161,7 +187,7 @@ def search(
     )
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(limit_asking)])
 def ask(
     body: QuestionRequest,
     user: CurrentUser,

@@ -10,11 +10,16 @@ because the point of the demo is to compare what different people get.
 Everything after that is the real code: the same ``answer_question``, the
 same access checks, the same prompt.
 
-Two things are added for a page anyone with the link can open:
+Three things are added for a page anyone with the link can open:
 
 - Answers are kept per person and question, so asking the same thing twice
   doesn't call the model again. The key includes the person, so one person's
   answer is never shown to another (threat T6).
+- Questions that call the model share one budget, for every visitor
+  together (threat T31). A visitor has no identity to count by, and the
+  demo lives as long as the process, so reloading the page doesn't reset
+  it. A kept answer costs nothing and is still given when the budget is
+  spent.
 - One question is answered at a time. The in-memory database is one SQLite
   connection, and the page serves each visitor on its own thread.
 """
@@ -31,6 +36,7 @@ from app.audit.seals import seal_key
 from app.authorization.service import readable_documents
 from app.core.config import Settings
 from app.core.database import Base, create_db_engine, create_session_factory
+from app.core.rate_limit import RateLimiter, Window
 from app.models import Document, User
 from app.rag.answer import Answer, answer_question
 from app.rag.context import Context, build_context
@@ -43,6 +49,10 @@ from scripts.seed import seed
 
 # Kept answers, oldest dropped first.
 MAX_KEPT_ANSWERS = 500
+# Questions the model is asked for everyone together. A choice, not the
+# provider's limit: it bounds what anyone with the link can spend, whatever
+# the provider would allow.
+MODEL_BUDGET = (Window(60, 3600), Window(300, 86_400))
 
 
 @dataclass(frozen=True)
@@ -63,6 +73,7 @@ class Demo:
         embedder: Embedder,
         index: FaissVectorIndex,
         provider: LLMProvider | None,
+        budget: RateLimiter | None = None,
     ) -> None:
         self.db = db
         self.settings = settings
@@ -71,6 +82,7 @@ class Demo:
         self.provider = provider
         self._lock = threading.Lock()
         self._kept: OrderedDict[tuple[str, str], Answer] = OrderedDict()
+        self._budget = budget or RateLimiter(MODEL_BUDGET)
 
     @property
     def answers_on(self) -> bool:
@@ -82,7 +94,11 @@ class Demo:
             return [self._person(user) for user in users]
 
     def ask(self, key: str, question: str) -> Answer:
-        """Answer the question as this person. Needs a model."""
+        """Answer the question as this person. Needs a model.
+
+        Raises TooManyRequestsError, before the model is asked, when the
+        budget shared by every visitor is spent.
+        """
         if self.provider is None:
             raise RuntimeError("no language model is configured, so there are no answers")
         kept_as = (key, question.strip())
@@ -90,6 +106,9 @@ class Demo:
             if kept_as in self._kept:
                 self._kept.move_to_end(kept_as)
                 return self._kept[kept_as]
+            # Counted whether or not the model ends up being called: whether it
+            # is depends on what the person may read.
+            self._budget.take("everyone")
             answer = answer_question(
                 self.db,
                 self.index,
@@ -135,6 +154,7 @@ def build_demo(
     settings: Settings,
     provider: LLMProvider | None,
     embedder: Embedder | None = None,
+    budget: RateLimiter | None = None,
 ) -> Demo:
     """Load the company into a new in-memory database and index it. Slow: do it once."""
     engine = create_db_engine("sqlite://")
@@ -143,4 +163,4 @@ def build_demo(
     # Nobody logs in to the demo, so the password is never used or shown.
     seed(db, settings, secrets.token_urlsafe(24))
     embedder = embedder or load_embedder(settings)
-    return Demo(db, settings, embedder, build_index(db, embedder), provider)
+    return Demo(db, settings, embedder, build_index(db, embedder), provider, budget)

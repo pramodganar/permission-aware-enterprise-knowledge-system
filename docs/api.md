@@ -163,7 +163,26 @@ If `APP_RERANKER_MODEL` names a cross-encoder, it is loaded at startup and both 
 
 Both responses carry `Cache-Control: no-store`.
 
-Not built yet: a limit on questions per person. Every `/ask` can cost a model call (NFR-3 caps the size of each call, not how many there are).
+### How often
+
+Each person may ask **10 questions in any minute and 200 in any 24 hours**, and search **30 times in any minute** (`APP_ASK_LIMIT_PER_MINUTE`, `APP_ASK_LIMIT_PER_DAY`, `APP_SEARCH_LIMIT_PER_MINUTE`). A call over a limit gets **429** with a `Retry-After` header, rounded up, so waiting that long is always enough. The windows slide: a call is taken if there are fewer than the limit in the last minute, or day, however they were spread.
+
+NFR-3 caps the size of each model call, and the daily limit caps how many there are. Together they bound what one person can spend: at most 200 questions a day, each at most three calls (the first and `APP_LLM_MAX_RETRIES` retries, 2 by default), each with at most `APP_CONTEXT_MAX_CHARACTERS` of document text and `APP_LLM_MAX_OUTPUT_TOKENS` of answer. The per-minute limits are against a script, not a person: someone reading the answers asks a few a minute.
+
+How it counts:
+
+- **Per person, by the user ID in the token.** Logging in again doesn't start a new count, and one person's limit is theirs alone. A call without a valid token is refused with 401 first and counts for nobody.
+- **Every call counts, whatever it asks and however it ends.** It is checked before the body is looked at, so an invalid body counts too. A question about a document the person may not read gets no information without the model being asked, and it counts exactly like one that is answered. If only model calls counted, where the limit fell would depend on what the person may read.
+- **A refused call isn't counted**, so retrying while refused doesn't push the wait further away. A call refused by one window uses nothing in the other.
+- **Asking and searching have separate budgets**, so running out of questions leaves search working.
+- **A limited call is logged, not audited**: one `request limited` line with the user ID and the route, never the question. It was given nothing, and recording each one would turn a flood of calls into a flood of records.
+
+What it doesn't cover (threat T24):
+
+- Like the login limit, it is in memory, per process. Two copies of the service count separately, and a restart forgets. A shared store such as Redis would fix both.
+- It counts calls, not cost: a question with a long answer counts the same as one with no answer.
+- There is no limit for the service as a whole. The total is the number of people times their limits. A company large enough for that to exceed the provider's quota needs a shared budget in front of the provider as well.
+- The other routes aren't limited. They read the database and nothing else, and the managing routes are for admins.
 
 ## Managing documents
 

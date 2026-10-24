@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # attempts are refused without checking the password (threat T10).
     login_max_failures: int = Field(default=5, ge=1, le=100)
     login_failure_window_seconds: int = Field(default=900, ge=1, le=86_400)
+    # Questions one person may ask, in any minute and in any 24 hours, and
+    # searches in any minute (threat T24). Every call counts, whatever it
+    # asks and however it ends. The daily limit is the cap on what one person
+    # can spend on the model. See docs/api.md.
+    ask_limit_per_minute: int = Field(default=10, ge=1, le=10_000)
+    ask_limit_per_day: int = Field(default=200, ge=1, le=100_000)
+    search_limit_per_minute: int = Field(default=30, ge=1, le=10_000)
 
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
 

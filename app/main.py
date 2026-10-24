@@ -25,6 +25,7 @@ from app.auth.throttle import LoginThrottle
 from app.core.config import Settings, get_settings
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.core.logging_setup import configure_logging
+from app.core.rate_limit import RateLimiter, Window
 
 FORM_OVERHEAD_BYTES = 64 * 1024
 
@@ -70,6 +71,10 @@ def create_app(
     app.state.login_throttle = LoginThrottle(
         current.login_max_failures, current.login_failure_window_seconds
     )
+    app.state.ask_limiter = RateLimiter(
+        [Window(current.ask_limit_per_minute, 60), Window(current.ask_limit_per_day, 86_400)]
+    )
+    app.state.search_limiter = RateLimiter([Window(current.search_limit_per_minute, 60)])
     app.dependency_overrides[get_settings] = lambda: current
     install_error_handlers(app)
     # The largest file, and room for the form around it.

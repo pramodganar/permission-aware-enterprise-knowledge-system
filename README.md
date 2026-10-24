@@ -146,7 +146,7 @@ Every record is sealed with a keyed hash when it is written, so a record changed
 uvicorn app.main:serve --factory --no-access-log
 ```
 
-It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`. See [docs/api.md](docs/api.md).
+It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`. Each person may ask 10 questions a minute and 200 a day, and search 30 times a minute ([how it counts](docs/api.md#how-often)). See [docs/api.md](docs/api.md).
 
 ## Running the API and the UI
 

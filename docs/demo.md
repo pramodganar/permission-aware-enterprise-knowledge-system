@@ -16,7 +16,10 @@ The page is brought forward from the UI phase so there is something to show befo
 - **Everything is in memory.** The company is loaded, embedded and indexed when the page starts, about 50 seconds on the development laptop. Nothing is saved, and a restart starts again.
 - **Answers are kept per person and question,** so asking the same thing twice doesn't call the model again. The key includes the person, so one person's answer is never shown to another (T6). At most 500 are kept.
 - **One question at a time.** The in-memory database is one SQLite connection, and Streamlit serves each visitor on its own thread.
-- **30 questions per visit,** because anyone with the link spends the model's free quota.
+- **A budget for the model, shared by every visitor:** 60 questions in any hour and 300 in any 24 hours, for everyone together. Visitors have no identity to count by, so the budget is one for the page. It lives with the demo, which is built once for the process, so reloading the page doesn't reset it; a restart does. A question that gets no information counts too, because whether the model is called depends on who is asking. A kept answer costs nothing and is still shown when the budget is spent. The numbers are a choice, not the provider's limits: they bound what anyone with the link can spend, whatever the provider would allow.
+- **30 questions per visit,** so one visit can't use up the shared budget alone. Reloading starts a new visit, but not a new budget.
+
+The budget protects the key's quota, not the demo: one person can still spend it and leave the page answering nothing for the hour. Sharing it fairly between visitors would need something to tell them apart, and the page has nothing it could trust.
 
 With no model configured the page still works: it shows the passages each person would get, without answers.
 
@@ -49,6 +52,7 @@ With Groq, every question sends the person's passages, fictional company text, t
 
 ## Tests
 
-- `tests/unit/test_demo.py`: the demo with the fake embedder and model. Everyone sees only what they may read, kept answers never cross between people, the oldest kept answer goes first, no model means passages only, and nine visitors at once.
+- `tests/unit/test_demo.py`: the demo with the fake embedder and model. Everyone sees only what they may read, kept answers never cross between people, the oldest kept answer goes first, no model means passages only, nine visitors at once, and the budget: shared by every visitor, refused before the model is asked, kept answers still given.
+- `tests/integration/test_demo_budget.py`: the page itself, headless, with the fake embedder and model and a budget of two. A second visit, as a reload is, finds the budget spent by the first.
 - `tests/integration/test_demo_page.py` (`pytest -m model`): the page itself, run headless with the real embedding model and no language model.
 - `tests/unit/test_demo_requirements.py`: what Streamlit Cloud installs matches what is installed and tested here.
