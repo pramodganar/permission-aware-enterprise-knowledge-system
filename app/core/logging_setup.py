@@ -39,6 +39,15 @@ BLOCKED_FIELDS = frozenset(
 # Libraries whose INFO lines are one per HTTP request they make.
 QUIET_LIBRARIES = ("httpx", "httpcore", "huggingface_hub", "urllib3")
 
+# Libraries that read uploaded files, and whose warnings and errors quote the
+# bytes they tripped over: the document's own text, from a restricted
+# document as easily as any other. Found by fuzzing the PDF extractor. Their
+# lines are never wanted: the extractor turns every failure into one fixed
+# message of its own.
+DOCUMENT_PARSERS = ("pypdf",)
+# Above every level there is, so nothing they log is written.
+SILENT = logging.CRITICAL + 1
+
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 # Attributes present on every LogRecord. Anything else came in through `extra`.
@@ -105,3 +114,5 @@ def configure_logging(level: str) -> None:
     # already logged by the service, as counts.
     for library in QUIET_LIBRARIES:
         logging.getLogger(library).setLevel(max(logging.WARNING, root.level))
+    for parser in DOCUMENT_PARSERS:
+        logging.getLogger(parser).setLevel(SILENT)

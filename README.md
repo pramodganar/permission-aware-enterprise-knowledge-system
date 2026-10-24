@@ -177,6 +177,8 @@ To look for secrets in every tracked file and every commit, the local `.env`'s o
 python -m scripts.scan_secrets
 ```
 
+Some tests generate their inputs with [Hypothesis](https://hypothesis.readthedocs.io): files damaged at random, questions, answers, titles, filters and requests to every route. The examples are the same on every run, so a failure can be run again.
+
 To run only the security tests:
 
 ```

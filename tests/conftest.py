@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from hypothesis import settings as hypothesis_settings
 from pydantic import SecretStr
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
@@ -12,6 +13,12 @@ from app.audit.seals import seal_key
 from app.core.config import Settings
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.models import Department
+
+# Generated inputs are the same on every run, so a failure can be run again,
+# and nothing is saved between runs. A parser can take a while on a damaged
+# file, so there is no time limit per example.
+hypothesis_settings.register_profile("project", derandomize=True, database=None, deadline=None)
+hypothesis_settings.load_profile("project")
 
 # The database a developer runs the service on. Settings point at it by
 # default, and the service creates any table it is missing at startup, so a

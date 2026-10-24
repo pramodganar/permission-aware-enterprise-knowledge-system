@@ -175,7 +175,10 @@ def _check_docx_archive(data: bytes) -> None:
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             entries = archive.infolist()
-    except zipfile.BadZipFile:
+    except Exception:
+        # Not only BadZipFile: a damaged archive can also give
+        # NotImplementedError ("zip file version 21.5"), found by fuzzing, and
+        # it was a 500 until then.
         raise InvalidInputError("the file is not a Word document") from None
 
     if len(entries) > MAX_DOCX_ENTRIES:

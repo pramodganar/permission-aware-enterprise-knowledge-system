@@ -4,6 +4,8 @@
 # Testing
 pytest==9.1.1
 pytest-cov==7.1.0
+# Generated inputs, for fuzzing what the service is sent
+hypothesis==6.170.8
 
 # Linting, formatting and type checking
 ruff==0.16.10
