@@ -63,6 +63,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Configuration](docs/configuration.md): every setting, where settings come from, what production changes, and secrets as files
 - [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
 - [Logging](docs/logging.md): the log's format, following one request, where the time goes, what is never written, and every event
+- [Monitoring](docs/monitoring.md): the signals, the targets, the rules that call for someone, and what to do when each fires
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made
 
@@ -182,7 +183,7 @@ python -m scripts.make_secrets
 docker compose up --build
 ```
 
-The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. Each image has a health check: the UI is started once the API has loaded and answers, and `docker compose ps` shows whether both still do. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
+The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. Each image has a health check: the UI is started once the API has loaded and answers, and `docker compose ps` shows whether both still do. `docker compose logs --no-log-prefix --since 15m api | python -m scripts.monitor` reports how it is doing and whether anyone is needed ([monitoring](docs/monitoring.md)). What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
 
 ## Checks
 

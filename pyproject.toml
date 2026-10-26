@@ -57,4 +57,4 @@ module = ["faiss", "yaml"]
 ignore_missing_imports = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "evaluation", "scripts", "ui", "acmecorp", "apiclient", "liveserver", "files", "fakes", "logcheck", "questions", "shown"]
+known-first-party = ["app", "evaluation", "scripts", "ui", "acmecorp", "apiclient", "liveserver", "files", "fakes", "logcheck", "logcalls", "questions", "shown"]

@@ -197,6 +197,6 @@ The three ERRORs about chunks outside a scope or an allowed list mean an access 
 
 ## Not covered
 
-- **Shipping the log anywhere.** It stays in Docker's files on the machine. Collecting it centrally, and alerting on the ERRORs above, is part of monitoring.
+- **Shipping the log anywhere.** It stays in Docker's files on the machine. What is watched in it, and when someone is called, is in [monitoring](monitoring.md); collecting it centrally is not set up.
 - **The token check, the audit write and the commit aren't timed** separately; together they are most of a fast search's time.
 - **The scripts** (`seed`, `index`, `audit`) write the same JSON lines, but their own output, what they made and what they found, is printed for a person to read.
