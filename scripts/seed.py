@@ -242,7 +242,9 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    password = arguments.password or os.environ.get("SEED_PASSWORD")
+    # An empty SEED_PASSWORD counts as none, as Compose passes one that is unset.
+    # Otherwise every account would get a password nobody can type.
+    password = arguments.password or os.environ.get("SEED_PASSWORD") or None
     generated = password is None
     if password is None:
         password = secrets.token_urlsafe(12)

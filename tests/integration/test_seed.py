@@ -390,6 +390,22 @@ def test_command_does_not_print_a_password_it_was_given(
     assert PASSWORD not in capsys.readouterr().out
 
 
+def test_an_empty_password_in_the_environment_counts_as_none(
+    command_line: Settings, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SEED_PASSWORD", "")
+
+    assert main([]) == 0
+
+    shown = capsys.readouterr().out
+    assert "password for the new users: " in shown
+    generated = shown.split("password for the new users: ")[1].split()[0]
+    engine = create_db_engine(command_line.database_url)
+    with create_session_factory(engine)() as db:
+        assert authenticate(db, "grace@acmecorp.example", generated).full_name == "Grace Patel"
+    engine.dispose()
+
+
 def test_command_line_password_wins_over_the_environment(
     command_line: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:

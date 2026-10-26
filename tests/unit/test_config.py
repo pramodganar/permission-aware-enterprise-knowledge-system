@@ -1,7 +1,7 @@
 import secrets
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings, get_settings
 
@@ -81,6 +81,18 @@ def test_secret_is_not_shown_when_settings_are_printed(monkeypatch: pytest.Monke
     assert VALID_SECRET not in str(settings)
     assert VALID_SECRET not in settings.model_dump_json()
     assert settings.jwt_secret_key.get_secret_value() == VALID_SECRET
+
+
+def test_an_empty_api_key_is_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+    monkeypatch.setenv("APP_LLM_API_KEY", "")
+
+    assert load().llm_api_key is None
+    monkeypatch.setenv("APP_LLM_PROVIDER", "groq")
+    with pytest.raises(ValidationError, match="groq needs llm_api_key"):
+        load()
+    monkeypatch.delenv("APP_LLM_PROVIDER")
+    assert Settings(_env_file=None, llm_api_key=SecretStr("")).llm_api_key is None
 
 
 @pytest.mark.parametrize(

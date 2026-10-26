@@ -17,5 +17,8 @@ streamlit==1.65.0
 # A Markdown parser, to check what the UI escapes renders as plain text
 markdown-it-py==4.2.0
 
+# Reading compose.yaml, to check what it starts
+pyyaml==6.0.3
+
 # HTTP client used by FastAPI's test client
 httpx2==2.13.1

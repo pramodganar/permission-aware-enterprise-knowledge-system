@@ -171,7 +171,15 @@ docker build --target api -t knowledge-api .
 docker build --target ui  -t knowledge-ui  .
 ```
 
-Two images: the API, with the embedding model built in so a container fetches nothing, and the UI, which holds none of the service because it only talks to the API. Both run as an unprivileged user and hold no secret; the database and index live on a volume. How to seed, index and run them is in [docs/docker.md](docs/docker.md).
+Two images: the API, with the embedding model built in so a container fetches nothing, and the UI, which holds none of the service because it only talks to the API. Both run as an unprivileged user and hold no secret; the database and index live on a volume.
+
+To run both, with the company seeded and indexed on the first start:
+
+```
+docker compose up --build
+```
+
+It needs `APP_JWT_SECRET_KEY` in `.env`, and passes on only the settings it names. The UI is then at http://127.0.0.1:8501. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md).
 
 ## Checks
 

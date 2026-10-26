@@ -42,10 +42,12 @@ PATTERNS = {
     "signed token": re.compile(
         r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
     ),
-    # A value on the same line as one of the service's secret settings.
+    # A value on the same line as one of the service's secret settings. Not
+    # one that starts with { or $: that names a variable, as an f-string or
+    # compose.yaml does, and holds no value of its own.
     "value for a secret setting": re.compile(
         r"\b(?:APP_JWT_SECRET_KEY|APP_LLM_API_KEY|SEED_PASSWORD)[ \t]*[=:][ \t]*"
-        r"['\"]?[^\s'\"#]{8,}"
+        r"['\"]?(?![{$])[^\s'\"#]{8,}"
     ),
 }
 # Settings in .env whose values are secrets.
@@ -104,10 +106,16 @@ def local_secrets(env_file: Path) -> dict[str, str]:
 
 
 def scan(root: Path = ROOT, secrets: dict[str, str] | None = None) -> list[Finding]:
-    """Every finding in the tracked files and the history of the repository at ``root``."""
+    """Every finding in the files and the history of the repository at ``root``.
+
+    The files are the tracked ones and the new ones git would add, so the scan
+    run before a commit sees what that commit is about to hold. What git
+    ignores, .env above all, is left out.
+    """
     looking_for = local_secrets(root / ".env") if secrets is None else secrets
     findings: list[Finding] = []
-    for name in filter(None, _git(root, "ls-files", "-z").split("\0")):
+    listed = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+    for name in filter(None, listed.split("\0")):
         path = root / name
         if path.is_file():
             text = path.read_bytes().decode("utf-8", "replace")

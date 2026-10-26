@@ -12,14 +12,12 @@ the API image); after that the build is cached.
 
 import json
 import secrets
-import socket
-import subprocess
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
 import httpx
 import pytest
+from dockertools import docker, free_port, wait_for
 from imagesettings import ALLOWED
 
 from scripts.scan_secrets import local_secrets
@@ -31,24 +29,6 @@ API = "knowledge-api:test"
 UI = "knowledge-ui:test"
 PASSWORD = "docker-test-password"
 LEAVE = "How many days of annual leave do I get?"
-
-
-def docker(
-    *args: str, check: bool = True, timeout: float = 600
-) -> subprocess.CompletedProcess[str]:
-    run = subprocess.run(  # noqa: S603 - docker, with arguments written in these tests
-        ["docker", *args],  # noqa: S607
-        capture_output=True,
-        # Docker writes UTF-8, progress bars included; Windows would read it
-        # in its own code page and fail on the first one.
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        check=False,
-    )
-    if check and run.returncode != 0:
-        raise AssertionError(f"docker {' '.join(args)} failed:\n{run.stdout}\n{run.stderr}")
-    return run
 
 
 def in_image(image: str, *command: str, network: str = "none", check: bool = True) -> str:
@@ -63,27 +43,6 @@ def in_image(image: str, *command: str, network: str = "none", check: bool = Tru
         *command[1:],
         check=check,
     ).stdout
-
-
-def free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port: int = probe.getsockname()[1]
-        return port
-
-
-def wait_for(url: str, seconds: float = 120) -> httpx.Response:
-    deadline = time.monotonic() + seconds
-    while True:
-        try:
-            response = httpx.get(url, timeout=2)
-            if response.status_code == 200:
-                return response
-        except httpx.HTTPError:
-            pass
-        if time.monotonic() > deadline:
-            raise AssertionError(f"{url} never answered")
-        time.sleep(1)
 
 
 @pytest.fixture(scope="module")

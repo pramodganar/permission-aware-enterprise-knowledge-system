@@ -1,6 +1,6 @@
 # Docker
 
-Two images from one [Dockerfile](../Dockerfile): the API, and the UI. Running them together comes with Docker Compose; this page is the images themselves, and how to run each by hand.
+Two images from one [Dockerfile](../Dockerfile): the API, and the UI, and [compose.yaml](../compose.yaml) to run them together. This page is the images, how to run them with Compose, and how to run each by hand.
 
 ## The two images
 
@@ -32,6 +32,48 @@ Measured on the development laptop (8 CPUs, 8 GB given to Docker Desktop 29.9.2)
 - **State on a volume.** The database and the index are at `/data` (`APP_DATABASE_URL`, `APP_INDEX_DIRECTORY`), a volume, kept apart from the code. They hold every document, restricted ones included, so the volume needs the same protection as the database (T19).
 
 The tests run with 3.11.9 on the development machine, and the image has 3.11.16: the same minor version, with later security fixes.
+
+## Running them together
+
+```
+docker compose up --build
+```
+
+Then the UI is at http://127.0.0.1:8501 and the API at http://127.0.0.1:8000. `API_PORT` and `UI_PORT` in `.env` move them. `docker compose down` stops everything and keeps the data; `docker compose down -v` deletes the volume too.
+
+[compose.yaml](../compose.yaml) starts three services:
+
+| Service | What it does | Network | Data |
+|---|---|---|---|
+| `setup` | Seeds the fictional company, then builds the index if there is none or it is out of date, and exits | none | the volume |
+| `api` | The service, once `setup` has finished without an error | the stack's own | the volume |
+| `ui` | The UI, pointed at `http://api:8000` | the stack's own | none |
+
+**The first start** seeds the 17 documents and builds the index, which takes about 40 seconds once the images are built. **Later starts** find both on the volume: the seed adds nothing, the index is up to date and isn't rebuilt, and the stack is up in about 5 seconds. Measured once each on the development laptop.
+
+**Settings.** Compose reads `.env` itself and passes on only the settings `compose.yaml` names, so the rest of `.env`, the database's path for example, never reaches a container:
+
+| Setting | Given to | If `.env` doesn't set it |
+|---|---|---|
+| `APP_JWT_SECRET_KEY` | `setup`, `api` | Compose refuses to start, and says which setting is missing |
+| `APP_ENVIRONMENT` | `setup`, `api` | `local` |
+| `SEED_PASSWORD` | `setup` | a password is made up and printed once, in `docker compose logs setup`, where anyone who can read this machine's container logs can see it; setting one avoids that |
+| `APP_LLM_PROVIDER` | `api` | `none`: no answers, search only |
+| `APP_LLM_API_KEY` | `api` | no key |
+| `APP_LLM_MAX_OUTPUT_TOKENS` | `api` | `600`; set `1000` with Groq |
+
+The UI is given none of them. A setting that isn't set reaches a container as an empty one, which used to matter twice: an empty `SEED_PASSWORD` was taken as the password, giving every account one nobody could type, and an empty `APP_LLM_API_KEY` counted as a key. Both now count as not set.
+
+**In production** (`APP_ENVIRONMENT=production`) the seed refuses to load the fictional company, so `setup` fails and the API is never started. That is on purpose: this file runs the demo company. A real deployment loads its own documents.
+
+**Every container is hardened** beyond what the images do:
+
+- the image is read-only while it runs, and only the volume and `/tmp` can be written;
+- every Linux capability is dropped, and no process can gain privileges (`no-new-privileges`);
+- both ports are published on `127.0.0.1` only;
+- `setup` has no network at all.
+
+What a container is given with `environment:` can be read by anyone who can run `docker inspect` on this machine, the signing key included. Moving the secrets into files comes with the environment configuration step.
 
 ## Running them by hand
 
@@ -67,17 +109,19 @@ docker run -d --name knowledge-ui --network knowledge -p 127.0.0.1:8501:8501 kno
 ## Tests
 
 - [tests/unit/test_dockerfile.py](../tests/unit/test_dockerfile.py) reads the Dockerfile and `.dockerignore`, and runs with every other test: the pinned base, the versions, no secret set, the user, the volume, the UI's image holding none of the service, and what the build may see.
-- [tests/docker/test_images.py](../tests/docker/test_images.py) builds and runs both images, and needs Docker, so it is left out of a normal run:
+- [tests/unit/test_compose.py](../tests/unit/test_compose.py) reads `compose.yaml`: nothing published beyond this machine, every container hardened, no value written into the file, only the settings above passed and only where they're needed, the UI given none, and the defaults the service's own.
+- [tests/docker/test_images.py](../tests/docker/test_images.py) builds and runs both images, and [tests/docker/test_stack.py](../tests/docker/test_stack.py) starts the stack. Both need Docker, so they are left out of a normal run:
 
   ```
   pytest -m docker
   ```
 
-  It seeds and indexes a volume with no network, starts the API on it, signs in as David and searches, checks the log holds no question, starts the UI against the API, and looks inside both images: who they run as, that the service can't change its code, the CPU build of PyTorch, the model loaded with no network, the UI's missing service, and no local secret anywhere in them.
+  The images: it seeds and indexes a volume with no network, starts the API on it, signs in as David and searches, checks the log holds no question, starts the UI against the API, and looks inside both images: who they run as, that the service can't change its code, the CPU build of PyTorch, the model loaded with no network, the UI's missing service, and no local secret anywhere in them.
+
+  The stack: each person sees their own documents through it, the UI reaches the API by name, the UI's container holds no setting of the service's, nothing is published beyond this machine, every container runs hardened and only the data can be written, a restart keeps the data and builds nothing again, production refuses the demo data and never starts the API, and with no signing key Compose won't start. Each run gets its own project name, ports and env file, so it never reads the local `.env`, and it is taken down with its volume however it ends.
 
 ## Not done here
 
-- **No health check in the image.** Health checks come in their own step.
-- **No Compose.** Running the two together, with the volume and network made for them, is the next step.
+- **No health check.** So `docker compose up --wait` returns when the containers are running, not when the API has loaded its model and index, and the first requests can find nothing listening. The tests wait for `/health` themselves; health checks come in their own step.
 - **Image signing and scanning for known vulnerabilities** are not set up. The base is pinned, so it also doesn't get security fixes until the pin is moved.
 - **One process.** The rate limits and the login throttle are in memory, so one API container is the supported shape ([API](api.md#how-often)).

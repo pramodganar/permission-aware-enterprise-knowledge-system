@@ -40,12 +40,14 @@ In the environment, or in `.env`, which is ignored by git, and on Streamlit Clou
 python -m scripts.scan_secrets
 ```
 
-looks through every tracked file and every commit ever made for two things:
+looks through every tracked file, every new file git would add, and every commit ever made, for two things:
 
 - **Something shaped like a secret.** A Groq, OpenAI-style, AWS, GitHub or Hugging Face key, a private key, a signed token, or a value given to `APP_JWT_SECRET_KEY`, `APP_LLM_API_KEY` or `SEED_PASSWORD`.
 - **The secrets in the local `.env`, word for word.** A signing key is random text with no shape, so this is the only way to find one, and the most important check here.
 
 It prints where and what kind, never the text it matched, and exits 1 if it finds anything. The test suite runs it on this repository every time. The tests also show it working on a repository made for the purpose: a key committed and deleted in the next commit is still found, in the history.
+
+New files count because the scan runs before a commit, when what the commit will add isn't tracked yet. It used to read tracked files only, and once said "nothing found" for a commit whose new test folder it had never looked at. That commit held nothing secret, only an f-string, `SEED_PASSWORD={PASSWORD}`, which the scan took for a value. A setting given `{...}` or `${...}` names a variable, as Python and `compose.yaml` do, and now isn't counted as a value; one given anything else still is. What git ignores, `.env` above all, is still left out.
 
 Text inside a compressed Word file isn't seen. Nor is a secret pasted somewhere other than git: an issue, a chat, a screenshot.
 

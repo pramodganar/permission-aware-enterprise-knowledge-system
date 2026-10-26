@@ -126,6 +126,36 @@ def test_ordinary_text_is_not_mistaken_for_a_secret() -> None:
     assert kinds_in(text) == []
 
 
+def test_a_secret_in_a_new_file_not_yet_committed_is_found(repository: Path) -> None:
+    # The scan runs before a commit, when the files that commit will add are
+    # still untracked. One run missed a whole new folder that way.
+    (repository / "new").mkdir()
+    (repository / "new" / "settings.py").write_text(
+        f'KEY = "{EXAMPLES["Groq API key"]}"\n', "utf-8"
+    )
+
+    assert scan(repository, secrets={}) == [Finding("new/settings.py", "Groq API key")]
+
+
+def test_what_git_ignores_is_not_scanned(repository: Path) -> None:
+    (repository / ".gitignore").write_text("local.env\n", "utf-8")
+    (repository / "local.env").write_text(EXAMPLES["Groq API key"] + "\n", "utf-8")
+
+    assert scan(repository, secrets={}) == []
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["{PASSWORD}", "{settings.key}", "${SEED_VALUE}", "${APP_KEY:?set it in .env}", "$FROM_SHELL"],
+)
+def test_a_setting_that_names_a_variable_holds_no_secret(reference: str) -> None:
+    for setting in ("SEED_" + "PASSWORD", "APP_JWT" + "_SECRET_KEY"):
+        assert kinds_in(f"{setting}={reference}") == []
+        assert kinds_in(f"{setting}: {reference}") == []
+    # A value is still a value, whatever comes after it.
+    assert kinds_in("SEED_" + "PASSWORD=" + "q" * 12 + "{x}") == ["value for a secret setting"]
+
+
 def test_a_secret_committed_and_then_deleted_is_still_found_in_the_history(
     repository: Path,
 ) -> None:

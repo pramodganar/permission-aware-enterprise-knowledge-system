@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Where an API key may go without TLS: this machine, as Ollama runs.
@@ -110,6 +110,16 @@ class Settings(BaseSettings):
     llm_max_output_tokens: int = Field(default=600, ge=50, le=4000)
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
+
+    @field_validator("llm_api_key", mode="before")
+    @classmethod
+    def empty_key_is_no_key(cls, value: object) -> object:
+        # Docker Compose passes a variable that isn't set as an empty one. An
+        # empty key is no key, so a provider that needs one says so at startup
+        # instead of sending an empty key on every call.
+        if value == "" or (isinstance(value, SecretStr) and not value.get_secret_value()):
+            return None
+        return value
 
     @model_validator(mode="after")
     def check_sizes(self) -> "Settings":
