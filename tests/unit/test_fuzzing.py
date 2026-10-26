@@ -25,7 +25,6 @@ application log; the last test here is for that.
 
 import contextlib
 import html
-import logging
 import random
 import re
 from collections.abc import Callable
@@ -40,7 +39,7 @@ from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
-from app.core.logging_setup import DOCUMENT_PARSERS, QUIET_LIBRARIES, configure_logging
+from app.core.logging_setup import configure_logging
 from app.ingestion.extractors import extract_docx, extract_pdf, extract_txt
 from app.rag.citations import resolve_citations
 from app.rag.context import Context, Source
@@ -49,6 +48,7 @@ from app.rag.prompt import build_prompt
 from app.retrieval.filters import SearchFilters
 from app.retrieval.query import ProcessedQuestion, clean_question
 from files import make_pdf
+from logcheck import logging_restored
 from ui.text import literal
 
 DOCUMENTS = Path(__file__).resolve().parents[2] / "data" / "acmecorp" / "documents"
@@ -315,15 +315,12 @@ def test_a_filter_is_valid_or_refused_whatever_shape_it_comes_in(value: object) 
 
 def test_a_damaged_pdf_puts_none_of_its_text_in_the_log(capsys: pytest.CaptureFixture[str]) -> None:
     # Found by the fuzzing above: the PDF reader's warnings quote the file.
-    root = logging.getLogger()
-    saved = root.handlers[:], root.level
-    levels = {name: logging.getLogger(name).level for name in (*QUIET_LIBRARIES, *DOCUMENT_PARSERS)}
     words = "Salary band for E-2291 is 68,000 to 92,000 per year."
     pdf = make_pdf([words])
     assert b"68,000" in pdf
     # Damage that is the same on every run, not a secret.
     rng = random.Random(84)  # noqa: S311
-    try:
+    with logging_restored():
         configure_logging("DEBUG")
         for _ in range(300):
             data = bytearray(pdf)
@@ -331,10 +328,6 @@ def test_a_damaged_pdf_puts_none_of_its_text_in_the_log(capsys: pytest.CaptureFi
                 data[rng.randrange(len(data))] = rng.randrange(256)
             text_or_refused(extract_pdf, bytes(data))
         log = capsys.readouterr().out
-    finally:
-        root.handlers, root.level = saved
-        for name, level in levels.items():
-            logging.getLogger(name).setLevel(level)
 
     assert "68,000" not in log
     assert "E-2291" not in log

@@ -13,7 +13,6 @@ first is an error the service expects, the second one it doesn't. Neither
 message may reach the log.
 """
 
-import logging
 from collections.abc import Callable, Iterator, Sequence
 
 import pytest
@@ -22,12 +21,13 @@ from sqlalchemy.orm import Session
 
 from apiclient import PASSWORD, company_client, email, token
 from app.core.config import Settings
-from app.core.logging_setup import QUIET_LIBRARIES, configure_logging
+from app.core.logging_setup import configure_logging
 from app.models import Chunk
 from app.rag.llm import LLMUnavailableError
 from app.rag.prompt import Prompt
 from fakes import FakeLLM, FakeReranker, Reply
 from files import make_docx, make_pdf
+from logcheck import logging_restored
 
 UPLOADS = {
     "booth.pdf": make_pdf(["Booth crates for the spring fair ship from dock four on Tuesdays."]),
@@ -65,13 +65,8 @@ def written(capsys: pytest.CaptureFixture[str]) -> Iterator[Callable[[], str]]:
     Logging is set up when the test starts, not here: the output pytest
     captures during setup is closed by then.
     """
-    root = logging.getLogger()
-    handlers, level = root.handlers[:], root.level
-    libraries = {name: logging.getLogger(name).level for name in QUIET_LIBRARIES}
-    yield lambda: capsys.readouterr().out
-    root.handlers, root.level = handlers, level
-    for name, library_level in libraries.items():
-        logging.getLogger(name).setLevel(library_level)
+    with logging_restored():
+        yield lambda: capsys.readouterr().out
 
 
 def pieces(text: str) -> list[str]:

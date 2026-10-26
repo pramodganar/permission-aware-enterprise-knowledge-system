@@ -17,10 +17,12 @@ plan?"), so the text is never logged here. Only its size is.
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from app.core.config import Settings
 from app.core.exceptions import InvalidInputError
+from app.core.logging_setup import milliseconds_since
 from app.ingestion.cleaning import clean_text
 from app.retrieval.embeddings import Embedder, Vectors, embed_question
 
@@ -61,6 +63,7 @@ def clean_question(raw: str, settings: Settings) -> str:
 
 def process_question(raw: str, settings: Settings, embedder: Embedder) -> ProcessedQuestion:
     """Check, tidy and embed a question."""
+    started = time.perf_counter()
     text = clean_question(raw, settings)
 
     # The model would embed the start of an over-long question and ignore the
@@ -70,7 +73,14 @@ def process_question(raw: str, settings: Settings, embedder: Embedder) -> Proces
         raise InvalidInputError("the question is too long")
 
     vector = embed_question(text, embedder)
-    logger.info("question processed", extra={"characters": len(text), "tokens": tokens})
+    logger.info(
+        "question processed",
+        extra={
+            "characters": len(text),
+            "tokens": tokens,
+            "milliseconds": milliseconds_since(started),
+        },
+    )
     return ProcessedQuestion(text=text, vector=vector, tokens=tokens)
 
 

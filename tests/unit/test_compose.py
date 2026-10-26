@@ -26,6 +26,7 @@ COMPOSE = ROOT / "compose.yaml"
 PASSED = {
     "APP_SECRETS_DIR": {"setup", "api"},
     "APP_ENVIRONMENT": {"setup", "api"},
+    "APP_LOG_LEVEL": {"setup", "api"},
     "APP_LLM_PROVIDER": {"api"},
     "APP_LLM_MAX_OUTPUT_TOKENS": {"api"},
 }
@@ -75,6 +76,14 @@ def test_every_container_is_hardened(name: str) -> None:
     assert service["security_opt"] == ["no-new-privileges:true"]
     assert "privileged" not in service
     assert "user" not in service  # the image's own unprivileged user
+
+
+@pytest.mark.parametrize("name", ["setup", "api", "ui"])
+def test_every_containers_log_is_rotated(name: str) -> None:
+    # Docker's default keeps one file that grows until the disk is full.
+    logging = services()[name]["logging"]
+
+    assert logging == {"driver": "json-file", "options": {"max-size": "10m", "max-file": "5"}}
 
 
 def test_the_setup_has_no_network_and_the_api_waits_for_it() -> None:
@@ -143,6 +152,13 @@ def test_only_settings_decided_on_are_passed_and_only_where_they_are_needed() ->
         for setting in environment(service):
             assert name in PASSED.get(setting, set()), f"{name} is given {setting}"
     assert environment(services()["ui"]) == {}
+
+
+def test_each_setting_decided_on_is_given_to_exactly_those_services() -> None:
+    # Dropped from one, it gets the service's default without a word.
+    for setting, given_to in PASSED.items():
+        actual = {name for name, service in services().items() if setting in environment(service)}
+        assert actual == given_to, setting
 
 
 def test_every_setting_passed_is_one_the_service_reads() -> None:

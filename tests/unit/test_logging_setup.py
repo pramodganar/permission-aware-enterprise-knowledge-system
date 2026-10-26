@@ -1,20 +1,25 @@
 import json
 import logging
 import sys
+import time
+import warnings
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from uvicorn.config import Config
 
 from app.core.logging_setup import (
+    ACCESS_LOG,
     BLOCKED_FIELDS,
-    QUIET_LIBRARIES,
     REDACTED,
     JsonFormatter,
     bind_request_id,
     clear_request_id,
     configure_logging,
+    milliseconds_since,
 )
+from logcheck import logging_restored
 
 
 @pytest.fixture(autouse=True)
@@ -26,13 +31,8 @@ def no_request_id() -> Iterator[None]:
 
 @pytest.fixture
 def restore_root_logger() -> Iterator[None]:
-    root = logging.getLogger()
-    handlers, level = root.handlers[:], root.level
-    libraries = {name: logging.getLogger(name).level for name in QUIET_LIBRARIES}
-    yield
-    root.handlers, root.level = handlers, level
-    for name, library_level in libraries.items():
-        logging.getLogger(name).setLevel(library_level)
+    with logging_restored():
+        yield
 
 
 def format_record(
@@ -173,3 +173,84 @@ def test_libraries_that_log_every_http_request_keep_only_warnings(
 
     messages = [json.loads(line)["message"] for line in capsys.readouterr().out.splitlines()]
     assert messages == ["connection pool full", "model answered"]
+
+
+def as_uvicorn_leaves_it() -> None:
+    # What uvicorn does before it calls the app factory: its own handlers,
+    # writing plain text, on its own loggers.
+    Config("app.main:serve", factory=True).configure_logging()
+
+
+def test_the_servers_own_lines_are_json_on_stdout(
+    restore_root_logger: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    as_uvicorn_leaves_it()
+    configure_logging("INFO")
+
+    logging.getLogger("uvicorn.error").info("Application startup complete.")
+    logging.getLogger("uvicorn").warning("Invalid HTTP request received.")
+
+    written = capsys.readouterr()
+    lines = [json.loads(line) for line in written.out.splitlines()]
+    assert [(line["logger"], line["message"]) for line in lines] == [
+        ("uvicorn.error", "Application startup complete."),
+        ("uvicorn", "Invalid HTTP request received."),
+    ]
+    assert written.err == ""
+
+
+def test_the_servers_lines_follow_the_services_level(
+    restore_root_logger: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # uvicorn sets its own level, INFO; APP_LOG_LEVEL is the one that counts.
+    as_uvicorn_leaves_it()
+    configure_logging("WARNING")
+
+    logging.getLogger("uvicorn.error").info("Started server process [1]")
+
+    assert capsys.readouterr() == ("", "")
+
+
+@pytest.mark.parametrize("uvicorns_config", [True, False], ids=["uvicorns-config", "propagating"])
+def test_the_access_log_writes_nothing_even_when_uvicorn_is_told_to(
+    restore_root_logger: None, capsys: pytest.CaptureFixture[str], uvicorns_config: bool
+) -> None:
+    # Its lines hold the full URL and the client's address. Without
+    # --no-access-log uvicorn would write them; they still go nowhere. Nor
+    # when the access logger passes its lines up to the root, as a logger
+    # does unless told otherwise, and as it does without uvicorn's config.
+    if uvicorns_config:
+        as_uvicorn_leaves_it()
+    else:
+        logging.getLogger(ACCESS_LOG).propagate = True
+    configure_logging("DEBUG")
+
+    logging.getLogger(ACCESS_LOG).info(
+        '%s - "%s %s HTTP/%s" %d', "10.0.0.7:5555", "GET", "/search?question=salary", "1.1", 200
+    )
+
+    assert capsys.readouterr() == ("", "")
+
+
+def test_a_librarys_warning_is_a_json_line_not_text_on_stderr(
+    restore_root_logger: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    configure_logging("INFO")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        warnings.warn("this argument is deprecated", FutureWarning, stacklevel=1)
+
+    written = capsys.readouterr()
+    (line,) = [json.loads(line) for line in written.out.splitlines()]
+    assert line["logger"] == "py.warnings"
+    assert line["level"] == "WARNING"
+    assert "FutureWarning: this argument is deprecated" in line["message"]
+    assert written.err == ""
+
+
+def test_milliseconds_since_counts_whole_milliseconds() -> None:
+    elapsed = milliseconds_since(time.perf_counter() - 0.25)
+
+    assert isinstance(elapsed, int)
+    assert 250 <= elapsed < 1000

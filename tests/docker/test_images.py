@@ -120,7 +120,8 @@ def api(volume: str, network: str, key: str) -> Iterator[str]:
 def logs_of(base: str) -> str:
     port = base.rsplit(":", 1)[1]
     names = docker("ps", "--filter", f"publish={port}", "--format", "{{.Names}}").stdout.split()
-    return docker("logs", names[0]).stdout + docker("logs", names[0]).stderr
+    written = docker("logs", names[0])
+    return written.stdout + written.stderr
 
 
 # --- what is in the images ---------------------------------------------------------------
@@ -269,8 +270,13 @@ def test_the_api_logs_json_lines_with_no_question_in_them(api: str) -> None:
         f"{api}/search", headers=auth, json={"question": "Zanzibar hotel limits?"}, timeout=30
     )
 
-    lines = [line for line in logs_of(api).splitlines() if line.startswith("{")]
-    assert any(json.loads(line).get("message") == "request handled" for line in lines)
+    # Every line, the server's own and both streams included: one format for
+    # whatever collects them.
+    lines = [json.loads(line) for line in logs_of(api).splitlines() if line.strip()]
+    messages = {(line["logger"], line["message"]) for line in lines}
+    assert ("app.api.middleware", "request handled") in messages
+    assert ("uvicorn.error", "Application startup complete.") in messages
+    assert ("app.retrieval.search", "search done") in messages
     assert "Zanzibar" not in logs_of(api)
 
 

@@ -25,6 +25,7 @@ from typing import Protocol
 
 from app.core.config import Settings
 from app.core.exceptions import ServiceUnavailableError
+from app.core.logging_setup import milliseconds_since
 from app.rag.prompt import Prompt
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ def complete(
                 "provider": provider.name,
                 "model": checked.model,
                 "attempts": attempt,
-                "milliseconds": round((time.perf_counter() - started) * 1000),
+                "milliseconds": milliseconds_since(started),
                 "input_tokens": checked.input_tokens,
                 "output_tokens": checked.output_tokens,
                 "stop_reason": checked.stop_reason.value,

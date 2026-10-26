@@ -31,12 +31,14 @@ adds or removes one.
 
 import dataclasses
 import logging
+import time
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.authorization.service import can_read
+from app.core.logging_setup import milliseconds_since
 from app.models import Chunk, Document, User
 from app.retrieval.embeddings import embedding_text
 from app.retrieval.filters import SearchFilters, narrow_scope
@@ -108,6 +110,7 @@ def retrieve(
     searched = limit if reranker is None else (candidates or limit)
     if searched < limit:
         raise ValueError("candidates must be at least the limit")
+    started = time.perf_counter()
 
     readable = access_scope(db, user)
     scope = narrow_scope(db, readable, filters)
@@ -137,10 +140,15 @@ def retrieve(
         )
 
     below_threshold = best_score is not None and best_score < min_score
+    # The reranker is the slowest step when there is one: a model run on
+    # every candidate.
+    rerank_milliseconds = None
     if below_threshold:
         kept = []
     elif reranker is not None and kept:
+        reranking = time.perf_counter()
         kept = _reranked(question, kept, reranker)
+        rerank_milliseconds = milliseconds_since(reranking)
     kept = kept[:limit]
 
     # The best score is logged so the threshold can be checked against real
@@ -154,6 +162,9 @@ def retrieve(
             "best_score": None if best_score is None else round(best_score, 3),
             "below_threshold": below_threshold,
             "reranked": reranker is not None and bool(kept),
+            # The whole retrieval: scope, search, second check and reranking.
+            "milliseconds": milliseconds_since(started),
+            "rerank_milliseconds": rerank_milliseconds,
         },
     )
     return Retrieval(

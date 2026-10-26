@@ -69,6 +69,7 @@ A missing file doesn't stop Compose: Docker mounts an empty folder in its place,
 | Setting | Given to | If `.env` doesn't set it |
 |---|---|---|
 | `APP_ENVIRONMENT` | `setup`, `api` | `local` |
+| `APP_LOG_LEVEL` | `setup`, `api` | `INFO` ([logging](logging.md#levels)) |
 | `APP_LLM_PROVIDER` | `api` | `none`: no answers, search only |
 | `APP_LLM_MAX_OUTPUT_TOKENS` | `api` | `600`; set `1000` with Groq |
 
@@ -82,6 +83,8 @@ The UI is given none of them, and no secret file. A setting that isn't set reach
 - every Linux capability is dropped, and no process can gain privileges (`no-new-privileges`);
 - both ports are published on `127.0.0.1` only;
 - `setup` has no network at all.
+
+**Every container's log is rotated,** at most five files of 10 MB: Docker's default keeps one file that grows until the disk is full. Every line the API writes is JSON, the server's own included ([logging](logging.md)).
 
 ## Health checks
 
@@ -146,16 +149,16 @@ docker run -d --name knowledge-ui --network knowledge -p 127.0.0.1:8501:8501 kno
 ## Tests
 
 - [tests/unit/test_dockerfile.py](../tests/unit/test_dockerfile.py) reads the Dockerfile and `.dockerignore`, and runs with every other test: the pinned base, the versions, no secret set, the user, the volume, the UI's image holding none of the service, and what the build may see. And the health checks: each asks its own image's route on its own port, gives up before Docker would kill it, and has a start period; and each image's own probe, run against a local server, passes on a 200 and fails on a 503, a 500, a 404 and nothing listening.
-- [tests/unit/test_compose.py](../tests/unit/test_compose.py) reads `compose.yaml`: nothing published beyond this machine, every container hardened, no value written into the file, only the settings above passed and only where they're needed, the UI given none, the defaults the service's own, the UI waiting for the API to be healthy, and `setup`'s inherited check switched off.
+- [tests/unit/test_compose.py](../tests/unit/test_compose.py) reads `compose.yaml`: nothing published beyond this machine, every container hardened, no value written into the file, only the settings above passed and only where they're needed, the UI given none, the defaults the service's own, the UI waiting for the API to be healthy, `setup`'s inherited check switched off, and every container's log rotated.
 - [tests/docker/test_images.py](../tests/docker/test_images.py) builds and runs both images, and [tests/docker/test_stack.py](../tests/docker/test_stack.py) starts the stack. Both need Docker, so they are left out of a normal run:
 
   ```
   pytest -m docker
   ```
 
-  The images: it seeds and indexes a volume with no network, starts the API on it, signs in as David and searches, checks the log holds no question, starts the UI against the API, waiting each time for Docker to call it healthy by the image's own check, and looks inside both images: that each carries its health check and the API's fails with nothing listening, who they run as, that the service can't change its code, the CPU build of PyTorch, the model loaded with no network, the UI's missing service, and no local secret anywhere in them.
+  The images: it seeds and indexes a volume with no network, starts the API on it, signs in as David and searches, checks every line of the log is JSON and holds no question, starts the UI against the API, waiting each time for Docker to call it healthy by the image's own check, and looks inside both images: that each carries its health check and the API's fails with nothing listening, who they run as, that the service can't change its code, the CPU build of PyTorch, the model loaded with no network, the UI's missing service, and no local secret anywhere in them.
 
-  The stack: the UI was started only after the API's first passing check, both are healthy and `setup` has no check, no secret is in any container's settings and each gets only its own secret files, a missing key file stops `setup` naming it, each person sees their own documents through it, the UI reaches the API by name, the UI's container holds no setting of the service's, nothing is published beyond this machine, every container runs hardened and only the data can be written, a restart keeps the data and builds nothing again, production refuses the demo data and never starts the API, and, on Linux in the API's image, the secret files are made readable by their owner only. Each run gets its own project name, ports, env file and secret files, so it never reads the local `.env` or `secrets/`, and it is taken down with its volume however it ends.
+  The stack: the UI was started only after the API's first passing check, both are healthy and `setup` has no check, no secret is in any container's settings and each gets only its own secret files, a missing key file stops `setup` naming it, each person sees their own documents through it, the UI reaches the API by name, the UI's container holds no setting of the service's, nothing is published beyond this machine, every container's log is rotated, every container runs hardened and only the data can be written, a restart keeps the data and builds nothing again, production refuses the demo data and never starts the API, and, on Linux in the API's image, the secret files are made readable by their owner only. Each run gets its own project name, ports, env file and secret files, so it never reads the local `.env` or `secrets/`, and it is taken down with its volume however it ends.
 
 ## Not done here
 

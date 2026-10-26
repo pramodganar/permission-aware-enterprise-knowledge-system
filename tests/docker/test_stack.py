@@ -202,6 +202,17 @@ def test_every_container_is_hardened_as_it_runs(stack: Stack, service: str) -> N
     assert host["Privileged"] is False
 
 
+@pytest.mark.parametrize("service", ["setup", "api", "ui"])
+def test_every_containers_log_is_rotated(stack: Stack, service: str) -> None:
+    host = stack.container(service)["HostConfig"]
+    assert isinstance(host, dict)
+
+    assert host["LogConfig"] == {
+        "Type": "json-file",
+        "Config": {"max-size": "10m", "max-file": "5"},
+    }
+
+
 def test_the_setup_ran_with_no_network(stack: Stack) -> None:
     host = stack.container("setup")["HostConfig"]
     assert isinstance(host, dict)

@@ -38,11 +38,13 @@ At shutdown the connection to the language model provider is closed.
 
 FastAPI's own answer to a bad body includes the input, which here could be a password or a question. This one lists the fields only. The name of a field the client added is the client's own text too, so it is shown only if it looks like a field name (letters, digits and underscores, up to 64): `body.role` is shown, a key like `<script>…</script>` becomes `body.(unrecognised)`.
 
-**One log line per request**: method, route pattern (`/documents/{document_id}`, not the ID), status and milliseconds. Not the query string, which can hold a question, and not the client's address. A path that matches no route isn't logged either: it is whatever the client typed, and could be made to look like a log entry. uvicorn's own access log is switched off for the same reason; it writes the full URL.
+**One log line per request**: method, route pattern (`/documents/{document_id}`, not the ID), status and milliseconds. Not the query string, which can hold a question, and not the client's address. A path that matches no route isn't logged either: it is whatever the client typed, and could be made to look like a log entry. uvicorn's own access log is switched off and silenced for the same reason; it writes the full URL.
 
 An unexpected error is logged with its type and where it happened, not its message: a library's error message can hold document text (NFR-9). The PDF reader's own logger is switched off: its warnings quote the bytes of the file it is reading, which fuzzing showed put document text in the log. A test reads every line written at DEBUG, from every logger, over a session of use in which a model and a reranker fail with text in their errors, and finds no piece of any document, no question, password or token.
 
 The libraries that log one line per HTTP request they make (`httpx`, `huggingface_hub` and others) keep only their warnings. Running the service showed them logging every check of the embedding model's files at startup, and they would log every call to the language model.
+
+Every event the service logs, its level and its fields, how to follow one request through the log, and where a request's time goes are in [logging](logging.md).
 
 **Headers on every response**, errors and unknown paths included:
 

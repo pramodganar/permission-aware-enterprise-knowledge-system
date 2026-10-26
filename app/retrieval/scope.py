@@ -15,6 +15,7 @@ gets (decision record 0005).
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -23,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.authorization.permissions import Permission, permissions_for
 from app.authorization.service import readable_chunks
 from app.core.database import utc_now
+from app.core.logging_setup import milliseconds_since
 from app.models import Chunk, User
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ class AccessScope:
 
 def access_scope(db: Session, user: User, now: datetime | None = None) -> AccessScope:
     """Work out what this person may search right now."""
+    started = time.perf_counter()
     moment = now or utc_now()
     permissions = permissions_for(user)
 
@@ -85,6 +88,7 @@ def access_scope(db: Session, user: User, now: datetime | None = None) -> Access
             "user_id": user.id,
             "documents": len(scope.document_ids),
             "chunks": len(scope.chunk_ids),
+            "milliseconds": milliseconds_since(started),
         },
     )
     return scope

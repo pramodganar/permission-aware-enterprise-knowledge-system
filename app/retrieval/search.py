@@ -17,9 +17,11 @@ Three checks around the search itself:
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from app.core.database import utc_now
+from app.core.logging_setup import milliseconds_since
 from app.retrieval.index import Hit, VectorIndex
 from app.retrieval.query import ProcessedQuestion
 from app.retrieval.scope import AccessScope
@@ -56,6 +58,7 @@ def search_in_scope(
     # Chunks the person may read but that aren't indexed yet: a document added
     # since the index was built. They can't be found until it is rebuilt.
     searchable = scope.chunk_ids & index.chunk_ids
+    started = time.perf_counter()
     hits = index.search(question.vector, limit, searchable)
 
     outside = [hit.chunk_id for hit in hits if not scope.allows_chunk(hit.chunk_id)]
@@ -71,6 +74,7 @@ def search_in_scope(
             "in_scope": len(scope.chunk_ids),
             "not_indexed": len(scope.chunk_ids) - len(searchable),
             "hits": len(hits),
+            "milliseconds": milliseconds_since(started),
         },
     )
     return hits

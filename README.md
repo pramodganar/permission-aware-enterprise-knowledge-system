@@ -62,6 +62,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Configuration](docs/configuration.md): every setting, where settings come from, what production changes, and secrets as files
 - [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
+- [Logging](docs/logging.md): the log's format, following one request, where the time goes, what is never written, and every event
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made
 

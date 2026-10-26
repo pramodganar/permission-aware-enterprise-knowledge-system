@@ -23,6 +23,11 @@ x-hardened: &hardened
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
   tmpfs: [/tmp]
+  # Docker keeps what a container writes in a file that, by default, grows
+  # until the disk is full. Kept here: at most five files of 10 MB each.
+  logging:
+    driver: json-file
+    options: { max-size: 10m, max-file: "5" }
 
 services:
   # Runs once before the API: seeds the company and builds the index if
@@ -41,6 +46,7 @@ services:
       # The same as the API's, so in production the seed refuses to load the
       # fictional company, and the API, which waits for this, never starts.
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
     command:
       - sh
       - -c
@@ -58,6 +64,8 @@ services:
     environment:
       APP_SECRETS_DIR: /run/secrets
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
+      # DEBUG adds every passing health check; no level adds document text.
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
       # No model unless .env says which: then the prompt, company text, goes to it.
       APP_LLM_PROVIDER: ${APP_LLM_PROVIDER:-none}
       APP_LLM_MAX_OUTPUT_TOKENS: ${APP_LLM_MAX_OUTPUT_TOKENS:-600}

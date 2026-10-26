@@ -58,6 +58,19 @@ class Embedder(Protocol):
         ...
 
 
+def no_progress_bars() -> None:
+    """Stop the model libraries drawing progress bars on stderr while a model loads.
+
+    A bar isn't a log line: in a container's log it is text in among the
+    JSON, written again on every start. Each library has its own switch.
+    """
+    from huggingface_hub.utils.tqdm import disable_progress_bars
+    from transformers.utils import logging as transformers_logging
+
+    disable_progress_bars()
+    transformers_logging.disable_progress_bar()  # type: ignore[no-untyped-call]  # unannotated
+
+
 class SentenceTransformerEmbedder:
     """A sentence-transformers model, run locally on the CPU."""
 
@@ -65,6 +78,7 @@ class SentenceTransformerEmbedder:
         # Imported here because it takes many seconds and most code never needs it.
         from sentence_transformers import SentenceTransformer
 
+        no_progress_bars()
         # offline=True loads only from the local cache and makes no network call.
         self._model = SentenceTransformer(model_name, device="cpu", local_files_only=offline)
         self._batch_size = batch_size

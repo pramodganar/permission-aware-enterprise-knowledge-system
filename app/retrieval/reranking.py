@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from app.core.config import Settings
+from app.retrieval.embeddings import no_progress_bars
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class CrossEncoderReranker:
         # Imported here for the same reason as in embeddings.py: it is slow.
         from sentence_transformers import CrossEncoder
 
+        no_progress_bars()
         self._model = CrossEncoder(model_name, device="cpu", local_files_only=offline)
         self.name = model_name
         self.max_tokens = int(self._model.max_seq_length)

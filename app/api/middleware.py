@@ -51,7 +51,7 @@ from app.core.exceptions import (
     RequestTooLargeError,
     error_response,
 )
-from app.core.logging_setup import bind_request_id, clear_request_id
+from app.core.logging_setup import bind_request_id, clear_request_id, milliseconds_since
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ async def _around_request(request: Request, call_next: Handler, max_body_bytes: 
                 # a log entry.
                 "path": path,
                 "status": response.status_code,
-                "milliseconds": round((time.perf_counter() - started) * 1000),
+                "milliseconds": milliseconds_since(started),
             },
         )
         return response

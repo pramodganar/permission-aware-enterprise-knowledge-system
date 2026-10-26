@@ -1,6 +1,8 @@
-"""Looking at everything a log record carries, not only its message."""
+"""Looking at everything a log record carries, and undoing what configure_logging set up."""
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 
@@ -24,3 +26,27 @@ def everything_logged(caplog: pytest.LogCaptureFixture) -> str:
             f"{name}={value!r}" for name, value in vars(record).items() if name not in _STANDARD
         )
     return "\n".join(parts)
+
+
+@contextmanager
+def logging_restored() -> Iterator[None]:
+    """Put every logger back as it was, however the block ends.
+
+    configure_logging changes the root, the libraries it quiets, uvicorn's
+    loggers and where warnings go; a test that calls it must not leave any
+    of that for the next one.
+    """
+    known = logging.Logger.manager.loggerDict.values()
+    loggers = [
+        logging.getLogger(),
+        *(found for found in known if isinstance(found, logging.Logger)),
+    ]
+    saved = [(found, found.handlers[:], found.level, found.propagate) for found in loggers]
+    try:
+        yield
+    finally:
+        for found, handlers, level, propagate in saved:
+            found.handlers = handlers
+            found.setLevel(level)
+            found.propagate = propagate
+        logging.captureWarnings(False)
