@@ -1,22 +1,66 @@
 """Application settings.
 
-Values come from environment variables prefixed with APP_, or from a .env file
-in the project root. Environment variables win over the file.
+Values come from, in this order, the first that has one winning:
+
+1. environment variables prefixed with APP_;
+2. a .env file in the project root;
+3. files in the folder APP_SECRETS_DIR names, one per setting, named after
+   it (app_jwt_secret_key). This is how a container is given a secret
+   without putting it in its environment, where anyone who can inspect the
+   container reads it. Docker mounts them in /run/secrets.
+
+Every setting is listed, with where it comes from, in docs/configuration.md.
 """
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SecretsSettingsSource,
+    SettingsConfigDict,
+)
 
 # Where an API key may go without TLS: this machine, as Ollama runs.
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 # A signing key made by secrets.token_urlsafe(48) has around 40 different
 # characters. One with fewer than this was typed, not generated.
 MIN_DISTINCT_KEY_CHARACTERS = 16
+# Names the folder of secret files. Not a setting itself: it says where
+# settings come from.
+SECRETS_DIR_VARIABLE = "APP_SECRETS_DIR"
+
+
+class SecretsFolderError(ValueError):
+    """APP_SECRETS_DIR names something that isn't a folder."""
+
+
+def secrets_dir() -> Path | None:
+    """The folder of secret files, or None when APP_SECRETS_DIR isn't set.
+
+    One that is set but isn't a folder is refused: a mistyped path would
+    otherwise leave the service without its secrets and say nothing.
+    """
+    named = os.environ.get(SECRETS_DIR_VARIABLE)
+    if not named:
+        return None
+    folder = Path(named)
+    if not folder.is_dir():
+        raise SecretsFolderError(f"{SECRETS_DIR_VARIABLE} is not a folder: {folder}")
+    for entry in folder.iterdir():
+        # Docker mounts an empty folder in place of a secret file it can't
+        # find, and leaves one on the host. Said here, it's found at once.
+        if entry.is_dir():
+            raise SecretsFolderError(
+                f"{entry.name} in {folder} is a folder, not a file: Docker makes an "
+                "empty one when the file it should mount is missing"
+            )
+    return folder
 
 
 class Settings(BaseSettings):
@@ -29,6 +73,24 @@ class Settings(BaseSettings):
         # so a mistyped secret doesn't end up in startup logs.
         hide_input_in_errors=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # Read each time settings are made, not once at import, so the folder
+        # is the one the process was started with.
+        del file_secret_settings
+        folder = secrets_dir()
+        if folder is None:
+            return (init_settings, env_settings, dotenv_settings)
+        files = SecretsSettingsSource(settings_cls, secrets_dir=folder)
+        return (init_settings, env_settings, dotenv_settings, files)
 
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

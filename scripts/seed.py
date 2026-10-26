@@ -10,9 +10,10 @@ the tables.
 
 It is safe to run more than once: anything that already exists is left alone.
 
-All seeded users share one password. Give it with --password or the
-SEED_PASSWORD environment variable; otherwise one is generated and printed
-once. The script refuses to run when the environment is production.
+All seeded users share one password. Give it with --password, the
+SEED_PASSWORD environment variable, or a file named seed_password in the
+folder APP_SECRETS_DIR names; otherwise one is generated and printed once.
+The script refuses to run when the environment is production.
 """
 
 import argparse
@@ -31,7 +32,7 @@ from sqlalchemy.orm import Session
 from app.audit.seals import seal_key
 from app.auth.passwords import hash_password
 from app.authorization.document_access import GrantRequest
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, secrets_dir
 from app.core.database import Base, create_db_engine, create_session_factory, utc_now
 from app.core.exceptions import AppError
 from app.core.logging_setup import configure_logging
@@ -41,6 +42,7 @@ from app.models import Department, Document, DocumentStatus, Role, RoleCode, Use
 COMPANY_DIR = Path(__file__).resolve().parent.parent / "data" / "acmecorp"
 MANIFEST_NAME = "manifest.json"
 MIN_PASSWORD_LENGTH = 12
+PASSWORD_FILE = "seed_password"  # noqa: S105 - the file's name, not a password
 
 
 class SeedError(Exception):
@@ -231,6 +233,14 @@ def _seed_document(
     result.documents_ingested += 1
 
 
+def password_file() -> str | None:
+    """The password in the secrets folder, as a container is given it; None if there is none."""
+    folder = secrets_dir()
+    if folder is None or not (folder / PASSWORD_FILE).is_file():
+        return None
+    return (folder / PASSWORD_FILE).read_text(encoding="utf-8").strip() or None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Load the AcmeCorp company data.")
     parser.add_argument(
@@ -244,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # An empty SEED_PASSWORD counts as none, as Compose passes one that is unset.
     # Otherwise every account would get a password nobody can type.
-    password = arguments.password or os.environ.get("SEED_PASSWORD") or None
+    password = arguments.password or os.environ.get("SEED_PASSWORD") or password_file() or None
     generated = password is None
     if password is None:
         password = secrets.token_urlsafe(12)

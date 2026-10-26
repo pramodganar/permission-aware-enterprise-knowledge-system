@@ -30,7 +30,14 @@ from app.rag.prompt import INSTRUCTIONS, PROMPT_VERSION, Prompt
 from app.rag.providers import OpenAICompatibleProvider
 from logcheck import everything_logged
 from scripts import scan_secrets
-from scripts.scan_secrets import PATTERNS, Finding, kinds_in, local_secrets, scan
+from scripts.scan_secrets import (
+    PATTERNS,
+    Finding,
+    every_local_secret,
+    kinds_in,
+    local_secrets,
+    scan,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -135,6 +142,19 @@ def test_a_secret_in_a_new_file_not_yet_committed_is_found(repository: Path) -> 
     )
 
     assert scan(repository, secrets={}) == [Finding("new/settings.py", "Groq API key")]
+
+
+def test_the_values_in_the_secrets_folder_are_looked_for_too(repository: Path) -> None:
+    # The files Docker Compose is given: random text, which no pattern finds.
+    value = "Zq" + "8vT" * 10
+    (repository / ".gitignore").write_text("secrets/\n", "utf-8")
+    (repository / "secrets").mkdir()
+    (repository / "secrets" / "app_jwt_secret_key").write_text(value + "\n", "utf-8")
+    (repository / "secrets" / "app_llm_api_key").write_text("\n", "utf-8")
+    (repository / "notes.txt").write_text(f"pasted by mistake: {value}\n", "utf-8")
+
+    assert every_local_secret(repository) == {"secrets/app_jwt_secret_key": value}
+    assert scan(repository) == [Finding("notes.txt", "the value of secrets/app_jwt_secret_key")]
 
 
 def test_what_git_ignores_is_not_scanned(repository: Path) -> None:

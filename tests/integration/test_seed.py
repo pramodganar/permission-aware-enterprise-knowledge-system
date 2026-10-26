@@ -364,6 +364,7 @@ def command_line(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, settings: Sett
     # The real one replaces the root log handlers, which would outlive the test.
     monkeypatch.setattr("scripts.seed.configure_logging", lambda level: None)
     monkeypatch.delenv("SEED_PASSWORD", raising=False)
+    monkeypatch.delenv("APP_SECRETS_DIR", raising=False)
     return local
 
 
@@ -403,6 +404,26 @@ def test_an_empty_password_in_the_environment_counts_as_none(
     engine = create_db_engine(command_line.database_url)
     with create_session_factory(engine)() as db:
         assert authenticate(db, "grace@acmecorp.example", generated).full_name == "Grace Patel"
+    engine.dispose()
+
+
+def test_the_password_can_come_from_the_secrets_folder(
+    command_line: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder = tmp_path / "secrets"
+    folder.mkdir()
+    (folder / "seed_password").write_text(PASSWORD + "\n", encoding="utf-8")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(folder))
+
+    assert main([]) == 0
+
+    assert "password" not in capsys.readouterr().out
+    engine = create_db_engine(command_line.database_url)
+    with create_session_factory(engine)() as db:
+        assert authenticate(db, "grace@acmecorp.example", PASSWORD).full_name == "Grace Patel"
     engine.dispose()
 
 

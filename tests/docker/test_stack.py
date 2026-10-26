@@ -1,8 +1,9 @@
 """The stack, started with Docker Compose. Needs Docker: pytest -m docker
 
-Each stack gets a project name and ports of its own and an env file made
-for it, so it never reads the local .env or meets a stack already running,
-and it is taken down with its volume however the tests end.
+Each stack gets a project name, ports, an env file and a folder of secret
+files of its own, made by scripts.make_secrets, so it never reads the local
+.env or secrets/, or meets a stack already running. It is taken down with
+its volume however the tests end.
 """
 
 import json
@@ -14,20 +15,23 @@ import httpx
 import pytest
 from dockertools import docker, free_port, wait_for
 
+from scripts.make_secrets import make
+
 pytestmark = pytest.mark.docker
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = str(ROOT / "compose.yaml")
-PASSWORD = "compose-test-password"
 
 
 class Stack:
     def __init__(self, folder: Path, **settings: str) -> None:
         self.project = f"knowledge-test-{secrets.token_hex(4)}"
         self.api_port, self.ui_port = free_port(), free_port()
+        self.secrets = folder / f"{self.project}-secrets"
+        make(self.secrets)
+        self.password = (self.secrets / "seed_password").read_text("utf-8").strip()
         values = {
-            "APP_JWT_SECRET_KEY": secrets.token_urlsafe(48),
-            "SEED_PASSWORD": PASSWORD,
+            "SECRETS_DIR": self.secrets.as_posix(),
             "API_PORT": str(self.api_port),
             "UI_PORT": str(self.ui_port),
             **settings,
@@ -85,7 +89,8 @@ def stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Stack]:
 
 def documents(stack: Stack, name: str) -> dict[str, object]:
     login = httpx.post(
-        f"{stack.api}/auth/login", json={"email": f"{name}@acmecorp.example", "password": PASSWORD}
+        f"{stack.api}/auth/login",
+        json={"email": f"{name}@acmecorp.example", "password": stack.password},
     )
     assert login.status_code == 200, login.text
     auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
@@ -212,20 +217,46 @@ def test_in_production_the_demo_data_is_refused_and_the_api_never_starts(
         production.down("-v")
 
 
-def test_without_a_signing_key_compose_refuses_to_start(tmp_path: Path) -> None:
-    empty = tmp_path / "empty.env"
-    empty.write_text("", "utf-8")
-    refused = docker(
-        "compose",
-        "-f",
-        COMPOSE,
-        "-p",
-        "knowledge-test-nokey",
-        "--env-file",
-        str(empty),
-        "config",
-        check=False,
-    )
+def settings_of(stack: Stack, service: str) -> list[str]:
+    config = stack.container(service)["Config"]
+    assert isinstance(config, dict)
+    given: list[str] = config["Env"]
+    return given
 
-    assert refused.returncode != 0
-    assert "APP_JWT_SECRET_KEY" in refused.stderr
+
+@pytest.mark.parametrize("service", ["setup", "api", "ui"])
+def test_no_secret_is_in_any_containers_settings(stack: Stack, service: str) -> None:
+    given = settings_of(stack, service)
+    names = {item.split("=", 1)[0] for item in given}
+
+    assert not names & {"APP_JWT_SECRET_KEY", "APP_LLM_API_KEY", "SEED_PASSWORD"}
+    for path in stack.secrets.iterdir():
+        value = path.read_text("utf-8").strip()
+        if value:
+            assert not any(value in item for item in given), f"{service} holds {path.name}"
+
+
+def test_each_container_is_given_only_its_own_secret_files(stack: Stack) -> None:
+    api = stack.compose("exec", "-T", "api", "ls", "/run/secrets").split()
+    ui = stack.compose("exec", "-T", "ui", "ls", "/run/secrets", check=False)
+
+    assert sorted(api) == ["app_jwt_secret_key", "app_llm_api_key"]
+    assert "No such file or directory" in ui
+
+
+def test_a_missing_key_file_stops_the_setup_naming_it_and_the_api_never_starts(
+    tmp_path: Path,
+) -> None:
+    missing = Stack(tmp_path)
+    (missing.secrets / "app_jwt_secret_key").unlink()
+    try:
+        assert "didn't complete successfully" in missing.up(check=False)
+        setup = missing.compose("logs", "setup")
+        api = missing.container("api")["State"]
+        assert isinstance(api, dict)
+
+        # Docker mounted an empty folder in the file's place; the service says so.
+        assert "app_jwt_secret_key in /run/secrets is a folder" in setup
+        assert api["Status"] == "created"
+    finally:
+        missing.down("-v")

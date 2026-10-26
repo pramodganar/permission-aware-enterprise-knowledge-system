@@ -1,9 +1,10 @@
 """compose.yaml, read without Docker (docs/docker.md).
 
-Running it is tested by ``tests/docker/test_compose.py`` (``pytest -m docker``).
+Running it is tested by ``tests/docker/test_stack.py`` (``pytest -m docker``).
 These run everywhere and check what a run alone wouldn't show at a glance:
 that nothing is published beyond this machine, every container is
-hardened, no value is written into the file, only settings decided on are
+hardened, no value is written into the file, no secret is a setting and
+each service gets only its own secret files, only settings decided on are
 passed, the UI gets none of the service's, and the defaults are the
 service's own.
 """
@@ -15,19 +16,26 @@ from typing import Any
 import pytest
 import yaml
 
-from app.core.config import Settings
+from app.core.config import SECRETS_DIR_VARIABLE, Settings
+from scripts import make_secrets, seed
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = ROOT / "compose.yaml"
 
 # Every setting a container may be given, and which may give it.
 PASSED = {
-    "APP_JWT_SECRET_KEY": {"setup", "api"},
+    "APP_SECRETS_DIR": {"setup", "api"},
     "APP_ENVIRONMENT": {"setup", "api"},
-    "SEED_PASSWORD": {"setup"},
     "APP_LLM_PROVIDER": {"api"},
-    "APP_LLM_API_KEY": {"api"},
     "APP_LLM_MAX_OUTPUT_TOKENS": {"api"},
+}
+# The one setting written into the file: where Docker mounts the secrets.
+FIXED = {"APP_SECRETS_DIR": "/run/secrets"}
+# Never a setting: each is a file, given only to the services that need it.
+SECRETS = {
+    "app_jwt_secret_key": {"setup", "api"},
+    "seed_password": {"setup"},
+    "app_llm_api_key": {"api"},
 }
 _INTERPOLATION = re.compile(r"\$\{(?P<name>[A-Z_]+)(?P<rule>:[-?])?(?P<rest>[^}]*)\}")
 
@@ -109,6 +117,9 @@ def test_no_value_is_written_into_the_file() -> None:
     # be written here, and a setting can't be renamed on the way in.
     for name, service in services().items():
         for setting, value in environment(service).items():
+            if setting in FIXED:
+                assert value == FIXED[setting], f"{name}: {setting}"
+                continue
             match = _INTERPOLATION.fullmatch(value)
             assert match, f"{name}: {setting} is given {value!r}, not a variable"
             assert match.group("name") == setting, f"{name}: {setting} reads {match['name']}"
@@ -125,22 +136,51 @@ def test_every_setting_passed_is_one_the_service_reads() -> None:
     # The settings ignore names they don't know, so a misspelt one would be
     # dropped without a word.
     for setting in PASSED:
+        # Not a setting: it says where settings come from.
+        if setting == SECRETS_DIR_VARIABLE:
+            continue
         if setting.startswith("APP_"):
             assert setting.removeprefix("APP_").lower() in Settings.model_fields, setting
 
 
-def test_the_signing_key_is_required_wherever_it_is_given() -> None:
-    for name in ("setup", "api"):
-        match = _INTERPOLATION.fullmatch(environment(services()[name])["APP_JWT_SECRET_KEY"])
-        assert match and match.group("rule") == ":?", name
+def test_no_secret_is_given_as_a_setting() -> None:
+    # Anyone who can inspect a container reads its settings.
+    for name, service in services().items():
+        for setting in environment(service):
+            assert setting.lower() not in SECRETS, f"{name} is given {setting} as a setting"
+            assert setting not in ("APP_JWT_SECRET_KEY", "APP_LLM_API_KEY", "SEED_PASSWORD")
+
+
+def test_each_service_gets_only_the_secret_files_it_needs() -> None:
+    for name, service in services().items():
+        given = set(service.get("secrets", []))
+        assert given == {s for s, users in SECRETS.items() if name in users}, name
+        # Given files, it must be told where they are, or it never reads them.
+        told = environment(service).get(SECRETS_DIR_VARIABLE)
+        assert told == (FIXED[SECRETS_DIR_VARIABLE] if given else None), name
+
+
+def test_every_secret_is_a_file_in_the_secrets_folder_named_for_what_it_holds() -> None:
+    declared = compose()["secrets"]
+
+    assert set(declared) == set(SECRETS)
+    for secret, source in declared.items():
+        assert source == {"file": f"${{SECRETS_DIR:-./secrets}}/{secret}"}, secret
+        # What the service reads it as: a setting's file, or the seed's password.
+        held = secret.removeprefix("app_")
+        assert held in Settings.model_fields or secret == seed.PASSWORD_FILE, secret
+
+
+def test_the_script_makes_exactly_the_files_compose_mounts() -> None:
+    assert set(make_secrets.FILES) == set(SECRETS)
+    assert make_secrets.PASSWORD_FILE == seed.PASSWORD_FILE
 
 
 def test_the_defaults_are_the_services_own() -> None:
     for name in ("setup", "api"):
         for setting, value in environment(services()[name]).items():
             match = _INTERPOLATION.fullmatch(value)
-            assert match
-            if match.group("rule") != ":-" or setting == "SEED_PASSWORD":
+            if match is None or match.group("rule") != ":-":
                 continue
             field = Settings.model_fields[setting.removeprefix("APP_").lower()]
             default = "" if field.default is None else str(field.default)

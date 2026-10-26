@@ -1,4 +1,4 @@
-"""Look for secrets in the repository: every tracked file, and every commit ever made.
+"""Look for secrets in the repository: every file git has or would add, and every commit.
 
     python -m scripts.scan_secrets
 
@@ -6,7 +6,8 @@ Two kinds of finding:
 
 - Something shaped like a secret: a provider's API key, a private key, a
   signed token, or a value given to one of the service's secret settings.
-- One of the secrets in the local ``.env``, word for word, wherever it is.
+- One of the secrets in the local ``.env`` or in ``secrets/``, the files
+  Docker Compose is given, word for word, wherever it is.
   This is the one that matters most and the one a pattern can't see: a
   signing key is just random text.
 
@@ -105,6 +106,24 @@ def local_secrets(env_file: Path) -> dict[str, str]:
     return found
 
 
+def folder_secrets(folder: Path) -> dict[str, str]:
+    """The values in a folder of secret files, as Docker Compose is given them, by file name."""
+    if not folder.is_dir():
+        return {}
+    found = {}
+    for path in sorted(folder.iterdir()):
+        if path.is_file():
+            value = path.read_text(encoding="utf-8").strip()
+            if len(value) >= MIN_SECRET_LENGTH:
+                found[f"secrets/{path.name}"] = value
+    return found
+
+
+def every_local_secret(root: Path) -> dict[str, str]:
+    """The values in .env and in the secrets folder: what this checkout holds."""
+    return local_secrets(root / ".env") | folder_secrets(root / "secrets")
+
+
 def scan(root: Path = ROOT, secrets: dict[str, str] | None = None) -> list[Finding]:
     """Every finding in the files and the history of the repository at ``root``.
 
@@ -112,7 +131,7 @@ def scan(root: Path = ROOT, secrets: dict[str, str] | None = None) -> list[Findi
     run before a commit sees what that commit is about to hold. What git
     ignores, .env above all, is left out.
     """
-    looking_for = local_secrets(root / ".env") if secrets is None else secrets
+    looking_for = every_local_secret(root) if secrets is None else secrets
     findings: list[Finding] = []
     listed = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
     for name in filter(None, listed.split("\0")):
@@ -129,7 +148,8 @@ def report(findings: Iterable[Finding], searched: Iterable[str]) -> None:
     for finding in findings:
         print(f"FOUND {finding}")
     names = sorted(searched)
-    print(f"also searched for the values of: {', '.join(names) if names else 'nothing (no .env)'}")
+    listed = ", ".join(names) if names else "nothing (no .env or secrets/)"
+    print(f"also searched for the values of: {listed}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -139,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     except NotACheckoutError as error:
         print(f"error: {error}", file=sys.stderr)
         return NOT_A_CHECKOUT
-    report(findings, local_secrets(ROOT / ".env"))
+    report(findings, every_local_secret(ROOT))
     print("nothing found" if not findings else f"{len(findings)} found")
     return 1 if findings else 0
 

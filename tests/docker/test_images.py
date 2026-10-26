@@ -297,3 +297,20 @@ def test_the_ui_starts_and_reaches_the_api(api: str, network: str) -> None:
         assert reached.strip() == "{'status': 'ok'}"
     finally:
         docker("rm", "-f", name, check=False)
+
+
+def test_on_linux_the_secret_files_are_made_readable_by_their_owner_only(images: None) -> None:
+    # The unit test of this is skipped on Windows; here it runs on Linux.
+    modes = in_image(
+        API,
+        "sh",
+        "-c",
+        "python -m scripts.make_secrets --folder /tmp/made >/dev/null"
+        " && stat -c '%a %n' /tmp/made/*",
+    )
+
+    assert sorted(modes.split("\n")[:-1]) == [
+        "600 /tmp/made/app_jwt_secret_key",
+        "600 /tmp/made/app_llm_api_key",
+        "600 /tmp/made/seed_password",
+    ]

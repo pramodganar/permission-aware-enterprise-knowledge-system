@@ -1,13 +1,16 @@
 # The API and the UI together, on this machine (docs/docker.md):
 #
+#   python -m scripts.make_secrets
 #   docker compose up --build
 #
 # Then the UI is at http://127.0.0.1:8501 and the API at http://127.0.0.1:8000
-# (UI_PORT and API_PORT move them).
-# The signing key comes from .env, read by Compose itself, and only the
-# settings named below are passed on; the rest of .env never reaches a
-# container. The first start seeds the fictional company and builds the
-# index on the volume; later starts find both there.
+# (UI_PORT and API_PORT move them). The first start seeds the fictional
+# company and builds the index on the volume; later starts find both there.
+#
+# Secrets are files, in secrets/ (SECRETS_DIR moves it), mounted in
+# /run/secrets: never in a container's environment, where anyone who can
+# inspect it reads them. The other settings come from .env, read by Compose
+# itself, and only those named below are passed on.
 
 name: knowledge
 
@@ -28,13 +31,12 @@ services:
     image: knowledge-api
     network_mode: none
     volumes: [data:/data]
+    secrets: [app_jwt_secret_key, seed_password]
     environment:
-      APP_JWT_SECRET_KEY: ${APP_JWT_SECRET_KEY:?set APP_JWT_SECRET_KEY in .env}
+      APP_SECRETS_DIR: /run/secrets
       # The same as the API's, so in production the seed refuses to load the
       # fictional company, and the API, which waits for this, never starts.
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
-      # Unset, a password is made up and printed once in this service's log.
-      SEED_PASSWORD: ${SEED_PASSWORD:-}
     command:
       - sh
       - -c
@@ -48,12 +50,12 @@ services:
     restart: unless-stopped
     volumes: [data:/data]
     ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
+    secrets: [app_jwt_secret_key, app_llm_api_key]
     environment:
-      APP_JWT_SECRET_KEY: ${APP_JWT_SECRET_KEY:?set APP_JWT_SECRET_KEY in .env}
+      APP_SECRETS_DIR: /run/secrets
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
       # No model unless .env says which: then the prompt, company text, goes to it.
       APP_LLM_PROVIDER: ${APP_LLM_PROVIDER:-none}
-      APP_LLM_API_KEY: ${APP_LLM_API_KEY:-}
       APP_LLM_MAX_OUTPUT_TOKENS: ${APP_LLM_MAX_OUTPUT_TOKENS:-600}
 
   # Gets no setting of the service's and no secret: it only needs the API's
@@ -65,6 +67,16 @@ services:
     depends_on: [api]
     restart: unless-stopped
     ports: ["127.0.0.1:${UI_PORT:-8501}:8501"]
+
+# Made by python -m scripts.make_secrets. A missing one makes Docker mount
+# an empty folder in its place, which the service refuses, naming it.
+secrets:
+  app_jwt_secret_key:
+    file: ${SECRETS_DIR:-./secrets}/app_jwt_secret_key
+  seed_password:
+    file: ${SECRETS_DIR:-./secrets}/seed_password
+  app_llm_api_key:
+    file: ${SECRETS_DIR:-./secrets}/app_llm_api_key
 
 volumes:
   # The database and the index: every document, restricted ones included.

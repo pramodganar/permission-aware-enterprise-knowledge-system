@@ -36,8 +36,11 @@ The tests run with 3.11.9 on the development machine, and the image has 3.11.16:
 ## Running them together
 
 ```
+python -m scripts.make_secrets
 docker compose up --build
 ```
+
+The first line makes the secret files, once ([configuration](configuration.md#secrets-as-files)).
 
 Then the UI is at http://127.0.0.1:8501 and the API at http://127.0.0.1:8000. `API_PORT` and `UI_PORT` in `.env` move them. `docker compose down` stops everything and keeps the data; `docker compose down -v` deletes the volume too.
 
@@ -51,18 +54,25 @@ Then the UI is at http://127.0.0.1:8501 and the API at http://127.0.0.1:8000. `A
 
 **The first start** seeds the 17 documents and builds the index, which takes about 40 seconds once the images are built. **Later starts** find both on the volume: the seed adds nothing, the index is up to date and isn't rebuilt, and the stack is up in about 5 seconds. Measured once each on the development laptop.
 
+**Secrets are files,** mounted in `/run/secrets` and read through `APP_SECRETS_DIR`, never settings: a container's settings can be read by anyone who can run `docker inspect`, and a test inspects every container for them.
+
+| Secret file | Given to |
+|---|---|
+| `app_jwt_secret_key` | `setup`, `api` |
+| `seed_password` | `setup` |
+| `app_llm_api_key` | `api`; empty, no hosted model |
+
+A missing file doesn't stop Compose: Docker mounts an empty folder in its place, and leaves one on the host. The service refuses that and names it, so `setup` fails and the API never starts; `make_secrets` says the same if it finds one.
+
 **Settings.** Compose reads `.env` itself and passes on only the settings `compose.yaml` names, so the rest of `.env`, the database's path for example, never reaches a container:
 
 | Setting | Given to | If `.env` doesn't set it |
 |---|---|---|
-| `APP_JWT_SECRET_KEY` | `setup`, `api` | Compose refuses to start, and says which setting is missing |
 | `APP_ENVIRONMENT` | `setup`, `api` | `local` |
-| `SEED_PASSWORD` | `setup` | a password is made up and printed once, in `docker compose logs setup`, where anyone who can read this machine's container logs can see it; setting one avoids that |
 | `APP_LLM_PROVIDER` | `api` | `none`: no answers, search only |
-| `APP_LLM_API_KEY` | `api` | no key |
 | `APP_LLM_MAX_OUTPUT_TOKENS` | `api` | `600`; set `1000` with Groq |
 
-The UI is given none of them. A setting that isn't set reaches a container as an empty one, which used to matter twice: an empty `SEED_PASSWORD` was taken as the password, giving every account one nobody could type, and an empty `APP_LLM_API_KEY` counted as a key. Both now count as not set.
+The UI is given none of them, and no secret file. A setting that isn't set reaches a container as an empty one, which mattered twice: an empty `SEED_PASSWORD` was taken as the password, giving every account one nobody could type, and an empty `APP_LLM_API_KEY` counted as a key. Both now count as not set.
 
 **In production** (`APP_ENVIRONMENT=production`) the seed refuses to load the fictional company, so `setup` fails and the API is never started. That is on purpose: this file runs the demo company. A real deployment loads its own documents.
 
@@ -72,8 +82,6 @@ The UI is given none of them. A setting that isn't set reaches a container as an
 - every Linux capability is dropped, and no process can gain privileges (`no-new-privileges`);
 - both ports are published on `127.0.0.1` only;
 - `setup` has no network at all.
-
-What a container is given with `environment:` can be read by anyone who can run `docker inspect` on this machine, the signing key included. Moving the secrets into files comes with the environment configuration step.
 
 ## Running them by hand
 
@@ -118,7 +126,7 @@ docker run -d --name knowledge-ui --network knowledge -p 127.0.0.1:8501:8501 kno
 
   The images: it seeds and indexes a volume with no network, starts the API on it, signs in as David and searches, checks the log holds no question, starts the UI against the API, and looks inside both images: who they run as, that the service can't change its code, the CPU build of PyTorch, the model loaded with no network, the UI's missing service, and no local secret anywhere in them.
 
-  The stack: each person sees their own documents through it, the UI reaches the API by name, the UI's container holds no setting of the service's, nothing is published beyond this machine, every container runs hardened and only the data can be written, a restart keeps the data and builds nothing again, production refuses the demo data and never starts the API, and with no signing key Compose won't start. Each run gets its own project name, ports and env file, so it never reads the local `.env`, and it is taken down with its volume however it ends.
+  The stack: no secret is in any container's settings and each gets only its own secret files, a missing key file stops `setup` naming it, each person sees their own documents through it, the UI reaches the API by name, the UI's container holds no setting of the service's, nothing is published beyond this machine, every container runs hardened and only the data can be written, a restart keeps the data and builds nothing again, production refuses the demo data and never starts the API, and, on Linux in the API's image, the secret files are made readable by their owner only. Each run gets its own project name, ports, env file and secret files, so it never reads the local `.env` or `secrets/`, and it is taken down with its volume however it ends.
 
 ## Not done here
 

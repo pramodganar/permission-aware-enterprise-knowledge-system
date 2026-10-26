@@ -60,6 +60,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
 - [Security](docs/security.md): the promise, where it is kept, what shows it, and how to run it safely; start here for a review
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
+- [Configuration](docs/configuration.md): every setting, where settings come from, what production changes, and secrets as files
 - [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made
@@ -176,10 +177,11 @@ Two images: the API, with the embedding model built in so a container fetches no
 To run both, with the company seeded and indexed on the first start:
 
 ```
+python -m scripts.make_secrets
 docker compose up --build
 ```
 
-It needs `APP_JWT_SECRET_KEY` in `.env`, and passes on only the settings it names. The UI is then at http://127.0.0.1:8501. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md).
+The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
 
 ## Checks
 

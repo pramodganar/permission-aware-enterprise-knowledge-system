@@ -1,9 +1,10 @@
 import secrets
+from pathlib import Path
 
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from app.core.config import Settings, get_settings
+from app.core.config import SecretsFolderError, Settings, get_settings
 
 VALID_SECRET = "x" * 40
 
@@ -20,6 +21,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "APP_LLM_PROVIDER",
         "APP_LLM_API_KEY",
         "APP_LLM_BASE_URL",
+        "APP_SECRETS_DIR",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -62,6 +64,105 @@ def test_missing_secret_fails() -> None:
         load()
 
     assert "jwt_secret_key" in str(error.value)
+
+
+def secret_files(folder: Path, **files: str) -> Path:
+    for name, value in files.items():
+        (folder / name).write_text(value, encoding="utf-8")
+    return folder
+
+
+def test_a_setting_is_read_from_its_file_in_the_secrets_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    key = secrets.token_urlsafe(48)
+    # As echo writes it, with a newline at the end.
+    secret_files(tmp_path, app_jwt_secret_key=key + "\n", app_llm_api_key="model-key\n")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+
+    settings = load()
+
+    assert settings.jwt_secret_key.get_secret_value() == key
+    assert settings.llm_api_key is not None
+    assert settings.llm_api_key.get_secret_value() == "model-key"
+
+
+def test_a_file_is_found_whatever_the_case_of_its_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The name put together, or the secret scan reads a setting being given a value.
+    secret_files(tmp_path, **{"APP_JWT" + "_SECRET_KEY": VALID_SECRET})
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+
+    assert load().jwt_secret_key.get_secret_value() == VALID_SECRET
+
+
+def test_the_environment_wins_over_a_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    secret_files(tmp_path, app_jwt_secret_key="f" * 40, app_access_token_expire_minutes="5")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+
+    settings = load()
+
+    assert settings.jwt_secret_key.get_secret_value() == VALID_SECRET
+    # A setting only the file gives still comes from the file.
+    assert settings.access_token_expire_minutes == 5
+
+
+def test_without_the_folder_named_no_file_is_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret_files(tmp_path, app_jwt_secret_key=VALID_SECRET)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValidationError, match="jwt_secret_key"):
+        load()
+
+
+@pytest.mark.parametrize("kind", ["missing", "a file"])
+def test_a_secrets_folder_that_is_not_a_folder_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, kind: str
+) -> None:
+    named = tmp_path / "secrets"
+    if kind == "a file":
+        named.write_text("", encoding="utf-8")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(named))
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+
+    with pytest.raises(SecretsFolderError, match="APP_SECRETS_DIR is not a folder"):
+        load()
+
+
+def test_a_folder_where_a_secret_file_should_be_is_refused_and_named(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret_files(tmp_path, app_llm_api_key="model-key")
+    (tmp_path / "app_jwt_secret_key").mkdir()
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+
+    with pytest.raises(SecretsFolderError, match=r"app_jwt_secret_key in .* is a folder"):
+        load()
+
+
+def test_a_bad_value_in_a_file_is_not_shown_in_the_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret_files(tmp_path, app_jwt_secret_key="short-file-secret")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+
+    with pytest.raises(ValidationError) as error:
+        load()
+
+    assert "jwt_secret_key" in str(error.value)
+    assert "short-file-secret" not in str(error.value)
+
+
+def test_an_empty_key_file_is_no_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    secret_files(tmp_path, app_llm_api_key="\n")
+    monkeypatch.setenv("APP_SECRETS_DIR", str(tmp_path))
+    monkeypatch.setenv("APP_JWT_SECRET_KEY", VALID_SECRET)
+
+    assert load().llm_api_key is None
 
 
 @pytest.mark.parametrize("secret", ["", "short", "x" * 31])
