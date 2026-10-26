@@ -1,0 +1,8 @@
+# What the UI's image installs. The UI only talks to the API (ui/client.py),
+# so it needs none of the service: no database, no model, no index, no torch.
+# Pinned the same as in requirements.txt and requirements-dev.txt; a test
+# checks they stay that way.
+
+streamlit==1.65.0
+httpx==0.28.1
+pydantic==2.13.5

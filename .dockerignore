@@ -1,0 +1,15 @@
+# Everything is left out of the build unless it is named here. A list of what
+# to leave out would have to be kept in step with every local file that
+# shouldn't reach an image, such as .env, the database or the index; a list
+# of what to let in can't miss one.
+*
+
+!app/
+!scripts/
+!ui/
+!data/acmecorp/
+!requirements.txt
+!requirements-ui.txt
+
+**/__pycache__/
+**/*.py[cod]

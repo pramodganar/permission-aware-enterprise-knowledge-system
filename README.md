@@ -60,6 +60,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
 - [Security](docs/security.md): the promise, where it is kept, what shows it, and how to run it safely; start here for a review
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
+- [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made
 
@@ -163,6 +164,15 @@ Sign in as any of the AcmeCorp people with the password given to `python -m scri
 
 To run them separately, start the API as above and, in a second terminal, `streamlit run ui/app.py`; the UI finds the API at `UI_API_URL`, `http://127.0.0.1:8000` by default.
 
+## Docker
+
+```
+docker build --target api -t knowledge-api .
+docker build --target ui  -t knowledge-ui  .
+```
+
+Two images: the API, with the embedding model built in so a container fetches nothing, and the UI, which holds none of the service because it only talks to the API. Both run as an unprivileged user and hold no secret; the database and index live on a volume. How to seed, index and run them is in [docs/docker.md](docs/docker.md).
+
 ## Checks
 
 ```
@@ -186,6 +196,8 @@ To run only the security tests:
 pytest tests/security
 ```
 
+The tests that build and run the Docker images need Docker, and are left out of a normal run too: `pytest -m docker`.
+
 The tests that load the real models are left out of a normal run, because loading them takes about half a minute. The first run downloads the embedding model and the reranker, about 90 MB each.
 
 ```
@@ -204,4 +216,4 @@ For fast answers, Groq has a free tier: create a key at [console.groq.com](https
 
 In use now: Python 3.11, FastAPI (with python-multipart for uploads), SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, Streamlit and httpx for the UI, pytest, ruff, mypy.
 
-Planned: PostgreSQL as the target database, Docker. Libraries are added to the requirements files when the part that needs them is built.
+Docker for the images. Planned: PostgreSQL as the target database. Libraries are added to the requirements files when the part that needs them is built.
