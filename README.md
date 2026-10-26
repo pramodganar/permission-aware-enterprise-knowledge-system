@@ -181,7 +181,7 @@ python -m scripts.make_secrets
 docker compose up --build
 ```
 
-The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
+The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. Each image has a health check: the UI is started once the API has loaded and answers, and `docker compose ps` shows whether both still do. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
 
 ## Checks
 

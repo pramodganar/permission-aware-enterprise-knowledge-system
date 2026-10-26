@@ -70,6 +70,8 @@ The security tests read the routes off the app and fail for one that isn't in th
 
 `GET /health` → `{"status": "ok"}`, or 503 if the database doesn't answer. It needs no token, so it says nothing else: no version, no model, no counts.
 
+It answers only once the service is ready: the port opens after the embedding model and the index are loaded. That is what the Docker images' health checks ask, and what Compose waits for before starting the UI ([Docker](docker.md#health-checks)). Docker asks every 30 seconds, so a 200 is logged at DEBUG, below the default level; a 503 is logged like any other request.
+
 ## Logging in and who you are
 
 ```

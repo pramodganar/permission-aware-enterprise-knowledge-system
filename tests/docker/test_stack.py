@@ -7,13 +7,15 @@ its volume however the tests end.
 """
 
 import json
+import re
 import secrets
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 
 import httpx
 import pytest
-from dockertools import docker, free_port, wait_for
+from dockertools import docker, free_port, health_of, wait_for
 
 from scripts.make_secrets import make
 
@@ -55,13 +57,8 @@ class Stack:
         return done.stdout + done.stderr
 
     def up(self, check: bool = True) -> str:
-        started = self.compose("up", "-d", "--build", "--wait", check=check)
-        if check:
-            # --wait only knows a container is running: with no health check
-            # it can't know the API has loaded its model and index.
-            wait_for(f"{self.api}/health")
-            wait_for(f"http://127.0.0.1:{self.ui_port}/_stcore/health")
-        return started
+        # --wait returns once the API and the UI pass their health checks.
+        return self.compose("up", "-d", "--build", "--wait", check=check)
 
     def down(self, *args: str) -> None:
         self.compose("down", *args, check=False)
@@ -102,6 +99,55 @@ def restricted(listed: dict[str, object]) -> list[str]:
     found = listed["documents"]
     assert isinstance(found, list)
     return [d["title"] for d in found if d["classification"] == "restricted"]
+
+
+def instant(stamp: str) -> datetime:
+    """A time as Docker writes it, to the microsecond: Python reads no finer."""
+    match = re.fullmatch(r"([\d-]+T[\d:]+)(?:\.(\d+))?(Z|[+-][\d:]+)", stamp)
+    assert match, stamp
+    whole, fraction, zone = match.groups()
+    return datetime.fromisoformat(
+        f"{whole}.{(fraction or '0')[:6]:0<6}{'+00:00' if zone == 'Z' else zone}"
+    )
+
+
+# First of the stack's tests: Docker keeps only the last five checks, so the
+# API's first pass is still among them.
+def test_the_ui_was_started_only_once_the_api_was_healthy(stack: Stack) -> None:
+    api = health_of(f"{stack.project}-api-1")
+    assert api is not None
+    checks = api["Log"]
+    assert isinstance(checks, list)
+    passed = [instant(c["End"]) for c in checks if c["ExitCode"] == 0]
+    ui = stack.container("ui")["State"]
+    assert isinstance(ui, dict)
+
+    assert passed
+    assert instant(ui["StartedAt"]) >= min(passed)
+
+
+@pytest.mark.parametrize("service", ["api", "ui"])
+def test_the_api_and_the_ui_are_healthy(stack: Stack, service: str) -> None:
+    state = health_of(f"{stack.project}-{service}-1")
+
+    assert state is not None
+    assert state["Status"] == "healthy"
+
+
+def test_the_setup_has_no_health_check(stack: Stack) -> None:
+    config = stack.container("setup")["Config"]
+    assert isinstance(config, dict)
+
+    # Docker keeps the image's timings; NONE is what switches the check off.
+    assert config["Healthcheck"]["Test"] == ["NONE"]
+    assert health_of(f"{stack.project}-setup-1") is None
+
+
+def test_the_reader_reads_dockers_times() -> None:
+    assert instant("2026-10-26T09:15:02.123456789Z") == datetime.fromisoformat(
+        "2026-10-26T09:15:02.123456+00:00"
+    )
+    assert instant("2026-10-26T10:15:02+01:00") == instant("2026-10-26T09:15:02Z")
 
 
 def test_each_person_sees_their_own_documents_through_the_stack(stack: Stack) -> None:

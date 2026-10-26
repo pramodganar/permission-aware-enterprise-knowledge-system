@@ -17,7 +17,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from dockertools import docker, free_port, wait_for
+from dockertools import docker, free_port, wait_for, wait_healthy
 from imagesettings import ALLOWED
 
 from scripts.scan_secrets import local_secrets
@@ -110,7 +110,8 @@ def api(volume: str, network: str, key: str) -> Iterator[str]:
         API,
     )
     try:
-        wait_for(f"http://127.0.0.1:{port}/health")
+        # By the image's own health check, which is what Compose waits for.
+        wait_healthy(name)
         yield f"http://127.0.0.1:{port}"
     finally:
         docker("rm", "-f", name, check=False)
@@ -129,6 +130,31 @@ def logs_of(base: str) -> str:
 def test_the_image_runs_as_the_unprivileged_user(images: None, image: str) -> None:
     assert docker("image", "inspect", "--format", "{{.Config.User}}", image).stdout.strip() == "app"
     assert in_image(image, "id", "-u").strip() == "10001"
+
+
+@pytest.mark.parametrize(
+    ("image", "url"),
+    [(API, "http://127.0.0.1:8000/health"), (UI, "http://127.0.0.1:8501/_stcore/health")],
+)
+def test_each_image_carries_its_health_check(images: None, image: str, url: str) -> None:
+    listed = docker("image", "inspect", "--format", "{{json .Config.Healthcheck}}", image).stdout
+    check = json.loads(listed)
+
+    assert check["Test"][:3] == ["CMD", "python", "-c"]
+    assert url in check["Test"][3]
+
+
+def test_the_api_images_check_fails_when_the_api_isnt_running(images: None) -> None:
+    # The probe alone, in a container where nothing is listening.
+    probe = json.loads(
+        docker("image", "inspect", "--format", "{{json .Config.Healthcheck}}", API).stdout
+    )["Test"][1:]
+    ran = docker(
+        "run", "--rm", "--network=none", "--entrypoint", probe[0], API, *probe[1:], check=False
+    )
+
+    assert ran.returncode == 1
+    assert "Connection refused" in ran.stderr
 
 
 @pytest.mark.parametrize("image", [API, UI])
@@ -267,7 +293,7 @@ def test_the_interactive_docs_are_off_in_production(volume: str, key: str) -> No
         API,
     )
     try:
-        wait_for(f"http://127.0.0.1:{port}/health")
+        wait_healthy(name)
         assert httpx.get(f"http://127.0.0.1:{port}/docs").status_code == 404
     finally:
         docker("rm", "-f", name, check=False)
@@ -285,6 +311,7 @@ def test_the_ui_starts_and_reaches_the_api(api: str, network: str) -> None:
     name = f"knowledge-ui-{secrets.token_hex(4)}"
     docker("run", "-d", "--name", name, "--network", network, "-p", f"127.0.0.1:{port}:8501", UI)
     try:
+        wait_healthy(name)
         assert wait_for(f"http://127.0.0.1:{port}/_stcore/health").text == "ok"
         # The address the UI is given is the API's on the shared network.
         reached = in_image(

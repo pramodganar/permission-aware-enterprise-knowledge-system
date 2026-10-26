@@ -60,6 +60,10 @@ COPY ui/__init__.py ui/app.py ui/asking.py ui/client.py ui/documents.py \
      ui/managing.py ui/reviewing.py ui/session.py ui/text.py ui/
 USER app
 EXPOSE 8501
+# Streamlit's own health route. Not the API's: if the API is down, a new UI
+# wouldn't help, and the UI says so to whoever is using it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --start-interval=2s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)"]
 CMD ["streamlit", "run", "ui/app.py", \
      "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true", \
      "--browser.gatherUsageStats=false"]
@@ -85,6 +89,13 @@ RUN mkdir /data && chown app:app /data
 USER app
 VOLUME /data
 EXPOSE 8000
+# Healthy once /health answers 200, which is once the model and the index are
+# loaded: the port isn't open before. The image has no curl, so the check is
+# Python's own; urlopen fails on a 503, which /health gives when the
+# database doesn't answer. A slow machine gets two minutes to start, checked
+# every two seconds so a fast one is healthy as soon as it is ready.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=2s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
 # Inside a container it has to listen on every interface to be reached at
 # all; which of the host's addresses it is published on is decided by
 # docker run -p or Compose, and the docs publish it on 127.0.0.1 only.

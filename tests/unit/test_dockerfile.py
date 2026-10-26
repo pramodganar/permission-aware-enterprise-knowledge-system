@@ -4,19 +4,28 @@ Building the images is tested by ``tests/docker`` (``pytest -m docker``),
 which needs Docker. These run everywhere, and check what a build alone
 wouldn't: that the base is pinned, the versions are the ones tested here,
 no secret is baked in, nothing runs as root, the build only sees what it
-is allowed to, and the UI's image holds none of the service.
+is allowed to, the UI's image holds none of the service, and each image's
+health check asks the route that says it is ready, and fails when it should.
 """
 
 import ast
 import fnmatch
+import json
 import re
+import subprocess
+import sys
+import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.metadata import version
 from pathlib import Path
 
 import pytest
 from imagesettings import OURS
 
+from app.api import health
+from app.api.middleware import HEALTH_PATH
 from app.core.config import Settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -276,6 +285,169 @@ def test_everything_the_images_copy_is_let_into_the_build(stage: str) -> None:
         if source == "data/acmecorp/":
             probe = "data/acmecorp/manifest.json"
         assert sent_to_the_build(probe), source
+
+
+@dataclass(frozen=True)
+class HealthCheck:
+    options: dict[str, str]
+    command: list[str]
+
+    def seconds(self, option: str) -> float:
+        value = self.options[option]
+        assert value.endswith("s"), f"--{option}={value}"
+        return float(value.removesuffix("s"))
+
+    @property
+    def probe(self) -> str:
+        assert self.command[:2] == ["python", "-c"], self.command
+        return self.command[2]
+
+    @property
+    def url(self) -> str:
+        match = re.search(r"urlopen\('([^']+)', timeout=(\d+)\)", self.probe)
+        assert match, self.probe
+        return match.group(1)
+
+    @property
+    def probe_timeout(self) -> float:
+        match = re.search(r"timeout=(\d+)\)", self.probe)
+        assert match, self.probe
+        return float(match.group(1))
+
+
+def health_check(stage: Stage) -> HealthCheck:
+    (rest,) = stage.all("HEALTHCHECK")
+    options, _, command = rest.partition(" CMD ")
+    # The exec form, so no shell is needed to run it.
+    return HealthCheck(dict(re.findall(r"--([\w-]+)=(\S+)", options)), json.loads(command))
+
+
+# The route each image's check asks, and the port it serves on.
+READY = {"api": (8000, HEALTH_PATH), "ui": (8501, "/_stcore/health")}
+
+
+@pytest.mark.parametrize("stage", ["api", "ui"])
+def test_each_image_checks_its_own_health_route_on_its_own_port(stage: str) -> None:
+    found = stages(dockerfile())[stage]
+    port, path = READY[stage]
+
+    assert found.all("EXPOSE") == [str(port)]
+    assert re.search(rf"\b{port}\b", found.all("CMD")[0])
+    assert health_check(found).url == f"http://127.0.0.1:{port}{path}"
+
+
+def test_the_api_checks_the_one_route_the_service_has_for_it() -> None:
+    assert [route.path for route in health.router.routes] == [HEALTH_PATH]  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("stage", ["api", "ui"])
+def test_each_check_gives_up_before_docker_does_and_waits_out_a_slow_start(stage: str) -> None:
+    check = health_check(stages(dockerfile())[stage])
+
+    # A probe Docker kills counts as failed too, but says only "timed out".
+    assert check.probe_timeout < check.seconds("timeout") < check.seconds("interval")
+    assert int(check.options["retries"]) >= 2
+    # Failures while starting don't count; a fast start is seen in seconds.
+    assert check.seconds("start-period") >= 60
+    assert check.seconds("start-interval") <= 5
+
+
+def test_the_api_has_longer_to_start_than_the_ui() -> None:
+    # It loads the embedding model and the index before its port opens.
+    found = stages(dockerfile())
+
+    assert health_check(found["api"]).seconds("start-period") > health_check(found["ui"]).seconds(
+        "start-period"
+    )
+
+
+def test_the_docker_page_gives_each_checks_route_and_timings() -> None:
+    page = (ROOT / "docs/docker.md").read_text(encoding="utf-8")
+
+    def written(seconds: float) -> str:
+        return f"{seconds:g} s"
+
+    for stage, label in (("api", "API"), ("ui", "UI")):
+        check = health_check(stages(dockerfile())[stage])
+        port, path = READY[stage]
+        row = next(line for line in page.splitlines() if line.startswith(f"| {label} |"))
+        assert f"{path}` on port {port}" in row, row
+        assert (
+            f"every {written(check.seconds('start-interval'))},"
+            f" for up to {written(check.seconds('start-period'))}"
+        ) in row, row
+        assert row.endswith(f"every {written(check.seconds('interval'))} |"), row
+        assert f"on a 200 within {check.probe_timeout:g} seconds" in page
+
+
+def test_only_the_two_images_have_a_health_check() -> None:
+    for name, stage in stages(dockerfile()).items():
+        assert bool(stage.all("HEALTHCHECK")) == (name in READY), name
+
+
+@pytest.fixture
+def server() -> Iterator[tuple[str, list[int]]]:
+    """A local server answering with whatever status is first in the list."""
+    status = [200]
+
+    class Answer(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(status[0])
+            self.end_headers()
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    running = ThreadingHTTPServer(("127.0.0.1", 0), Answer)
+    threading.Thread(target=running.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{running.server_address[1]}", status
+    finally:
+        running.shutdown()
+        running.server_close()
+
+
+def run_probe(stage: str, base: str) -> int:
+    """The image's own probe, run here with its address moved to ``base``."""
+    check = health_check(stages(dockerfile())[stage])
+    port, _ = READY[stage]
+    probe = check.probe.replace(f"http://127.0.0.1:{port}", base)
+    assert probe != check.probe
+    done = subprocess.run(  # noqa: S603 - this interpreter, with the Dockerfile's own code
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        timeout=check.seconds("timeout"),
+        check=False,
+    )
+    return done.returncode
+
+
+@pytest.mark.parametrize("stage", ["api", "ui"])
+def test_the_probe_passes_on_a_200(stage: str, server: tuple[str, list[int]]) -> None:
+    base, _ = server
+
+    assert run_probe(stage, base) == 0
+
+
+@pytest.mark.parametrize("stage", ["api", "ui"])
+@pytest.mark.parametrize("status", [503, 500, 404])
+def test_the_probe_fails_on_anything_else(
+    stage: str, status: int, server: tuple[str, list[int]]
+) -> None:
+    # 503 is what /health gives when the database doesn't answer.
+    base, answer = server
+    answer[0] = status
+
+    assert run_probe(stage, base) == 1
+
+
+@pytest.mark.parametrize("stage", ["api", "ui"])
+def test_the_probe_fails_when_nothing_is_listening(stage: str) -> None:
+    with ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler) as closed:
+        port = closed.server_address[1]
+
+    # Exit code 1 is unhealthy; Docker reserves 2.
+    assert run_probe(stage, f"http://127.0.0.1:{port}") == 1
 
 
 def test_the_reader_joins_lines_and_finds_stages() -> None:

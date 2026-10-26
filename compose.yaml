@@ -6,6 +6,8 @@
 # Then the UI is at http://127.0.0.1:8501 and the API at http://127.0.0.1:8000
 # (UI_PORT and API_PORT move them). The first start seeds the fictional
 # company and builds the index on the volume; later starts find both there.
+# Each image has a health check, so docker compose up --wait returns once
+# both answer, and docker compose ps says whether they still do.
 #
 # Secrets are files, in secrets/ (SECRETS_DIR moves it), mounted in
 # /run/secrets: never in a container's environment, where anyone who can
@@ -30,6 +32,8 @@ services:
     build: { context: ., target: api }
     image: knowledge-api
     network_mode: none
+    # The image's health check is the API's, which a job never passes.
+    healthcheck: { disable: true }
     volumes: [data:/data]
     secrets: [app_jwt_secret_key, seed_password]
     environment:
@@ -64,7 +68,10 @@ services:
     <<: *hardened
     build: { context: ., target: ui }
     image: knowledge-ui
-    depends_on: [api]
+    # Started once the API's health check passes, so it never starts talking
+    # to an API still loading its model and index.
+    depends_on:
+      api: { condition: service_healthy }
     restart: unless-stopped
     ports: ["127.0.0.1:${UI_PORT:-8501}:8501"]
 

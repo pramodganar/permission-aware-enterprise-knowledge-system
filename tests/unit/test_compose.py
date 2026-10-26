@@ -5,8 +5,8 @@ These run everywhere and check what a run alone wouldn't show at a glance:
 that nothing is published beyond this machine, every container is
 hardened, no value is written into the file, no secret is a setting and
 each service gets only its own secret files, only settings decided on are
-passed, the UI gets none of the service's, and the defaults are the
-service's own.
+passed, the UI gets none of the service's, the defaults are the service's
+own, and the UI waits for the API to pass its health check.
 """
 
 import re
@@ -82,6 +82,19 @@ def test_the_setup_has_no_network_and_the_api_waits_for_it() -> None:
 
     assert found["setup"]["network_mode"] == "none"
     assert found["api"]["depends_on"] == {"setup": {"condition": "service_completed_successfully"}}
+
+
+def test_the_ui_waits_for_the_api_to_be_healthy_not_just_started() -> None:
+    assert services()["ui"]["depends_on"] == {"api": {"condition": "service_healthy"}}
+
+
+def test_the_api_and_the_ui_keep_their_images_health_checks_and_the_setup_has_none() -> None:
+    # One place says how each is checked: the Dockerfile, so docker run gets it too.
+    found = services()
+
+    assert found["setup"]["healthcheck"] == {"disable": True}
+    assert "healthcheck" not in found["api"]
+    assert "healthcheck" not in found["ui"]
 
 
 def test_the_setup_seeds_then_builds_the_index_only_when_it_has_to() -> None:

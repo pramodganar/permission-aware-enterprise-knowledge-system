@@ -85,7 +85,7 @@ def test_health_needs_no_token(client: TestClient) -> None:
     assert client.get("/health", headers={"Authorization": "Bearer nonsense"}).status_code == 200
 
 
-def test_health_fails_when_the_database_does(client: TestClient) -> None:
+def break_the_database(client: TestClient) -> None:
     class Broken:
         def __enter__(self) -> "Broken":
             return self
@@ -98,11 +98,56 @@ def test_health_fails_when_the_database_does(client: TestClient) -> None:
 
     client.app.state.session_factory = Broken  # type: ignore[attr-defined]
 
+
+def test_health_fails_when_the_database_does(client: TestClient) -> None:
+    break_the_database(client)
+
     response = client.get("/health")
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "service_unavailable"
     assert "disk" not in response.text
+
+
+def handled(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.message == "request handled"]
+
+
+def test_a_passing_health_check_is_logged_only_at_debug(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Docker asks every 30 seconds; at INFO that would be most of the log.
+    with caplog.at_level(logging.DEBUG):
+        client.get("/health")
+
+    (record,) = handled(caplog)
+    assert record.levelno == logging.DEBUG
+    assert record.status == 200  # type: ignore[attr-defined]
+
+
+def test_a_failing_health_check_is_logged_like_any_request(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    break_the_database(client)
+
+    with caplog.at_level(logging.INFO):
+        client.get("/health")
+
+    (record,) = handled(caplog)
+    assert record.levelno == logging.INFO
+    assert record.status == 503  # type: ignore[attr-defined]
+
+
+# /docs answers 200, like a passing health check, on another route.
+@pytest.mark.parametrize("path", ["/docs", "/test/not-found", "/auth/me", "/health/extra"])
+def test_every_other_request_is_still_logged_at_info(
+    client: TestClient, caplog: pytest.LogCaptureFixture, path: str
+) -> None:
+    with caplog.at_level(logging.INFO):
+        client.get(path)
+
+    (record,) = handled(caplog)
+    assert record.levelno == logging.INFO
 
 
 # --- request IDs ------------------------------------------------------------------------
@@ -149,7 +194,8 @@ def test_an_error_body_carries_the_request_id(client: TestClient) -> None:
 def test_each_request_is_logged_without_its_query(
     client: TestClient, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.INFO):
+    # DEBUG, where a passing health check is logged.
+    with caplog.at_level(logging.DEBUG):
         response = client.get("/health?question=salary+bands+for+carol")
 
     record = next(r for r in caplog.records if r.message == "request handled")

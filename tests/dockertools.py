@@ -1,5 +1,6 @@
 """Running Docker from the tests that need it (pytest -m docker)."""
 
+import json
 import socket
 import subprocess
 import time
@@ -43,4 +44,24 @@ def wait_for(url: str, seconds: float = 120) -> httpx.Response:
             pass
         if time.monotonic() > deadline:
             raise AssertionError(f"{url} never answered")
+        time.sleep(1)
+
+
+def health_of(container: str) -> dict[str, object] | None:
+    """The container's health as Docker keeps it: its status and its last few checks."""
+    found = docker("inspect", "--format", "{{json .State.Health}}", container).stdout
+    state: dict[str, object] | None = json.loads(found)
+    return state
+
+
+def wait_healthy(container: str, seconds: float = 180) -> None:
+    """Wait for Docker to call the container healthy, by the image's own check."""
+    deadline = time.monotonic() + seconds
+    while True:
+        state = health_of(container)
+        assert state is not None, f"{container} has no health check"
+        if state["Status"] == "healthy":
+            return
+        if state["Status"] == "unhealthy" or time.monotonic() > deadline:
+            raise AssertionError(f"{container} is {state['Status']}: {state['Log']}")
         time.sleep(1)

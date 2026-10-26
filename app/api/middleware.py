@@ -8,7 +8,10 @@ across services, but only one made of letters, digits and dashes, at most
 line.
 
 The log line has the method, the route pattern, the status and the time. Not the
-query string, which can hold a question, and not the client's address.
+query string, which can hold a question, and not the client's address. A
+health check that passes is logged at DEBUG: Docker asks every 30 seconds,
+and at INFO that would be most of the log. One that fails is logged like
+any other request.
 
 An error nothing else handled becomes a fixed 500 here rather than in an
 exception handler: the handler for unexpected errors runs outside this
@@ -59,6 +62,7 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 UNMATCHED = "(no matching route)"
+HEALTH_PATH = "/health"
 _SAFE_REQUEST_ID = re.compile(r"[A-Za-z0-9-]{1,64}")
 
 Handler = Callable[[Request], Awaitable[Response]]
@@ -110,7 +114,10 @@ async def _around_request(request: Request, call_next: Handler, max_body_bytes: 
         if "cache-control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
         route = request.scope.get("route")
-        logger.info(
+        path = getattr(route, "path", UNMATCHED)
+        passed_health_check = path == HEALTH_PATH and response.status_code == 200
+        logger.log(
+            logging.DEBUG if passed_health_check else logging.INFO,
             "request handled",
             extra={
                 "method": request.method,
@@ -118,7 +125,7 @@ async def _around_request(request: Request, call_next: Handler, max_body_bytes: 
                 # matched no route is not logged: it is whatever the client
                 # typed, and could be a question or a line made to look like
                 # a log entry.
-                "path": getattr(route, "path", UNMATCHED),
+                "path": path,
                 "status": response.status_code,
                 "milliseconds": round((time.perf_counter() - started) * 1000),
             },
