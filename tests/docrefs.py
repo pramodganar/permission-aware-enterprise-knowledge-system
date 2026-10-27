@@ -1,4 +1,4 @@
-"""Reading the tests a document names, for the tests that keep documents true.
+"""Reading what a document names, tests and headings, for the tests that keep documents true.
 
 A document names a test as `tests/path/to/file.py::test_name`, in backticks.
 """
@@ -27,3 +27,21 @@ def check_references(owner: str, said: str) -> None:
         path = ROOT / file
         assert path.is_file(), f"{owner} names {file}, which doesn't exist"
         assert defines(path, name), f"{owner} names {name}, which {file} doesn't define"
+
+
+_FENCED = re.compile(r"```.*?```", re.DOTALL)
+_HEADING = re.compile(r"^#{1,6} (.+)$", re.MULTILINE)
+
+
+def prose(path: Path) -> str:
+    """A Markdown page without its code blocks, where a # is a comment, not a heading."""
+    return _FENCED.sub("", path.read_text(encoding="utf-8"))
+
+
+def slug(heading: str) -> str:
+    """A heading's anchor as GitHub makes it."""
+    return re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+
+
+def anchors(path: Path) -> set[str]:
+    return {slug(heading) for heading in _HEADING.findall(prose(path))}

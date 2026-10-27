@@ -63,6 +63,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Configuration](docs/configuration.md): every setting, where settings come from, what production changes, and secrets as files
 - [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
 - [Logging](docs/logging.md): the log's format, following one request, where the time goes, what is never written, and every event
+- [CI](docs/ci.md): what runs on every push, what it may do, and what it does and doesn't hold back
 - [Monitoring](docs/monitoring.md): the signals, the targets, the rules that call for someone, and what to do when each fires
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
 - [Decision records](docs/adr/README.md): why the main design choices were made
@@ -193,6 +194,8 @@ ruff format --check .
 mypy
 pytest --cov
 ```
+
+GitHub runs the same on Linux for every push, and builds and runs the images when anything in them changes ([CI](docs/ci.md)).
 
 To look for secrets in every tracked file and every commit, the local `.env`'s own values included (it prints where, never what):
 

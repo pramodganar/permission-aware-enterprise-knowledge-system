@@ -1,0 +1,63 @@
+# Every push and pull request: the same checks as the README's, on Linux
+# (docs/ci.md). Publishes nothing and needs no secret.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read the code, nothing else: no job here writes to the repository.
+permissions:
+  contents: read
+
+# A newer push makes the older run's result moot.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, tests and secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # The tests never load the real models (pytest -m model does), so
+      # nothing may be fetched: a test that tries fails here first.
+      HF_HUB_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The secret scan reads every commit, not only the last.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install
+        # PyTorch from its CPU-only index first, the version the images use:
+        # the default Linux build brings gigabytes of GPU libraries.
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
+          python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .
+
+      - name: Types
+        run: mypy
+
+      - name: Tests
+        run: pytest --cov
+
+      - name: Secrets
+        run: python -m scripts.scan_secrets

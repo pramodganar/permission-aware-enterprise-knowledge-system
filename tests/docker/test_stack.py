@@ -31,6 +31,12 @@ class Stack:
         self.api_port, self.ui_port = free_port(), free_port()
         self.secrets = folder / f"{self.project}-secrets"
         make(self.secrets)
+        # On a Linux host Docker mounts the files as they are, readable by
+        # their owner only, and the service's user isn't their owner. The docs
+        # give them to it with sudo chown 10001; a test's throwaway secrets
+        # are made readable instead (docs/configuration.md#secrets-as-files).
+        for path in self.secrets.iterdir():
+            path.chmod(0o644)
         self.password = (self.secrets / "seed_password").read_text("utf-8").strip()
         values = {
             "SECRETS_DIR": self.secrets.as_posix(),
