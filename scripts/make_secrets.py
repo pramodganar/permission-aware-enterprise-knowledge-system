@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     except InTheWayError as error:
         print(
             f"error: a folder is where a file should be, in {arguments.folder}: {error}. "
-            "Docker makes an empty one when it starts before the file exists. "
+            "Docker Desktop makes an empty one when it starts before the file exists. "
             "Remove it and run this again.",
             file=sys.stderr,
         )

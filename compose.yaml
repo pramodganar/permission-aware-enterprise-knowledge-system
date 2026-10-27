@@ -83,8 +83,9 @@ services:
     restart: unless-stopped
     ports: ["127.0.0.1:${UI_PORT:-8501}:8501"]
 
-# Made by python -m scripts.make_secrets. A missing one makes Docker mount
-# an empty folder in its place, which the service refuses, naming it.
+# Made by python -m scripts.make_secrets. A missing one is refused: on Linux
+# Docker won't start the container, and Docker Desktop mounts an empty folder
+# in its place, which the service refuses, naming it.
 secrets:
   app_jwt_secret_key:
     file: ${SECRETS_DIR:-./secrets}/app_jwt_secret_key

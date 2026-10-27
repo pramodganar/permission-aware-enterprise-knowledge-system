@@ -13,6 +13,15 @@ The Docker workflow watches the Dockerfile, `.dockerignore`, `compose.yaml`, the
 
 Both can be run from the repository's Actions tab with "Run workflow".
 
+**How long, and what it costs.** The first runs, on GitHub's `ubuntu-24.04` machines:
+
+| Workflow | Whole run | Of which |
+|---|---|---|
+| CI | 20 min | installing 1 min, `mypy` 1 min, the tests 18 min |
+| Docker | 5 min | installing 1 min, building both images from nothing and the 45 tests 4 min |
+
+On a private repository GitHub's free plan gives 2,000 minutes a month, so about 95 pushes, fewer when the Docker workflow runs too. The tests take as long as on the development laptop (16 minutes): no one test dominates, the slowest is 30 seconds, so there is nothing worth splitting across machines yet.
+
 ## What it can't check
 
 - **The real models.** Tests marked `model` load the embedding model and `llm` a local language model; both are left out here as on a laptop (`pytest -m model` runs them). CI runs with `HF_HUB_OFFLINE=1`, so a test that would fetch a model fails instead of quietly downloading one.
@@ -46,7 +55,13 @@ Not much, on purpose: a workflow runs the repository's code on GitHub's machines
 
 Everything CI runs can be run on a laptop, and should be before a push: the commands in the README's [checks](../README.md#checks), the secret scan, and `pytest -m docker` when the images changed. The only difference is the operating system: CI runs on Linux.
 
-**Linux showed one difference before CI ever ran.** Docker on a Linux host mounts the secret files as they are, readable by their owner only, and the service's user isn't their owner ([configuration](configuration.md#secrets-as-files)). The stack tests make their own throwaway secrets readable for that reason; the docs give a real machine's files to the service's user instead.
+**What Linux found.** Three things the project's Windows laptop hid:
+
+- **Secret files readable by their owner only.** Docker on a Linux host mounts them as they are, and the service's user isn't their owner ([configuration](configuration.md#secrets-as-files)). Seen before CI ran, from the docs: the stack tests make their own throwaway secrets readable, and the docs give a real machine's files to the service's user.
+- **A missing secret file is refused differently.** Docker Desktop mounts an empty folder in its place, which the service refuses, naming it; Docker Engine on Linux won't start the container at all. Both stop `setup`, and the API never starts, but the test expected Docker Desktop's way, and the docs said it was Docker's. Both now say which is which ([Docker](docker.md#running-them-together)), and the test checks each on its own system.
+- **A link test that passed on Windows only.** An example of a Markdown link in inline code, `[S1](...)`, was read as a link to a file called `...`; Windows drops trailing dots from a path, so it found the folder `docs`. Inline code is no longer read for links.
+
+The first runs of both workflows failed on these, one test each out of 3,627 and 45; the fixes went in the next push.
 
 ## Not covered
 

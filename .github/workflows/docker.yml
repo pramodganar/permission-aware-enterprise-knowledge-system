@@ -1,6 +1,6 @@
 # Build both images and run them, alone and as the Compose stack, when
-# anything that goes into them changes, or by hand (docs/ci.md). About ten
-# minutes, most of it the first build, so it doesn't run on every push.
+# anything that goes into them changes, or by hand (docs/ci.md). About five
+# minutes, most of it building the images, so it doesn't run on every push.
 
 name: Docker
 

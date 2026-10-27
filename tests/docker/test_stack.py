@@ -9,6 +9,7 @@ its volume however the tests end.
 import json
 import re
 import secrets
+import sys
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
@@ -311,15 +312,29 @@ def test_a_missing_key_file_stops_the_setup_naming_it_and_the_api_never_starts(
     tmp_path: Path,
 ) -> None:
     missing = Stack(tmp_path)
-    (missing.secrets / "app_jwt_secret_key").unlink()
+    gone = missing.secrets / "app_jwt_secret_key"
+    gone.unlink()
     try:
-        assert "didn't complete successfully" in missing.up(check=False)
-        setup = missing.compose("logs", "setup")
-        api = missing.container("api")["State"]
-        assert isinstance(api, dict)
+        started = missing.up(check=False)
 
-        # Docker mounted an empty folder in the file's place; the service says so.
-        assert "app_jwt_secret_key in /run/secrets is a folder" in setup
-        assert api["Status"] == "created"
+        if sys.platform == "linux":
+            # Docker Engine refuses to start a container whose file isn't there.
+            assert f"does not exist: {gone.as_posix()}" in started
+        else:
+            # Docker Desktop mounts an empty folder in its place, which the
+            # service refuses, naming it.
+            assert "didn't complete successfully" in started
+            setup = missing.compose("logs", "setup")
+            assert "app_jwt_secret_key in /run/secrets is a folder" in setup
+        assert never_started(missing, "api")
     finally:
         missing.down("-v")
+
+
+def never_started(stack: Stack, service: str) -> bool:
+    name = f"{stack.project}-{service}-1"
+    if not docker("ps", "-a", "-q", "--filter", f"name=^{name}$").stdout.split():
+        return True
+    state = stack.container(service)["State"]
+    assert isinstance(state, dict)
+    return str(state["StartedAt"]).startswith("0001-01-01")

@@ -14,7 +14,7 @@ Then the setting's default, if it has one. The signing key has none, so the serv
 
 A value that is wrong stops the service at startup with the setting's name and what is wrong with it, never the value given: a mistyped key doesn't end up in a log.
 
-`APP_SECRETS_DIR` itself isn't a setting: it says where settings come from. If it names something that isn't a folder, or the folder has a folder in it, the service refuses to start and says which. That second one is how a missing file shows up under Docker, which mounts an empty folder in place of a file it can't find.
+`APP_SECRETS_DIR` itself isn't a setting: it says where settings come from. If it names something that isn't a folder, or the folder has a folder in it, the service refuses to start and says which. That second one is how a missing file shows up under Docker Desktop, which mounts an empty folder in place of a file it can't find; Docker Engine on Linux refuses to start the container instead ([Docker](docker.md#running-them-together)).
 
 An empty value counts as no value for the model key and the seed password, because Docker Compose passes a variable that isn't set as an empty one.
 

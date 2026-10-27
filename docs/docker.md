@@ -62,7 +62,7 @@ Then the UI is at http://127.0.0.1:8501 and the API at http://127.0.0.1:8000. `A
 | `seed_password` | `setup` |
 | `app_llm_api_key` | `api`; empty, no hosted model |
 
-A missing file doesn't stop Compose: Docker mounts an empty folder in its place, and leaves one on the host. The service refuses that and names it, so `setup` fails and the API never starts; `make_secrets` says the same if it finds one.
+A missing file is refused either way, so `setup` fails and the API never starts, but each Docker refuses it differently. Docker Engine, on a Linux host, won't start the container, and names the file that `does not exist`. Docker Desktop, on Windows and macOS, mounts an empty folder in its place, and leaves one on the host; the service refuses that and names it, and `make_secrets` says the same if it finds one. A test runs both: on Windows locally and on Linux in [CI](ci.md).
 
 **Settings.** Compose reads `.env` itself and passes on only the settings `compose.yaml` names, so the rest of `.env`, the database's path for example, never reaches a container:
 

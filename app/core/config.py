@@ -53,11 +53,11 @@ def secrets_dir() -> Path | None:
     if not folder.is_dir():
         raise SecretsFolderError(f"{SECRETS_DIR_VARIABLE} is not a folder: {folder}")
     for entry in folder.iterdir():
-        # Docker mounts an empty folder in place of a secret file it can't
-        # find, and leaves one on the host. Said here, it's found at once.
+        # Docker Desktop mounts an empty folder in place of a secret file it
+        # can't find, and leaves one on the host. Said here, it's found at once.
         if entry.is_dir():
             raise SecretsFolderError(
-                f"{entry.name} in {folder} is a folder, not a file: Docker makes an "
+                f"{entry.name} in {folder} is a folder, not a file: Docker Desktop makes an "
                 "empty one when the file it should mount is missing"
             )
     return folder
