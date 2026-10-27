@@ -14,7 +14,7 @@ The setting is AcmeCorp, a fictional company with seven departments. All documen
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is complete: logging in, listing and opening documents, searching, asking, managing documents and the audit trail, with a security test that walks every route. The web UI covers all of it, talks only to the API, and starts with the API in one command.
+Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is complete: logging in, listing and opening documents, searching, asking, managing documents and the audit trail, with a security test that walks every route. The web UI covers all of it, talks only to the API, and starts with the API in one command. Both run as hardened containers, and GitHub checks every push on Linux and builds and runs the images when they change.
 
 - [x] Requirements, personas, architecture, threat model, decision records
 - [x] Project structure, settings, logging, error types, lint and type checks
@@ -28,7 +28,7 @@ Work in progress. Identity, authorization, document ingestion, permission-aware 
 - [x] API: login, documents, search and ask, admin routes, audit trail, and a walk of every route for its authorization
 - [x] UI: signing in, asking and searching, documents, managing documents and the audit trail, each offered by permission (and a public demo page: [docs/demo.md](docs/demo.md))
 - [x] Evaluation: a labelled set of 73 questions, retrieval, leakage through the API, answer quality checked by hand, latency, and one command that checks every target
-- [ ] Docker and CI
+- [x] Docker and CI: two images, Compose with secrets as files, health checks, JSON logs, monitoring from the log, CI on Linux for every push, and a deployment guide with HTTPS, backups and restore
 
 Measured on the AcmeCorp data ([evaluation report](docs/evaluation-report.md)): no leak in 18 forbidden and injection probes, in any configuration, including a model that repeats everything it was given; 1 wrongful refusal in 34 answerable questions with Groq; the answer chunk in the top five for 33 of 34; 33 answers of which, by hand, all are correct and 32 faithful; retrieval 7.4 ms and an answered question 1.6 s at p95, and the permission filter 2.6 ms at the median. How each is measured, and what it doesn't cover, is in [evaluation](docs/evaluation.md).
 
