@@ -166,12 +166,19 @@ def test_a_call_exactly_one_short_window_old_no_longer_counts_in_it(clock: Clock
     limiter.take("a")
 
 
+# Threads switch every 100 microseconds instead of every 5 ms, so a take that
+# isn't atomic is interrupted part way: without the lock, this catches it on
+# every run, and at 5 ms on none. Every microsecond caught it too, but on
+# GitHub's Linux machines it once stalled a run for an hour.
+SWITCH_INTERVAL = 1e-4
+# Far longer than the 50 calls take, short enough that a stall fails here.
+STALL = 30.0
+
+
 @pytest.fixture
 def switching_often() -> Iterator[None]:
-    # Threads switch every microsecond instead of every 5 ms, so a take that
-    # isn't atomic is interrupted part way.
     before = sys.getswitchinterval()
-    sys.setswitchinterval(1e-6)
+    sys.setswitchinterval(SWITCH_INTERVAL)
     yield
     sys.setswitchinterval(before)
 
@@ -180,7 +187,7 @@ def switching_often() -> Iterator[None]:
 @pytest.mark.parametrize("attempt", range(20))
 def test_calls_at_the_same_moment_from_many_threads_take_exactly_the_limit(attempt: int) -> None:
     limiter = RateLimiter([Window(10, 3600), Window(10, 7200)])
-    start = threading.Barrier(50)
+    start = threading.Barrier(50, timeout=STALL)
     taken: list[bool] = []
 
     def call() -> None:
@@ -195,8 +202,9 @@ def test_calls_at_the_same_moment_from_many_threads_take_exactly_the_limit(attem
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join()
+        thread.join(timeout=STALL)
 
+    assert not [thread for thread in threads if thread.is_alive()], "the threads stalled"
     assert taken.count(True) == 10
     assert taken.count(False) == 40
 

@@ -4,6 +4,8 @@
 # Testing
 pytest==9.1.1
 pytest-cov==7.1.0
+# A test that hangs fails, with where every thread was, instead of stopping the run
+pytest-timeout==2.4.0
 # Generated inputs, for fuzzing what the service is sent
 hypothesis==6.170.8
 

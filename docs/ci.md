@@ -63,6 +63,11 @@ Everything CI runs can be run on a laptop, and should be before a push: the comm
 
 The first runs of both workflows failed on these, one test each out of 3,627 and 45; the fixes went in the next push.
 
+**Then a run that hung.** The next CI run passed 86% of the tests and then wrote nothing for 47 minutes, until the job's limit stopped it. It was the rate limiter's test of 50 threads calling at once, which made Python switch threads every microsecond so that a call without its lock would be interrupted part way; on GitHub's Linux machine, under coverage, that once stalled, where on the laptop it takes 0.04 seconds. Two changes:
+
+- **The test switches every 100 microseconds,** and waits at most 30 seconds for its threads. Without the lock it still fails on every run, as it did every microsecond; at Python's usual 5 ms it never does, which is why it switches more often at all.
+- **Every test has a time limit,** 5 minutes, its fixtures included (`pytest-timeout`); the slowest takes about 30 seconds. A test that hangs now fails, with where every thread was, instead of stopping the run silently at CI's hour. The Docker tests get an hour, the local model half an hour and the real embedding model 15 minutes ([tests/conftest.py](../tests/conftest.py)).
+
 ## Not covered
 
 - **Dependency updates.** Nothing opens a pull request when a pinned version has a fix. Dependabot would, for the requirements and the actions.

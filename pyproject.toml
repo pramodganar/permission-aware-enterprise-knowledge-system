@@ -11,6 +11,10 @@ markers = [
 ]
 # A warning usually means a test is doing something it shouldn't.
 filterwarnings = ["error"]
+# Seconds a test may take, its fixtures included; the slowest takes about 30.
+# A test that hangs fails with every thread's stack, not silently at CI's
+# own limit an hour later. Slower kinds get more (tests/conftest.py).
+timeout = 300
 
 [tool.coverage.run]
 source = ["app", "evaluation"]

@@ -20,6 +20,19 @@ from app.models import Department
 hypothesis_settings.register_profile("project", derandomize=True, database=None, deadline=None)
 hypothesis_settings.load_profile("project")
 
+# Longer than the default time limit (pyproject.toml), for the kinds that do
+# more: a first image build downloads PyTorch and the model, and a local model
+# takes minutes to answer one question.
+TIME_LIMITS = {"docker": 3600, "llm": 1800, "model": 900}
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        limits = [seconds for kind, seconds in TIME_LIMITS.items() if item.get_closest_marker(kind)]
+        if limits and item.get_closest_marker("timeout") is None:
+            item.add_marker(pytest.mark.timeout(max(limits)))
+
+
 # The database a developer runs the service on. Settings point at it by
 # default, and the service creates any table it is missing at startup, so a
 # test that started the app on the default settings changed it.
