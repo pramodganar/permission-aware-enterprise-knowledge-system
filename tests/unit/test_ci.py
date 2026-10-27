@@ -208,6 +208,10 @@ def test_the_docker_workflow_runs_when_anything_in_the_images_changes() -> None:
         "requirements-ui.txt",
         "tests/docker/test_stack.py",
         "tests/dockertools.py",
+        # How the Docker tests themselves run: their settings, time limits and tools.
+        "tests/conftest.py",
+        "requirements-dev.txt",
+        "pyproject.toml",
         "tests/imagesettings.py",
         ".github/workflows/docker.yml",
     ):

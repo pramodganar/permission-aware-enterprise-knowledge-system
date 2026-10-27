@@ -13,11 +13,14 @@ on:
       - compose.yaml
       - requirements.txt
       - requirements-ui.txt
+      - requirements-dev.txt
+      - pyproject.toml
       - app/**
       - scripts/**
       - ui/**
       - data/acmecorp/**
       - tests/docker/**
+      - tests/conftest.py
       - tests/dockertools.py
       - tests/imagesettings.py
       - .github/workflows/docker.yml
@@ -29,11 +32,14 @@ on:
       - compose.yaml
       - requirements.txt
       - requirements-ui.txt
+      - requirements-dev.txt
+      - pyproject.toml
       - app/**
       - scripts/**
       - ui/**
       - data/acmecorp/**
       - tests/docker/**
+      - tests/conftest.py
       - tests/dockertools.py
       - tests/imagesettings.py
       - .github/workflows/docker.yml

@@ -9,7 +9,7 @@ What runs on GitHub when code is pushed, what it checks, what it can't, and what
 | [CI](../.github/workflows/ci.yml) | Every push to `main`, every pull request, and by hand | The README's checks on Linux, `ruff check .`, `ruff format --check .`, `mypy` and `pytest --cov`, then the secret scan over every file and every commit |
 | [Docker](../.github/workflows/docker.yml) | A push or pull request that changes anything that goes into the images, and by hand | Builds both images and runs `pytest -m docker`: the images alone, then the Compose stack ([Docker](docker.md#tests)) |
 
-The Docker workflow watches the Dockerfile, `.dockerignore`, `compose.yaml`, the requirements, `app/`, `scripts/`, `ui/`, the company's files and its own tests. A test reads every `COPY` in the Dockerfile and fails if the workflow doesn't watch what it copies, so a new file in an image can't go untested. A change to the docs or the evaluation doesn't run it: it builds PyTorch and the model into an image, which costs most of its time.
+The Docker workflow watches the Dockerfile, `.dockerignore`, `compose.yaml`, the requirements, `app/`, `scripts/`, `ui/`, the company's files, its own tests, and what decides how they run: `tests/conftest.py`, with their time limits, and `pyproject.toml`. It first watched only what goes into the images, so a change to the tests' time limits didn't run it. A test reads every `COPY` in the Dockerfile and fails if the workflow doesn't watch what it copies, so a new file in an image can't go untested. A change to the docs or the evaluation doesn't run it: it builds PyTorch and the model into an image, which costs most of its time.
 
 Both can be run from the repository's Actions tab with "Run workflow".
 
