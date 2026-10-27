@@ -62,6 +62,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
 - [Configuration](docs/configuration.md): every setting, where settings come from, what production changes, and secrets as files
 - [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
+- [Deployment](docs/deployment.md): running it on a server behind HTTPS, backing it up, upgrading it, and what a real company would add first
 - [Logging](docs/logging.md): the log's format, following one request, where the time goes, what is never written, and every event
 - [CI](docs/ci.md): what runs on every push, what it may do, and what it does and doesn't hold back
 - [Monitoring](docs/monitoring.md): the signals, the targets, the rules that call for someone, and what to do when each fires
@@ -184,7 +185,7 @@ python -m scripts.make_secrets
 docker compose up --build
 ```
 
-The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. Each image has a health check: the UI is started once the API has loaded and answers, and `docker compose ps` shows whether both still do. `docker compose logs --no-log-prefix --since 15m api | python -m scripts.monitor` reports how it is doing and whether anyone is needed ([monitoring](docs/monitoring.md)). What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
+The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. Each image has a health check: the UI is started once the API has loaded and answers, and `docker compose ps` shows whether both still do. `docker compose logs --no-log-prefix --since 15m api | python -m scripts.monitor` reports how it is doing and whether anyone is needed ([monitoring](docs/monitoring.md)). On a server, `compose.tls.yaml` puts HTTPS in front; [deployment](docs/deployment.md) has every step, backups included. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
 
 ## Checks
 

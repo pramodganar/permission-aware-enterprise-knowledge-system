@@ -204,6 +204,8 @@ def test_the_docker_workflow_runs_when_anything_in_the_images_changes() -> None:
         "Dockerfile",
         ".dockerignore",
         "compose.yaml",
+        "compose.tls.yaml",
+        "deploy/Caddyfile",
         "requirements.txt",
         "requirements-ui.txt",
         "tests/docker/test_stack.py",

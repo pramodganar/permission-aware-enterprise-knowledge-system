@@ -11,6 +11,8 @@ on:
       - Dockerfile
       - .dockerignore
       - compose.yaml
+      - compose.tls.yaml
+      - deploy/**
       - requirements.txt
       - requirements-ui.txt
       - requirements-dev.txt
@@ -30,6 +32,8 @@ on:
       - Dockerfile
       - .dockerignore
       - compose.yaml
+      - compose.tls.yaml
+      - deploy/**
       - requirements.txt
       - requirements-ui.txt
       - requirements-dev.txt

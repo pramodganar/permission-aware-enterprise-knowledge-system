@@ -7,6 +7,13 @@ import time
 
 import httpx
 
+# The backup and the restore of the data volume, run in the API's image, as
+# docs/deployment.md gives them (tests/unit/test_deployment_doc.py).
+BACKUP = ("tar", "-czf", "/backup/knowledge-data.tgz", "-C", "/data", ".")
+RESTORE = ("tar", "-xzf", "/backup/knowledge-data.tgz", "--numeric-owner", "-C", "/data")
+# Where the TLS proxy keeps the authority it makes its own certificates with.
+PROXY_AUTHORITY = "/data/caddy/pki/authorities/local/root.crt"
+
 
 def docker(
     *args: str, check: bool = True, timeout: float = 600

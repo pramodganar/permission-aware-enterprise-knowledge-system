@@ -1,0 +1,33 @@
+# TLS in front of the stack (docs/deployment.md#tls), for compose.tls.yaml.
+#
+# SITE_ADDRESS is the name people use: with a public name that resolves to
+# this machine, Caddy gets a certificate from Let's Encrypt on its own and
+# renews it; with localhost or an IP address it makes one from its own
+# authority, which browsers don't trust until told to. Certificates are kept
+# in the caddy_data volume.
+
+{
+	# No admin endpoint: nothing can reconfigure the proxy while it runs.
+	admin off
+}
+
+{$SITE_ADDRESS} {
+	# The API, under /api: /api/health is the service's /health.
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else is the UI, its websocket included.
+	handle {
+		reverse_proxy ui:8501
+	}
+
+	header {
+		# Browsers come back over HTTPS only, for a year.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# No access log: Caddy's would hold every URL, and the service already
+	# logs each request without its query string (docs/logging.md).
+}

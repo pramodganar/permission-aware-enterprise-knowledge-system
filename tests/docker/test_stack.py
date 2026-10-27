@@ -9,6 +9,7 @@ its volume however the tests end.
 import json
 import re
 import secrets
+import shutil
 import sys
 from collections.abc import Iterator
 from datetime import datetime
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from dockertools import docker, free_port, health_of, wait_for
+from dockertools import BACKUP, RESTORE, docker, free_port, health_of, wait_for
 
 from scripts.make_secrets import make
 
@@ -24,14 +25,38 @@ pytestmark = pytest.mark.docker
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = str(ROOT / "compose.yaml")
+COMPOSE_TLS = str(ROOT / "compose.tls.yaml")
 
 
 class Stack:
-    def __init__(self, folder: Path, **settings: str) -> None:
+    def __init__(
+        self,
+        folder: Path,
+        secrets_of: "Stack | None" = None,
+        *,
+        tls: bool = False,
+        **settings: str,
+    ) -> None:
+        """A stack of its own, with new secrets, or another's: a restore needs its key.
+
+        With ``tls``, the proxy of compose.tls.yaml in front, for localhost.
+        """
         self.project = f"knowledge-test-{secrets.token_hex(4)}"
         self.api_port, self.ui_port = free_port(), free_port()
+        self.files = [COMPOSE, *([COMPOSE_TLS] if tls else [])]
+        if tls:
+            self.https_port, self.http_port = free_port(), free_port()
+            settings = {
+                "SITE_ADDRESS": "localhost",
+                "HTTPS_PORT": str(self.https_port),
+                "HTTP_PORT": str(self.http_port),
+                **settings,
+            }
         self.secrets = folder / f"{self.project}-secrets"
-        make(self.secrets)
+        if secrets_of is None:
+            make(self.secrets)
+        else:
+            shutil.copytree(secrets_of.secrets, self.secrets)
         # On a Linux host Docker mounts the files as they are, readable by
         # their owner only, and the service's user isn't their owner. The docs
         # give them to it with sudo chown 10001; a test's throwaway secrets
@@ -51,8 +76,7 @@ class Stack:
     def compose(self, *args: str, check: bool = True) -> str:
         done = docker(
             "compose",
-            "-f",
-            COMPOSE,
+            *(option for file in self.files for option in ("-f", file)),
             "-p",
             self.project,
             "--env-file",
@@ -75,6 +99,10 @@ class Stack:
             docker("inspect", f"{self.project}-{service}-1").stdout
         )
         return found[0]
+
+    @property
+    def volume(self) -> str:
+        return f"{self.project}_data"
 
     @property
     def api(self) -> str:
@@ -262,6 +290,73 @@ def test_a_restart_keeps_the_data_and_builds_nothing_again(stack: Stack) -> None
     assert "is up to date" in setup
     assert versions.split() == ["000001"]
     assert documents(stack, "carol")["total"] == 6
+
+
+def in_a_container(volume: str, backups: Path, *command: str, writable: str = "") -> str:
+    """Run a command in the API's image, as root, with the volume and the backups folder.
+
+    As in docs/deployment.md: root, so the files keep the owner they had, and
+    no network, because a backup needs none.
+    """
+    return docker(
+        "run",
+        "--rm",
+        "--user",
+        "0",
+        "--network",
+        "none",
+        "-v",
+        f"{volume}:/data{'' if writable == 'data' else ':ro'}",
+        "-v",
+        f"{backups.as_posix()}:/backup{'' if writable == 'backup' else ':ro'}",
+        "knowledge-api",
+        *command,
+    ).stdout
+
+
+def trail(stack: Stack) -> str:
+    return stack.compose("exec", "-T", "api", "python", "-m", "scripts.audit", "check")
+
+
+def test_a_backup_restored_into_a_new_stack_serves_the_same_and_its_trail_still_checks(
+    stack: Stack, tmp_path: Path
+) -> None:
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    before = trail(stack)
+    assert "intact" in before
+
+    # The API stopped while the files are copied, so the database isn't
+    # written half way through.
+    stack.compose("stop", "api")
+    in_a_container(stack.volume, backups, *BACKUP, writable="backup")
+    stack.compose("start", "api")
+    wait_for(f"{stack.api}/health")
+
+    restored = Stack(tmp_path, secrets_of=stack)
+    try:
+        restored.compose("up", "--no-start")
+        in_a_container(restored.volume, backups, *RESTORE, writable="data")
+        restored.up()
+        after = trail(restored)
+
+        # Every record backed up, each still matching its seal, and one more:
+        # setup's seed re-chunks on every start, an admin action, audited.
+        assert "intact" in after
+        assert int(highest(after)) == int(highest(before)) + 1
+        assert documents(restored, "carol")["total"] == 6
+        assert restricted(documents(restored, "david")) == []
+        setup = restored.compose("logs", "setup")
+        assert "documents skipped:   17" in setup
+        assert "is up to date" in setup
+    finally:
+        restored.down("-v")
+
+
+def highest(checked: str) -> str:
+    match = re.search(r"highest ID: (\S+)", checked)
+    assert match, checked
+    return match.group(1)
 
 
 def test_in_production_the_demo_data_is_refused_and_the_api_never_starts(

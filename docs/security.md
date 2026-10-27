@@ -105,7 +105,7 @@ The service's defaults, as `app/core/config.py` has them. A test compares this t
 
 ## Running it for real
 
-What a deployment has to add, because the service doesn't do it itself:
+What a deployment has to add, because the service doesn't do it itself. [Deployment](deployment.md) does each of these that can be done for the fictional company, step by step:
 
 - **Set `APP_ENVIRONMENT=production`**, and generate the signing key with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Changing the key signs everyone out and makes the existing audit seals stop matching ([secrets](secrets.md)).
 - **Put TLS in front.** The service speaks plain HTTP; tokens and questions must not cross a network that way. Run it behind a proxy that terminates TLS, listening on this machine only, as `scripts/run.py` does by default.
