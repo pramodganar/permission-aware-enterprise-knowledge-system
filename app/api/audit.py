@@ -1,6 +1,7 @@
 """Reading the audit trail (FR-14). Needs the audit:read permission.
 
-    GET /audit   ?actor=david@acmecorp.example&action=question.asked&document_id=16
+    GET /audit   ?actor=david@acmecorp.example&action=question.asked
+                 &document_id=3f0c9a52-8d1e-4b7a-9c61-2e5d8f4a7b10
                  &since=2026-10-01T00:00:00Z&until=...&limit=100&offset=0
 
 Newest first. The records hold the questions people asked and which chunks
@@ -8,10 +9,15 @@ they were given, so only a security reviewer may read them, and every read
 is itself recorded. Anyone else gets 403.
 
 Times must include a timezone, like every timestamp in the service.
+
+Documents are named by their public IDs, the ones readers and admins are
+given. A record's details are as they were written: records from before
+public IDs name documents by the service's own numbers.
 """
 
 from datetime import datetime
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import AwareDatetime, BaseModel
@@ -20,8 +26,7 @@ from app.audit.trail import AuditQuery, read_trail
 from app.auth.dependencies import DbSession
 from app.authorization.dependencies import require_permission
 from app.authorization.permissions import Permission
-from app.core.database import MAX_ID
-from app.models import AuditAction, User
+from app.models import AuditAction, User, public_ids
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -43,7 +48,7 @@ class AuditEntry(BaseModel):
     actor: Actor | None
     action: str
     outcome: str
-    document_id: int | None
+    document_id: UUID | None
     question: str | None
     chunk_ids: list[int]
     details: dict[str, Any]
@@ -61,7 +66,7 @@ def read_audit_trail(
     response: Response,
     actor: Annotated[str | None, Query(max_length=255)] = None,
     action: AuditAction | None = None,
-    document_id: Annotated[int | None, Query(ge=1, le=MAX_ID)] = None,
+    document_id: UUID | None = None,
     since: AwareDatetime | None = None,
     until: AwareDatetime | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 100,
@@ -81,6 +86,7 @@ def read_audit_trail(
         ),
     )
 
+    named = public_ids(db, (entry.document_id for entry in page.records))
     response.headers["Cache-Control"] = "no-store"
     return AuditList(
         total=page.total,
@@ -94,7 +100,7 @@ def read_audit_trail(
                 else Actor(id=entry.actor_id, email=page.emails.get(entry.actor_id, "")),
                 action=entry.action,
                 outcome=entry.outcome,
-                document_id=entry.document_id,
+                document_id=None if entry.document_id is None else named[entry.document_id],
                 question=entry.question,
                 chunk_ids=entry.chunk_ids,
                 details=entry.details,

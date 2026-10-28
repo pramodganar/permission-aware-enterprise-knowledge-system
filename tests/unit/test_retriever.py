@@ -104,6 +104,7 @@ def test_each_chunk_carries_its_text_and_what_is_needed_to_cite_it(acme: Company
         assert found == RetrievedChunk(
             chunk_id=chunk.id,
             document_id=chunk.document_id,
+            document_public_id=chunk.document.public_id,
             document_title=chunk.document.title,
             document_version=chunk.document.version,
             position=chunk.position,

@@ -12,6 +12,7 @@ the browser next, and nothing stale on screen after someone's access changes.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from uuid import UUID
 
 from ui.client import (
     Api,
@@ -53,7 +54,7 @@ class Choices:
 
     departments: dict[str, str]  # code -> name
     classifications: tuple[str, ...]
-    documents: dict[int, str]  # id -> how it is shown
+    documents: dict[UUID, str]  # id -> how it is shown
 
     @property
     def empty(self) -> bool:
@@ -86,7 +87,7 @@ def choices(documents: Iterable[DocumentSummary]) -> Choices:
 
 
 def chosen(
-    departments: Iterable[str], classifications: Iterable[str], documents: Iterable[int]
+    departments: Iterable[str], classifications: Iterable[str], documents: Iterable[UUID]
 ) -> Filters:
     """The filters for what was picked. Nothing picked is no filter."""
     return Filters(

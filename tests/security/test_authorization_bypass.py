@@ -15,6 +15,7 @@ import json
 from collections.abc import Iterator
 from itertools import product
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -82,8 +83,9 @@ def labels(db: Session) -> list[tuple[Any, ...]]:
     ]
 
 
-def ids_by_title(db: Session) -> dict[str, int]:
-    return {d.title: d.id for d in db.scalars(select(Document))}
+def ids_by_title(db: Session) -> dict[str, UUID]:
+    """Each document's public ID, the one the routes take."""
+    return {d.title: d.public_id for d in db.scalars(select(Document))}
 
 
 # --- an admin who can also read ---------------------------------------------------------
@@ -265,13 +267,18 @@ def test_a_search_written_in_another_shape_never_reaches_further(
 ) -> None:
     david = headers(client, "david")
     question = "What are the salary bands for senior engineers?"
-    hidden = [n for t, n in ids_by_title(db).items() if t not in MAY_READ["david"]]
+    hidden = [str(n) for t, n in ids_by_title(db).items() if t not in MAY_READ["david"]]
+    first = UUID(hidden[0])
     grace = person(db, "grace").id
     bodies: list[Any] = [
         {"question": question, "filters": {"document_ids": [True]}},
-        {"question": question, "filters": {"document_ids": [str(hidden[0])]}},
-        {"question": question, "filters": {"document_ids": [float(hidden[0])]}},
-        {"question": question, "filters": {"document_ids": [-1, 0]}},
+        # The same ID written other ways, and as numbers.
+        {"question": question, "filters": {"document_ids": [hidden[0].upper()]}},
+        {"question": question, "filters": {"document_ids": [first.hex]}},
+        {"question": question, "filters": {"document_ids": [f"{{{first}}}"]}},
+        {"question": question, "filters": {"document_ids": [first.urn]}},
+        {"question": question, "filters": {"document_ids": [first.int]}},
+        {"question": question, "filters": {"document_ids": [-1, 0, 16]}},
         {"question": question, "filters": {"document_ids": [2**70]}},
         {"question": question, "filters": {"document_ids": hidden}},
         {"question": question, "filters": {"departments": ["HR "]}},

@@ -7,13 +7,14 @@ of person, and every way a call can fail.
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import httpx
 import pytest
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from apiclient import PASSWORD, company_app, email
+from apiclient import MISSING, PASSWORD, company_app, email
 from app.core.config import Settings
 from app.models import Document
 from app.rag.llm import LLMProvider
@@ -59,8 +60,9 @@ def sign_in(api: Api, name: str) -> str:
     return api.login(email(name), PASSWORD).token
 
 
-def document_id(db: Session, title: str) -> int:
-    return db.scalars(select(Document.id).where(Document.title == title)).one()
+def document_id(db: Session, title: str) -> UUID:
+    """The ID the service gives the document: its public one."""
+    return db.scalars(select(Document).where(Document.title == title)).one().public_id
 
 
 # --- signing in -------------------------------------------------------------------------
@@ -156,7 +158,7 @@ def test_a_document_opens_with_its_text_or_is_not_found(api: Api, db: Session) -
     with pytest.raises(NotFound) as forbidden:
         api.document(david, case_file)
     with pytest.raises(NotFound) as missing:
-        api.document(david, 999_999)
+        api.document(david, MISSING)
 
     assert "E-2291" in opened.content
     assert forbidden.value.message == missing.value.message == "Not found."
@@ -319,7 +321,7 @@ def test_the_token_only_ever_travels_in_the_authorization_header(start: StartSer
         token = api.login(email("henry"), PASSWORD).token
         api.me(token)
         api.documents(token, department="sales")
-        api.managed(token, 1)
+        api.managed_documents(token)
     calls = [str(request.url) for request in sent]
     bodies = [request.content for request in sent[1:]]
 

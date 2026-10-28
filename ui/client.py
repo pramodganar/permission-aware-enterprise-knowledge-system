@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
 from urllib.parse import quote
+from uuid import UUID
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -63,7 +64,7 @@ class Me(_Model):
 
 
 class DocumentSummary(_Model):
-    id: int
+    id: UUID
     title: str
     department: Department
     classification: str
@@ -85,7 +86,7 @@ class DocumentDetail(DocumentSummary):
 
 
 class DocumentRef(_Model):
-    id: int
+    id: UUID
     title: str
     version: int
 
@@ -123,7 +124,7 @@ class Grant(_Model):
 
 
 class ManagedDocument(_Model):
-    id: int
+    id: UUID
     version: int
     status: str
     department: str
@@ -131,9 +132,14 @@ class ManagedDocument(_Model):
     file_type: str
     size_bytes: int
     chunks: int
-    supersedes_id: int | None
+    supersedes_id: UUID | None
     grants: list[Grant]
     in_index: bool
+
+
+class ManagedList(_Model):
+    total: int
+    documents: list[ManagedDocument]
 
 
 class Actor(_Model):
@@ -148,7 +154,7 @@ class AuditEntry(_Model):
     actor: Actor | None
     action: str
     outcome: str
-    document_id: int | None
+    document_id: UUID | None
     question: str | None
     chunk_ids: list[int]
     details: dict[str, Any]
@@ -174,13 +180,13 @@ class Filters:
 
     departments: tuple[str, ...] = ()
     classifications: tuple[str, ...] = ()
-    document_ids: tuple[int, ...] = ()
+    document_ids: tuple[UUID, ...] = ()
 
     def body(self) -> dict[str, list[Any]] | None:
         chosen: dict[str, list[Any]] = {
             "departments": list(self.departments),
             "classifications": list(self.classifications),
-            "document_ids": list(self.document_ids),
+            "document_ids": [str(document_id) for document_id in self.document_ids],
         }
         # The API refuses an empty list, so a filter that isn't set is left out.
         kept = {name: values for name, values in chosen.items() if values}
@@ -302,8 +308,8 @@ class Api:
             params["classification"] = classification
         return self._get(DocumentList, token, "/documents", params=params)
 
-    def document(self, token: str, document_id: int) -> DocumentDetail:
-        return self._get(DocumentDetail, token, f"/documents/{int(document_id)}")
+    def document(self, token: str, document_id: UUID) -> DocumentDetail:
+        return self._get(DocumentDetail, token, f"/documents/{_id(document_id)}")
 
     def search(self, token: str, question: str, filters: Filters | None = None) -> SearchResult:
         return self._post(SearchResult, token, "/search", _question(question, filters))
@@ -342,15 +348,19 @@ class Api:
         )
         return _parse(ManagedDocument, response)
 
-    def managed(self, token: str, document_id: int) -> ManagedDocument:
-        return self._get(ManagedDocument, token, f"/admin/documents/{int(document_id)}")
+    def managed_documents(self, token: str, *, limit: int = 100, offset: int = 0) -> ManagedList:
+        params = {"limit": limit, "offset": offset}
+        return self._get(ManagedList, token, "/admin/documents", params=params)
+
+    def managed(self, token: str, document_id: UUID) -> ManagedDocument:
+        return self._get(ManagedDocument, token, f"/admin/documents/{_id(document_id)}")
 
     def new_version(
-        self, token: str, document_id: int, *, filename: str, data: bytes, title: str | None = None
+        self, token: str, document_id: UUID, *, filename: str, data: bytes, title: str | None = None
     ) -> ManagedDocument:
         response = self._send(
             "POST",
-            f"/admin/documents/{int(document_id)}/versions",
+            f"/admin/documents/{_id(document_id)}/versions",
             token=token,
             files={"file": (filename, data)},
             data={"title": title} if title else {},
@@ -360,7 +370,7 @@ class Api:
     def relabel(
         self,
         token: str,
-        document_id: int,
+        document_id: UUID,
         *,
         classification: str | None = None,
         department: str | None = None,
@@ -371,28 +381,28 @@ class Api:
             if value is not None
         }
         response = self._send(
-            "PATCH", f"/admin/documents/{int(document_id)}", token=token, json=body
+            "PATCH", f"/admin/documents/{_id(document_id)}", token=token, json=body
         )
         return _parse(ManagedDocument, response)
 
-    def delete(self, token: str, document_id: int) -> None:
-        self._send("DELETE", f"/admin/documents/{int(document_id)}", token=token)
+    def delete(self, token: str, document_id: UUID) -> None:
+        self._send("DELETE", f"/admin/documents/{_id(document_id)}", token=token)
 
     def grant(
-        self, token: str, document_id: int, email: str, expires_at: datetime | None = None
+        self, token: str, document_id: UUID, email: str, expires_at: datetime | None = None
     ) -> ManagedDocument:
         body: dict[str, Any] = {"email": email}
         if expires_at is not None:
             body["expires_at"] = expires_at.isoformat()
         response = self._send(
-            "PUT", f"/admin/documents/{int(document_id)}/grants", token=token, json=body
+            "PUT", f"/admin/documents/{_id(document_id)}/grants", token=token, json=body
         )
         return _parse(ManagedDocument, response)
 
-    def revoke(self, token: str, document_id: int, email: str) -> None:
+    def revoke(self, token: str, document_id: UUID, email: str) -> None:
         # The email is a path segment: quoted, so "/" or "?" in it can't change the route.
         quoted = quote(email, safe="@")
-        self._send("DELETE", f"/admin/documents/{int(document_id)}/grants/{quoted}", token=token)
+        self._send("DELETE", f"/admin/documents/{_id(document_id)}/grants/{quoted}", token=token)
 
     # The audit trail (audit:read)
 
@@ -402,7 +412,7 @@ class Api:
         *,
         actor: str | None = None,
         action: str | None = None,
-        document_id: int | None = None,
+        document_id: UUID | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 100,
@@ -412,7 +422,7 @@ class Api:
         for name, value in (
             ("actor", actor),
             ("action", action),
-            ("document_id", document_id),
+            ("document_id", None if document_id is None else _id(document_id)),
             ("since", since.isoformat() if since else None),
             ("until", until.isoformat() if until else None),
         ):
@@ -465,6 +475,11 @@ class Api:
         if response.status_code >= 400:
             raise _error(response)
         return response
+
+
+def _id(document_id: UUID) -> str:
+    # Read again as a UUID, so nothing but an ID can reach the path.
+    return str(UUID(str(document_id)))
 
 
 def _question(question: str, filters: Filters | None) -> dict[str, Any]:

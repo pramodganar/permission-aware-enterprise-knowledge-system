@@ -1,9 +1,12 @@
+import logging
+import uuid
+from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, Uuid, event, insert, select
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship, validates
 
 from app.core.database import Base, UtcDateTime, utc_now
 
@@ -11,6 +14,8 @@ if TYPE_CHECKING:
     from app.models.chunk import Chunk
     from app.models.department import Department
     from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 class Classification(StrEnum):
@@ -47,6 +52,9 @@ class Document(Base):
 
     The file details and the title are part of the document. They are shown
     only to people who may read it, like the text.
+
+    ``id`` is numbered in the order documents are stored and never leaves the
+    service: everyone outside it knows a document by its ``public_id``.
     """
 
     __tablename__ = "documents"
@@ -82,6 +90,12 @@ class Document(Base):
     chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="Chunk.position"
     )
+    # Loaded with the document, since every response that names it needs it.
+    public: Mapped["DocumentPublicId"] = relationship(lazy="joined", cascade="all, delete-orphan")
+
+    @property
+    def public_id(self) -> uuid.UUID:
+        return self.public.public_id
 
     @validates("classification")
     def check_classification(self, _: str, value: str) -> str:
@@ -119,3 +133,73 @@ class DocumentGrant(Base):
 
     def __repr__(self) -> str:
         return f"DocumentGrant(document_id={self.document_id!r}, user_id={self.user_id!r})"
+
+
+class DocumentPublicId(Base):
+    """The ID a document is known by outside the service (threat T36).
+
+    A document's own ID is numbered in the order documents are stored, so a
+    reader shown IDs 3 and 7 would know three documents were stored between
+    them. This one is random, so it says nothing about any other document.
+
+    It has a table of its own so that a database made before it existed gains
+    it without a table being changed: the service creates missing tables and
+    never alters one, so the audit seals arrived the same way.
+    """
+
+    __tablename__ = "document_public_ids"
+
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), primary_key=True)
+    public_id: Mapped[uuid.UUID] = mapped_column(Uuid, unique=True)
+
+    def __repr__(self) -> str:
+        return f"DocumentPublicId(document_id={self.document_id!r})"
+
+
+def new_public_id() -> uuid.UUID:
+    # 122 random bits from the operating system: nothing about the document,
+    # the time or any other document goes into it.
+    return uuid.uuid4()
+
+
+@event.listens_for(Document, "init")
+def _give_public_id(document: Document, _: Any, __: Any) -> None:
+    # Every document gets one when it is made, before anything can show it.
+    document.public = DocumentPublicId(public_id=new_public_id())
+
+
+def give_public_ids(db: Session) -> int:
+    """Give each document stored before public IDs existed one of its own. Returns how many."""
+    missing = db.scalars(
+        select(Document.id)
+        .outerjoin(DocumentPublicId, DocumentPublicId.document_id == Document.id)
+        .where(DocumentPublicId.document_id.is_(None))
+    ).all()
+    if missing:
+        db.execute(
+            insert(DocumentPublicId),
+            [{"document_id": number, "public_id": new_public_id()} for number in missing],
+        )
+        db.commit()
+        logger.info("public document IDs given", extra={"documents": len(missing)})
+    return len(missing)
+
+
+def document_number(db: Session, public_id: uuid.UUID) -> int | None:
+    """The document's own ID, or None if no document has this public ID."""
+    return db.scalar(
+        select(DocumentPublicId.document_id).where(DocumentPublicId.public_id == public_id)
+    )
+
+
+def public_ids(db: Session, numbers: Iterable[int | None]) -> dict[int, uuid.UUID]:
+    """The public ID of each of these documents, by their own ID."""
+    wanted = {number for number in numbers if number is not None}
+    if not wanted:
+        return {}
+    rows = db.execute(
+        select(DocumentPublicId.document_id, DocumentPublicId.public_id).where(
+            DocumentPublicId.document_id.in_(wanted)
+        )
+    )
+    return dict(rows.all())

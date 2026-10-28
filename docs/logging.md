@@ -136,7 +136,7 @@ The service's own, by area. A field that is `null` wasn't known or doesn't apply
 | `document access revoked` | INFO | `app.authorization.document_access` | `document_id`, `user_id`, `grantee_id` |
 | `document labels changed` | INFO | `app.authorization.document_access` | `document_id`, `user_id`, `old_classification`, `new_classification`, `old_department`, `new_department` |
 
-`login failed` has a `user_id` only when the email belongs to someone. `exists` says whether a document that wasn't returned exists at all; the client is told the same thing either way.
+`login failed` has a `user_id` only when the email belongs to someone. `exists` says whether a document that wasn't returned exists at all; the client is told the same thing either way. `document_id` in the log is always the database's own number, never the public ID a client sees, and is empty when no document has the ID asked for.
 
 **Searching and asking**
 
@@ -192,6 +192,14 @@ The three ERRORs about chunks outside a scope or an allowed list mean an access 
 |---|---|---|---|
 | `audit record sealed` | INFO | `app.models.audit` | `audit_id`, `action` |
 | `audit record not written` | ERROR | `app.audit.trail` | `action`, `error` |
+
+**The database**
+
+| Event | Level | Logger | Fields |
+|---|---|---|---|
+| `public document IDs given` | INFO | `app.models.document` | `documents` |
+
+`public document IDs given` appears once, on the first start of this version against a database from an earlier one, with how many documents were given a public ID.
 
 `audit record not written` means the request it belonged to was refused: nothing is answered that can't be audited ([audit](audit.md)).
 

@@ -86,15 +86,14 @@ def test_without_the_link_check_the_measurement_sees_every_planted_link(
     assert injection.summary(tried, model="obedient")["link_harm"] == 4
 
 
-def document_id(company: Company, title: str) -> int:
-    found: int = company.db.scalars(select(Document.id).where(Document.title == title)).one()
-    return found
+def document_of(company: Company, title: str) -> Document:
+    return company.db.scalars(select(Document).where(Document.title == title)).one()
 
 
 def answer_with(company: Company, text: str, *titles: str, passage: str = "passage") -> Answer:
     sources = tuple(
-        Source(f"S{n}", document_id(company, title), title, 1, (1,), passage, 0.5)
-        for n, title in enumerate(titles, start=1)
+        Source(f"S{n}", d.id, d.public_id, title, 1, (1,), passage, 0.5)
+        for n, (title, d) in enumerate(((t, document_of(company, t)) for t in titles), start=1)
     )
     context = Context(user_id=0, sources=sources, left_out=0)
     return Answer(0, "q", Outcome.ANSWERED, text, context, citations=sources)

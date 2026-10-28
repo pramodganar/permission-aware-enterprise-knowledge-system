@@ -395,7 +395,7 @@ def test_filters_narrow_what_the_model_is_given(acme: Company) -> None:
         select(Document).where(Document.title == "Travel and Expense Policy")
     ).one()
 
-    answer = acme.ask("grace", filters=SearchFilters(document_ids=[travel.id]))
+    answer = acme.ask("grace", filters=SearchFilters(document_ids=[travel.public_id]))
 
     assert {s.document_title for s in answer.context.sources} == {"Travel and Expense Policy"}
 

@@ -1,6 +1,7 @@
 """Managing documents (FR-2, FR-4). Needs the manage-documents permission.
 
     POST   /admin/documents                          upload a file with its labels (multipart)
+    GET    /admin/documents                          every document, newest first
     GET    /admin/documents/{id}                     how a document is managed
     POST   /admin/documents/{id}/versions            replace it with a new file (multipart)
     PATCH  /admin/documents/{id}                     change its classification or department
@@ -16,8 +17,9 @@ permission again.
 Managing a document is not reading it (docs/authorization.md). A knowledge
 admin decides who may read a document without being able to read it, so
 these responses never hold a document's title, file name or text: an admin
-works with documents by ID. They do show who holds a grant, because setting
-that is the admin's job.
+works with documents by ID, picked from the list. They do show who holds a
+grant, because setting that is the admin's job. The IDs are the documents'
+public ones, the same a reader is given.
 
 Every change applies to the next request: access is decided from the
 database, not from the index. Search is different in one way. A new document
@@ -28,10 +30,11 @@ whether the document is in the index the service is using.
 
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Path, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Path, Query, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.components import Loaded
@@ -45,17 +48,17 @@ from app.authorization.document_access import (
 )
 from app.authorization.permissions import Permission
 from app.core.config import Settings, get_settings
-from app.core.database import MAX_ID
 from app.core.exceptions import NotFoundError
 from app.ingestion.pipeline import Upload, delete_document, ingest, replace_document
-from app.models import Document, DocumentGrant, User
+from app.models import Document, DocumentGrant, User, document_number, public_ids
 
 router = APIRouter(prefix="/admin/documents", tags=["admin"])
 
 CanManage = Annotated[User, Depends(require_permission(Permission.MANAGE_DOCUMENTS))]
 AppSettings = Annotated[Settings, Depends(get_settings)]
-DocumentId = Annotated[int, Path(ge=1, le=MAX_ID)]
 MAX_READERS = 50
+MAX_PAGE = 100
+MAX_OFFSET = 1_000_000
 
 
 class GrantOut(BaseModel):
@@ -66,7 +69,7 @@ class GrantOut(BaseModel):
 class ManagedDocument(BaseModel):
     """What an admin sees of a document: how it is managed, not what it says."""
 
-    id: int
+    id: UUID
     version: int
     status: str
     department: str
@@ -75,11 +78,17 @@ class ManagedDocument(BaseModel):
     size_bytes: int
     chunks: int
     # The version this one replaced.
-    supersedes_id: int | None
+    supersedes_id: UUID | None
     grants: list[GrantOut]
     # Whether search can find it yet. False for a document added since the
     # index the service is using was built.
     in_index: bool
+
+
+class ManagedList(BaseModel):
+    # How many there are, across every page.
+    total: int
+    documents: list[ManagedDocument]
 
 
 class LabelChange(BaseModel):
@@ -97,11 +106,20 @@ class GrantIn(BaseModel):
     expires_at: datetime | None = None
 
 
+def _number(db: Session, public_id: UUID) -> int:
+    """The document's own ID, which the services below take."""
+    number = document_number(db, public_id)
+    if number is None:
+        raise NotFoundError(f"no document has the ID {public_id}")
+    return number
+
+
 def _managed(db: Session, document: Document, components: Loaded) -> ManagedDocument:
     db.refresh(document)
     chunk_ids = {chunk.id for chunk in document.chunks}
+    replaced = public_ids(db, [document.supersedes_id])
     return ManagedDocument(
-        id=document.id,
+        id=document.public_id,
         version=document.version,
         status=document.status,
         department=document.department.code,
@@ -109,7 +127,7 @@ def _managed(db: Session, document: Document, components: Loaded) -> ManagedDocu
         file_type=document.file_type,
         size_bytes=document.size_bytes,
         chunks=len(chunk_ids),
-        supersedes_id=document.supersedes_id,
+        supersedes_id=None if document.supersedes_id is None else replaced[document.supersedes_id],
         grants=[
             GrantOut(email=email, expires_at=expires_at)
             for email, expires_at in db.execute(
@@ -156,19 +174,36 @@ def upload(
     return _managed(db, document, components)
 
 
+@router.get("")
+def managed_documents(
+    _: CanManage,
+    db: DbSession,
+    components: Loaded,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE)] = MAX_PAGE,
+    offset: Annotated[int, Query(ge=0, le=MAX_OFFSET)] = 0,
+) -> ManagedList:
+    # Every version, replaced and deleted ones too: the list is where an
+    # admin finds a document's ID, and the status says which can be managed.
+    total = db.scalar(select(func.count()).select_from(Document)) or 0
+    documents = db.scalars(
+        select(Document).order_by(Document.id.desc()).limit(limit).offset(offset)
+    ).all()
+    return ManagedList(
+        total=total, documents=[_managed(db, document, components) for document in documents]
+    )
+
+
 @router.get("/{document_id}")
 def managed_document(
-    document_id: DocumentId, _: CanManage, db: DbSession, components: Loaded
+    document_id: UUID, _: CanManage, db: DbSession, components: Loaded
 ) -> ManagedDocument:
-    document = db.get(Document, document_id)
-    if document is None:
-        raise NotFoundError(f"document {document_id} does not exist")
+    document = db.get_one(Document, _number(db, document_id))
     return _managed(db, document, components)
 
 
 @router.post("/{document_id}/versions", status_code=status.HTTP_201_CREATED)
 def new_version(
-    document_id: DocumentId,
+    document_id: UUID,
     admin: CanManage,
     db: DbSession,
     settings: AppSettings,
@@ -179,7 +214,7 @@ def new_version(
     document = replace_document(
         db,
         admin,
-        document_id,
+        _number(db, document_id),
         filename=file.filename or "",
         data=_file_bytes(file, settings),
         settings=settings,
@@ -190,7 +225,7 @@ def new_version(
 
 @router.patch("/{document_id}")
 def relabel(
-    document_id: DocumentId,
+    document_id: UUID,
     body: LabelChange,
     admin: CanManage,
     db: DbSession,
@@ -199,7 +234,7 @@ def relabel(
     document = change_labels(
         db,
         admin,
-        document_id,
+        _number(db, document_id),
         classification=body.classification,
         department_code=body.department,
     )
@@ -207,31 +242,34 @@ def relabel(
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-def withdraw(document_id: DocumentId, admin: CanManage, db: DbSession) -> Response:
-    delete_document(db, admin, document_id)
+def withdraw(document_id: UUID, admin: CanManage, db: DbSession) -> Response:
+    delete_document(db, admin, _number(db, document_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.put("/{document_id}/grants")
 def grant(
-    document_id: DocumentId,
+    document_id: UUID,
     body: GrantIn,
     admin: CanManage,
     db: DbSession,
     components: Loaded,
 ) -> ManagedDocument:
     given = grant_access(
-        db, admin, document_id, GrantRequest(email=body.email, expires_at=body.expires_at)
+        db,
+        admin,
+        _number(db, document_id),
+        GrantRequest(email=body.email, expires_at=body.expires_at),
     )
     return _managed(db, given.document, components)
 
 
 @router.delete("/{document_id}/grants/{email}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke(
-    document_id: DocumentId,
+    document_id: UUID,
     email: Annotated[str, Path(max_length=255)],
     admin: CanManage,
     db: DbSession,
 ) -> Response:
-    revoke_access(db, admin, document_id, email)
+    revoke_access(db, admin, _number(db, document_id), email)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

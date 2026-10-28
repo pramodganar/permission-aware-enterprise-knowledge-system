@@ -88,11 +88,12 @@ Records written before sealing existed can't be checked, and are counted separat
 ## Reading it
 
 ```
-GET /audit   ?actor=david@acmecorp.example&action=question.asked&document_id=16
+GET /audit   ?actor=david@acmecorp.example&action=question.asked
+             &document_id=3f0c9a52-8d1e-4b7a-9c61-2e5d8f4a7b10
              &since=2026-10-01T00:00:00Z&until=...&limit=100&offset=0
 ```
 
-Newest first, with `total` across every page. Times must include a timezone. Anyone without `audit:read` gets 403. In the company that is everyone but Irene.
+Newest first, with `total` across every page. Documents are named by their public IDs, the ones readers and admins are given ([decision record 0014](adr/0014-random-public-document-ids.md)): in the filter, in each record's `document_id`, and in the details written since, such as the documents an answer cited or the ID a refused lookup asked for. Records written before public IDs keep the service's own numbers in their details, as written, since a record is never changed. Times must include a timezone. Anyone without `audit:read` gets 403. In the company that is everyone but Irene.
 
 ## Not covered
 

@@ -70,7 +70,7 @@ def test_same_file_cannot_be_ingested_twice(
 ) -> None:
     before = document_count(world)
 
-    with pytest.raises(InvalidInputError, match=f"already stored as document {guide.id}"):
+    with pytest.raises(InvalidInputError, match=f"already stored as document {guide.public_id}"):
         ingest(
             world.db,
             world.users["admin"],
@@ -181,8 +181,8 @@ def test_old_version_cannot_be_fetched_by_id(
     new = replace(world, settings, guide, V2)
 
     with pytest.raises(NotFoundError):
-        get_readable_document(world.db, world.users["alice"], guide.id)
-    assert get_readable_document(world.db, world.users["alice"], new.id).id == new.id
+        get_readable_document(world.db, world.users["alice"], guide.public_id)
+    assert get_readable_document(world.db, world.users["alice"], new.public_id).id == new.id
 
 
 def test_grants_carry_over_to_the_new_version(
@@ -342,7 +342,7 @@ def test_deleted_document_is_readable_by_nobody(
     assert readers(world, guide) == set()
     assert guide.id not in listed_ids(world, "alice")
     with pytest.raises(NotFoundError):
-        get_readable_document(world.db, world.users["grace"], guide.id)
+        get_readable_document(world.db, world.users["grace"], guide.public_id)
 
 
 def test_grant_does_not_keep_a_deleted_document_readable(

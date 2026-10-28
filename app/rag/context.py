@@ -29,6 +29,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import pairwise
+from uuid import UUID
 
 from app.retrieval.retriever import Retrieval, RetrievedChunk
 
@@ -41,6 +42,7 @@ class Source:
 
     label: str
     document_id: int
+    document_public_id: UUID
     document_title: str
     document_version: int
     # In document order.
@@ -100,6 +102,7 @@ def build_context(retrieval: Retrieval, max_characters: int) -> Context:
         Source(
             label=f"S{number}",
             document_id=run[0].document_id,
+            document_public_id=run[0].document_public_id,
             document_title=run[0].document_title,
             document_version=run[0].document_version,
             chunk_ids=tuple(chunk.chunk_id for chunk in run),

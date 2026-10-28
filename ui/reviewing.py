@@ -9,6 +9,7 @@ Times are shown and chosen in UTC, as the service stores them.
 
 import json
 from datetime import UTC, date, datetime, time, timedelta
+from uuid import UUID
 
 from ui import asking
 from ui.client import Api, ApiError, AuditEntry, AuditPage, InvalidInput, NotAllowed
@@ -33,6 +34,7 @@ ACTIONS = (
 )
 PAGE_SIZE = 50
 BACKWARDS = "The first day is after the last."
+NOT_AN_ID = "A document ID looks like 3f0c9a52-8d1e-4b7a-9c61-2e5d8f4a7b10."
 
 
 def window(first: date | None, last: date | None) -> tuple[datetime | None, datetime | None]:
@@ -50,6 +52,19 @@ def window_problem(first: date | None, last: date | None) -> str | None:
     return None
 
 
+def document_id_from(text: str) -> UUID | None:
+    """The document ID typed, or None for none. Raises ValueError if it isn't one."""
+    return UUID(text.strip()) if text.strip() else None
+
+
+def document_id_problem(text: str) -> str | None:
+    try:
+        document_id_from(text)
+    except ValueError:
+        return NOT_AN_ID
+    return None
+
+
 def pages_for(total: int) -> int:
     return max(1, -(-total // PAGE_SIZE))
 
@@ -60,7 +75,7 @@ def fetch(
     *,
     actor: str | None,
     action: str | None,
-    document_id: int | None,
+    document_id: UUID | None,
     since: datetime | None,
     until: datetime | None,
     page: int,
@@ -100,7 +115,7 @@ def rows(records: list[AuditEntry]) -> list[dict[str, object]]:
             "Who": record.actor.email if record.actor else "(no such account)",
             "Action": record.action,
             "Outcome": record.outcome,
-            "Document": record.document_id,
+            "Document": "" if record.document_id is None else str(record.document_id),
             "Question": record.question or "",
             "Chunks": ", ".join(str(n) for n in record.chunk_ids),
             "Details": json.dumps(record.details, sort_keys=True) if record.details else "",

@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
@@ -32,9 +33,13 @@ from ui.client import (
 from ui.session import UNREACHABLE
 
 
+def uuid_of(n: int) -> UUID:
+    return UUID(int=n)
+
+
 def summary(id_: int, title: str, department: str, classification: str) -> dict[str, Any]:
     return {
-        "id": id_,
+        "id": str(UUID(int=id_)),
         "title": title,
         "department": {"code": department, "name": department.title()},
         "classification": classification,
@@ -68,7 +73,7 @@ def test_every_readable_document_is_fetched_page_by_page(count: int) -> None:
 
     found = readable_documents(api, "tok")
 
-    assert [d.id for d in found] == list(range(1, count + 1))
+    assert [d.id for d in found] == [uuid_of(n) for n in range(1, count + 1)]
     assert len(seen) == max(1, -(-count // PAGE_SIZE))
 
 
@@ -93,19 +98,19 @@ def test_the_choices_come_only_from_the_documents_given() -> None:
     assert offered.departments == {"hr": "Hr", "sales": "Sales"}
     assert offered.classifications == ("confidential", "internal", "public")
     assert offered.documents == {
-        3: "Employee Handbook (v1)",
-        7: "Sales Playbook (v1)",
-        9: "Sales Targets (v1)",
+        UUID(int=3): "Employee Handbook (v1)",
+        UUID(int=7): "Sales Playbook (v1)",
+        UUID(int=9): "Sales Targets (v1)",
     }
-    assert list(offered.documents) == [3, 7, 9]
+    assert list(offered.documents) == [UUID(int=3), UUID(int=7), UUID(int=9)]
     assert not offered.empty
     assert choices([]).empty
 
 
 def test_nothing_chosen_is_no_filter() -> None:
     assert chosen([], [], []).body() is None
-    assert chosen(["sales", "hr"], [], [9, 3]) == Filters(
-        departments=("hr", "sales"), document_ids=(3, 9)
+    assert chosen(["sales", "hr"], [], [UUID(int=9), UUID(int=3)]) == Filters(
+        departments=("hr", "sales"), document_ids=(UUID(int=3), UUID(int=9))
     )
 
 
@@ -114,13 +119,17 @@ def test_nothing_chosen_is_no_filter() -> None:
     [
         ("", Filters(), EMPTY_QUESTION),
         ("   \n", Filters(), EMPTY_QUESTION),
-        ("Leave?", Filters(document_ids=tuple(range(1, MAX_DOCUMENTS + 2))), TOO_MANY_DOCUMENTS),
+        (
+            "Leave?",
+            Filters(document_ids=tuple(map(uuid_of, range(1, MAX_DOCUMENTS + 2)))),
+            TOO_MANY_DOCUMENTS,
+        ),
         (
             "Leave?",
             Filters(departments=tuple(f"d{n}" for n in range(MAX_DEPARTMENTS + 1))),
             TOO_MANY_DEPARTMENTS,
         ),
-        ("Leave?", Filters(document_ids=tuple(range(1, MAX_DOCUMENTS + 1))), None),
+        ("Leave?", Filters(document_ids=tuple(map(uuid_of, range(1, MAX_DOCUMENTS + 1)))), None),
         ("Leave?", Filters(), None),
     ],
 )

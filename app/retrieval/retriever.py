@@ -33,6 +33,7 @@ import dataclasses
 import logging
 import time
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -57,6 +58,8 @@ class RetrievedChunk:
 
     chunk_id: int
     document_id: int
+    # What the document is called outside the service.
+    document_public_id: UUID
     document_title: str
     document_version: int
     position: int
@@ -204,6 +207,7 @@ def _load_and_check(
             RetrievedChunk(
                 chunk_id=chunk.id,
                 document_id=chunk.document_id,
+                document_public_id=chunk.document.public_id,
                 document_title=chunk.document.title,
                 document_version=chunk.document.version,
                 position=chunk.position,

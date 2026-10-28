@@ -9,7 +9,16 @@ from app.models.audit import (
 )
 from app.models.chunk import Chunk
 from app.models.department import Department
-from app.models.document import Classification, Document, DocumentGrant, DocumentStatus
+from app.models.document import (
+    Classification,
+    Document,
+    DocumentGrant,
+    DocumentPublicId,
+    DocumentStatus,
+    document_number,
+    give_public_ids,
+    public_ids,
+)
 from app.models.role import Role, RoleCode
 from app.models.user import User
 
@@ -23,9 +32,13 @@ __all__ = [
     "Department",
     "Document",
     "DocumentGrant",
+    "DocumentPublicId",
     "DocumentStatus",
     "Role",
     "RoleCode",
     "User",
+    "document_number",
+    "give_public_ids",
+    "public_ids",
     "seal_of",
 ]

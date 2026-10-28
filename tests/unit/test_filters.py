@@ -2,12 +2,14 @@
 
 import logging
 from typing import Any
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from apiclient import MISSING
 from app.core.config import Settings
 from app.ingestion.pipeline import delete_document
 from app.models import Chunk, Classification, Document, User
@@ -25,7 +27,8 @@ from scripts.seed import seed
 PEOPLE = ["alice", "bob", "carol", "david", "emma", "frank", "grace", "henry", "irene"]
 DEPARTMENTS = ["engineering", "finance", "hr", "sales", "legal", "operations", "executive"]
 NO_GATE = -1.0
-UNKNOWN_DOCUMENT = 999_999
+# No document has this ID.
+UNKNOWN_DOCUMENT = MISSING
 
 
 class Company:
@@ -63,7 +66,7 @@ class Company:
                 document.classification not in filters.classifications
             ):
                 continue
-            if filters.document_ids is not None and document.id not in filters.document_ids:
+            if filters.document_ids is not None and document.public_id not in filters.document_ids:
                 continue
             found.add(chunk.id)
         return found
@@ -76,8 +79,8 @@ def acme(db: Session, settings: Settings) -> Company:
 
 
 def filter_cases(acme: Company) -> list[SearchFilters]:
-    ids = sorted(document.id for document in acme.documents.values())
-    salary = acme.documents["Salary Bands 2026"].id
+    ids = sorted(document.public_id for document in acme.documents.values())
+    salary = acme.documents["Salary Bands 2026"].public_id
     return [
         *(SearchFilters(departments=frozenset({code})) for code in DEPARTMENTS),
         SearchFilters(departments=frozenset({"finance", "legal"})),
@@ -176,7 +179,7 @@ def test_filtering_by_a_document_you_may_not_read_looks_like_one_that_does_not_e
     assert unreadable
     for document in unreadable:
         forbidden = acme.retrieve(
-            name, question, SearchFilters(document_ids=frozenset({document.id}))
+            name, question, SearchFilters(document_ids=frozenset({document.public_id}))
         )
         assert forbidden == missing
         assert forbidden.is_empty
@@ -216,7 +219,7 @@ def test_a_filter_cannot_bring_back_a_deleted_document(acme: Company) -> None:
     delete_document(acme.db, acme.user("henry"), runbook.id)
 
     retrieval = acme.retrieve(
-        "alice", "rollbacks", SearchFilters(document_ids=frozenset({runbook.id}))
+        "alice", "rollbacks", SearchFilters(document_ids=frozenset({runbook.public_id}))
     )
 
     assert retrieval.is_empty
@@ -266,10 +269,11 @@ def test_a_filter_gives_a_narrow_reader_a_full_set_of_results(acme: Company) -> 
         {"departments": ["x" * 51]},
         {"departments": [f"d{i}" for i in range(MAX_DEPARTMENTS + 1)]},
         {"classifications": ["secret"]},
-        {"document_ids": [0]},
         {"document_ids": [-3]},
+        {"document_ids": ["16"]},
         {"document_ids": ["seven"]},
-        {"document_ids": list(range(1, MAX_DOCUMENTS + 2))},
+        {"document_ids": [0]},
+        {"document_ids": [str(UUID(int=n)) for n in range(1, MAX_DOCUMENTS + 2)]},
         {"user_id": 7},
         {"role": "executive"},
     ],
@@ -289,7 +293,7 @@ def test_the_limits_themselves_are_allowed() -> None:
     SearchFilters.model_validate(
         {
             "departments": [f"d{i}" for i in range(MAX_DEPARTMENTS)],
-            "document_ids": list(range(1, MAX_DOCUMENTS + 1)),
+            "document_ids": [str(UUID(int=n)) for n in range(1, MAX_DOCUMENTS + 1)],
         }
     )
 
@@ -313,7 +317,9 @@ def test_the_kind_of_filter_is_logged_but_not_its_values(
     acme: Company, caplog: pytest.LogCaptureFixture
 ) -> None:
     case_file = acme.documents["HR Case File 2026-014"]
-    filters = SearchFilters(departments=frozenset({"hr"}), document_ids=frozenset({case_file.id}))
+    filters = SearchFilters(
+        departments=frozenset({"hr"}), document_ids=frozenset({case_file.public_id})
+    )
 
     with caplog.at_level(logging.INFO):
         narrow_scope(acme.db, acme.scope("carol"), filters)

@@ -124,7 +124,6 @@ Read these with the [residual risks](threat-model.md#residual-risks). The main o
 - Facts can be put together from documents a person may read (T12).
 - An admin can widen access for someone else; the trail shows it, nothing stops it (T18).
 - Text a person may read leaves the service when a hosted model answers (T23).
-- Document IDs count the documents stored between the ones a reader sees (T36).
 - Encryption at rest, network security, host hardening and key rotation are outside this project.
 
 ## Reporting a problem

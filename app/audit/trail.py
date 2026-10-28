@@ -22,8 +22,9 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -31,7 +32,7 @@ from app.authorization.checks import ensure_permission
 from app.authorization.permissions import Permission
 from app.core.exceptions import ServiceUnavailableError
 from app.core.logging_setup import current_request_id
-from app.models import AuditAction, AuditRecord, User
+from app.models import AuditAction, AuditRecord, User, document_number
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,8 @@ class AuditQuery:
 
     actor_email: str | None = None
     action: AuditAction | None = None
-    document_id: int | None = None
+    # The document's public ID, the one the reviewer is given.
+    document_id: UUID | None = None
     since: datetime | None = None
     until: datetime | None = None
     limit: int = 100
@@ -133,7 +135,9 @@ def read_trail(db: Session, reviewer: User, query: AuditQuery) -> AuditPage:
     if query.action is not None:
         selected = selected.where(AuditRecord.action == query.action)
     if query.document_id is not None:
-        selected = selected.where(AuditRecord.document_id == query.document_id)
+        # An ID no document has matches nothing, and the read is still recorded.
+        number = document_number(db, query.document_id)
+        selected = selected.where(false() if number is None else AuditRecord.document_id == number)
     if query.since is not None:
         selected = selected.where(AuditRecord.created_at >= query.since)
     if query.until is not None:
@@ -157,7 +161,7 @@ def read_trail(db: Session, reviewer: User, query: AuditQuery) -> AuditPage:
             "filters": {
                 "actor_email": query.actor_email,
                 "action": None if query.action is None else query.action.value,
-                "document_id": query.document_id,
+                "document_id": None if query.document_id is None else str(query.document_id),
                 "since": None if query.since is None else query.since.isoformat(),
                 "until": None if query.until is None else query.until.isoformat(),
             },

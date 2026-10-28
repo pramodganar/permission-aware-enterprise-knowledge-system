@@ -24,13 +24,13 @@ def service(db: Session, engine: Engine, settings: Settings) -> Iterator[str]:
         # Some activity to review: a document opened, one refused, a failed login.
         with Api(url) as api:
             david = api.login(email("david"), PASSWORD).token
-            leave = db.scalars(select(Document.id).where(Document.title == "Leave Policy")).one()
+            leave = db.scalars(select(Document).where(Document.title == "Leave Policy")).one()
             case = db.scalars(
-                select(Document.id).where(Document.title == "HR Case File 2026-014")
+                select(Document).where(Document.title == "HR Case File 2026-014")
             ).one()
-            api.document(david, leave)
+            api.document(david, leave.public_id)
             with pytest.raises(NotFound):
-                api.document(david, case)
+                api.document(david, case.public_id)
             with pytest.raises(NotSignedIn):
                 api.login(email("frank"), "wrong password")
         yield url
@@ -117,14 +117,28 @@ def test_filtering_by_who_alone(irene: AppTest) -> None:
 
 
 def test_filtering_by_document(irene: AppTest, db: Session) -> None:
-    leave = db.scalars(select(Document.id).where(Document.title == "Leave Policy")).one()
+    leave = db.scalars(select(Document).where(Document.title == "Leave Policy")).one()
 
-    show(irene, **{"Document ID": leave})
+    show(irene, **{"Document ID": f"  {leave.public_id}  "})
 
-    assert [(r["Action"], r["Outcome"]) for r in table(irene)] == [
+    rows = table(irene)
+    assert [(r["Action"], r["Outcome"]) for r in rows] == [
         ("document.read", "allowed"),
         ("document.ingested", "done"),
     ]
+    assert {r["Document"] for r in rows} == {str(leave.public_id)}
+
+
+def test_a_document_id_that_is_not_one_is_explained_and_nothing_is_fetched(
+    irene: AppTest, db: Session
+) -> None:
+    before = reads_by(db, "irene")
+    widgets = [w for w in irene.text_input if w.label == "Document ID"]
+    widgets[0].set_value("16")
+    next(b for b in irene.button if b.label == "Show").click().run()
+
+    assert [unescape(e.value) for e in irene.error] == [reviewing.NOT_AN_ID]
+    assert reads_by(db, "irene") == before
 
 
 def test_a_window_of_days_in_the_past_shows_nothing(irene: AppTest) -> None:

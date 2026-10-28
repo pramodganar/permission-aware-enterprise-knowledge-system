@@ -119,9 +119,9 @@ GET /documents/{id}  -> the same fields, plus source_filename, size_bytes, creat
 
 Nor does the time taken tell the two apart, as far as measured. Both do the same work: the scope query, a lookup of the ID alone, one log line and one audit record. The lookup used to load the whole document to see that it exists, so a hidden document's 404 took longer the bigger it was: for one of 2 MB, the median was 12.5 ms against 9.2 ms for a missing ID, over 1,000 requests each on the development laptop. Reading the ID alone, it was 9.4 ms, against 8.9 ms for a hidden document of 4 bytes and 9.3 ms for a missing ID, within the noise. A test holds the cause rather than the timing: a refused lookup runs the same queries either way and never loads a document.
 
-The **IDs themselves** are numbered in the order documents were stored, so a reader who sees documents 3 and 7 knows three others were stored between them: not their titles, departments or text. This is the one thing about hidden documents a reader can learn (threat model T36).
+**Nor do the IDs themselves.** Every document is known outside the service by its public ID, a random UUID such as `3f0c9a52-8d1e-4b7a-9c61-2e5d8f4a7b10`, made with the document and taken from nothing else ([decision record 0014](adr/0014-random-public-document-ids.md)). The database numbers documents in the order they were stored, and if readers saw those numbers, one who could open 3 and 7 would know three others were stored between them (threat T36). The numbers stay inside the service: every response, path and filter here, and the admin and audit routes, use the public ID. Each new version of a document has a public ID of its own, as it is a document of its own.
 
-An ID that can't be a document ID (not a whole number, below 1, or too big for the database) is invalid input (422), not a database error.
+Anything that isn't a UUID is invalid input (422), not a database error.
 
 **Filters only narrow.** `department` and `classification` are added to the caller's query, so they can only remove documents from it. Asking for HR's documents as David gives the one HR document everyone may read, the Leave Policy, and nothing else. A filter for something the caller can't read gives an empty list, the same as a filter that matches nothing. An unknown department isn't an error, for the same reason.
 
@@ -133,7 +133,8 @@ An ID that can't be a document ID (not a whole number, below 1, or too big for t
 
 ```
 POST /search  {"question": "How many days of annual leave do I get?",
-               "filters": {"departments": ["hr"], "classifications": ["general"], "document_ids": [1]}}
+               "filters": {"departments": ["hr"], "classifications": ["general"],
+                           "document_ids": ["3f0c9a52-8d1e-4b7a-9c61-2e5d8f4a7b10"]}}
            -> {"results": [{document {id, title, version}, start_offset, end_offset, text, score}, ...],
                "message": null}
 
@@ -194,6 +195,7 @@ Every route here needs the `documents:manage` permission, which in the company o
 
 ```
 POST   /admin/documents                       multipart: file, title, department, classification, readers (repeated)
+GET    /admin/documents                       ?limit=100&offset=0  -> {"total": 17, "documents": [...]}
 GET    /admin/documents/{id}                  how one document is managed
 POST   /admin/documents/{id}/versions         multipart: file, and optionally a new title
 PATCH  /admin/documents/{id}                  {"classification": ..., "department": ...}
@@ -204,7 +206,7 @@ DELETE /admin/documents/{id}/grants/{email}   204
 
 The work is done by the ingestion pipeline and the document access module ([authorization](authorization.md)), which check the permission a second time. So each rule there applies here: no document without a department and a classification, no restricted document without a named reader, no grant to oneself or to someone who can't read, an expiry must have a timezone and be in the future, and the same file can't be stored twice. A refusal says which rule, and nothing is stored.
 
-**Managing a document is not reading it.** Every response here describes how a document is managed: ID, version, status, department, classification, file type and size, how many chunks, which version it replaced, and who holds a grant. Never its title, file name or text. Henry works with documents by ID; uploading one doesn't let him open it, and his own document list stays empty.
+**Managing a document is not reading it.** Every response here describes how a document is managed: ID, version, status, department, classification, file type and size, how many chunks, which version it replaced, and who holds a grant. Never its title, file name or text. Henry works with documents by ID, which he finds in the list: every document, newest first, replaced and deleted versions included, each as it is managed. Uploading one doesn't let him open it, and his own document list stays empty.
 
 **Changes apply on the next request**, because access is decided from the database. A deleted or replaced document stops appearing in anyone's list, lookups and search at once. A relabelled one moves to its new audience at once.
 

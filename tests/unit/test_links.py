@@ -1,5 +1,7 @@
 """Links in an answer: kept only when the sources hold exactly that URL."""
 
+from uuid import UUID
+
 import pytest
 
 from app.rag.context import Context, Source
@@ -15,6 +17,7 @@ def context(*texts: str) -> Context:
             Source(
                 label=f"S{n}",
                 document_id=n,
+                document_public_id=UUID(int=n),
                 document_title=f"Document {n}",
                 document_version=1,
                 chunk_ids=(n,),

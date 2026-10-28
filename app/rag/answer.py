@@ -277,7 +277,7 @@ def _audit(db: Session, answer: Answer, filters: SearchFilters | None) -> None:
         chunk_ids=_chunks_given(answer.context),
         details={
             "reason": None if answer.reason is None else answer.reason.value,
-            "cited_documents": [source.document_id for source in answer.citations],
+            "cited_documents": [str(source.document_public_id) for source in answer.citations],
             "unknown_citations": answer.unknown_citations,
             "removed_links": answer.removed_links,
             "cut_off": answer.cut_off,

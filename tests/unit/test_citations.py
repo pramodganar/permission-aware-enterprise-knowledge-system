@@ -1,6 +1,7 @@
 """Reading citations from an answer and resolving them against its context only."""
 
 import dataclasses
+from uuid import UUID
 
 import pytest
 
@@ -12,6 +13,7 @@ def source(number: int, title: str = "Travel and Expense Policy") -> Source:
     return Source(
         label=f"S{number}",
         document_id=number * 10,
+        document_public_id=UUID(int=number * 10),
         document_title=title,
         document_version=2,
         chunk_ids=(number * 100,),

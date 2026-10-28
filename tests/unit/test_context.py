@@ -2,6 +2,7 @@
 
 import dataclasses
 import logging
+from uuid import UUID
 
 import pytest
 from pydantic import SecretStr, ValidationError
@@ -36,6 +37,7 @@ def chunk(
     return RetrievedChunk(
         chunk_id=chunk_id,
         document_id=document_id,
+        document_public_id=UUID(int=document_id),
         document_title=title,
         document_version=1,
         position=position,

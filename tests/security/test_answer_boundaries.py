@@ -167,7 +167,9 @@ def test_the_check_would_see_a_leak(acme: Company) -> None:
     # The check itself, on answers made up to leak, without going through the
     # code under test: David can't read any of these.
     salary = acme.document("Salary Bands 2026")
-    passage = Source("S1", salary.id, salary.title, 1, (1,), salary.content[200:500], 0.5)
+    passage = Source(
+        "S1", salary.id, salary.public_id, salary.title, 1, (1,), salary.content[200:500], 0.5
+    )
     leaky = Answer(
         user_id=0,
         question="q",

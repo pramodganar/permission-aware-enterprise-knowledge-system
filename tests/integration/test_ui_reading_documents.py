@@ -1,13 +1,14 @@
 """The UI's documents page, run headless against the service over real HTTP."""
 
 from collections.abc import Callable, Iterator
+from uuid import UUID
 
 import pytest
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
 
-from apiclient import PASSWORD, company_app, email
+from apiclient import MISSING, PASSWORD, company_app, email
 from app.core.config import Settings
 from app.models import AuditAction, AuditRecord, Department, Document, User
 from liveserver import live_server
@@ -67,8 +68,9 @@ def choose(page: AppTest, key: str, value: object) -> AppTest:
     return page
 
 
-def document_id(db: Session, title: str) -> int:
-    return db.scalars(select(Document.id).where(Document.title == title)).one()
+def document_id(db: Session, title: str) -> UUID:
+    """The ID the service gives the document: its public one."""
+    return db.scalars(select(Document).where(Document.title == title)).one().public_id
 
 
 def open_document(page: AppTest, db: Session, title: str) -> AppTest:
@@ -185,9 +187,8 @@ def test_opening_a_document_is_recorded(open_as: Open, db: Session) -> None:
             AuditRecord.actor_id == david, AuditRecord.action == AuditAction.DOCUMENT_READ
         )
     ).all()
-    assert [(r.document_id, r.outcome) for r in reads] == [
-        (document_id(db, "Leave Policy"), "allowed")
-    ]
+    leave = db.scalars(select(Document.id).where(Document.title == "Leave Policy")).one()
+    assert [(r.document_id, r.outcome) for r in reads] == [(leave, "allowed")]
 
 
 @pytest.mark.parametrize("name", sorted(set(MAY_READ) - {"henry", "irene"}))
@@ -228,8 +229,8 @@ def test_a_document_withdrawn_between_listing_and_opening_says_it_is_unavailable
     # The list still offers it, as it would have a moment before.
     real = Api.document
 
-    def withdrawn(self: Api, token: str, document_id: int) -> object:
-        return real(self, token, 10**9 if document_id == leave else document_id)
+    def withdrawn(self: Api, token: str, document_id: UUID) -> object:
+        return real(self, token, MISSING if document_id == leave else document_id)
 
     monkeypatch.setattr(Api, "document", withdrawn)
 

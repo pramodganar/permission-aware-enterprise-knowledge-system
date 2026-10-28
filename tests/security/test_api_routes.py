@@ -36,7 +36,7 @@ from routes import INTERACTIVE_DOCS, routes_of
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
-from apiclient import company_client, email, headers
+from apiclient import company_client, email, headers, public_path
 from app.auth.dependencies import get_current_user
 from app.auth.tokens import create_access_token
 from app.authorization.dependencies import RequirePermission
@@ -63,6 +63,7 @@ ACCESS: dict[tuple[str, str], str | Permission] = {
     ("POST", "/search"): LOGGED_IN,
     ("POST", "/ask"): LOGGED_IN,
     ("POST", "/admin/documents"): Permission.MANAGE_DOCUMENTS,
+    ("GET", "/admin/documents"): Permission.MANAGE_DOCUMENTS,
     ("GET", "/admin/documents/{document_id}"): Permission.MANAGE_DOCUMENTS,
     ("POST", "/admin/documents/{document_id}/versions"): Permission.MANAGE_DOCUMENTS,
     ("PATCH", "/admin/documents/{document_id}"): Permission.MANAGE_DOCUMENTS,
@@ -76,7 +77,7 @@ PROTECTED = [route for route, access in ACCESS.items() if access != PUBLIC]
 
 @dataclass(frozen=True)
 class Call:
-    """One request a route accepts, made concrete."""
+    """One request a route accepts, made concrete. <n> in the path is document n."""
 
     path: str
     json: Any = None
@@ -84,11 +85,12 @@ class Call:
     data: dict[str, Any] = field(default_factory=dict)
 
     def send(self, client: TestClient, method: str, auth: dict[str, str]) -> Response:
+        path = public_path(client, self.path)
         if self.files is not None:
-            return client.request(method, self.path, headers=auth, files=self.files, data=self.data)
+            return client.request(method, path, headers=auth, files=self.files, data=self.data)
         if self.json is not None:
-            return client.request(method, self.path, headers=auth, json=self.json)
-        return client.request(method, self.path, headers=auth)
+            return client.request(method, path, headers=auth, json=self.json)
+        return client.request(method, path, headers=auth)
 
 
 def upload_file(words: str) -> dict[str, Any]:
@@ -106,7 +108,7 @@ CALLS: dict[tuple[str, str], Call] = {
     ),
     ("GET", "/auth/me"): Call("/auth/me"),
     ("GET", "/documents"): Call("/documents"),
-    ("GET", "/documents/{document_id}"): Call("/documents/1"),
+    ("GET", "/documents/{document_id}"): Call("/documents/<1>"),
     ("POST", "/search"): Call("/search", json=QUESTION),
     ("POST", "/ask"): Call("/ask", json=QUESTION),
     ("POST", "/admin/documents"): Call(
@@ -114,19 +116,20 @@ CALLS: dict[tuple[str, str], Call] = {
         files=upload_file("walk"),
         data={"title": "Walk Note", "department": "sales", "classification": "general"},
     ),
-    ("GET", "/admin/documents/{document_id}"): Call("/admin/documents/1"),
+    ("GET", "/admin/documents"): Call("/admin/documents"),
+    ("GET", "/admin/documents/{document_id}"): Call("/admin/documents/<1>"),
     ("POST", "/admin/documents/{document_id}/versions"): Call(
-        "/admin/documents/2/versions", files=upload_file("second version")
+        "/admin/documents/<2>/versions", files=upload_file("second version")
     ),
     ("PATCH", "/admin/documents/{document_id}"): Call(
-        "/admin/documents/3", json={"classification": "departmental"}
+        "/admin/documents/<3>", json={"classification": "departmental"}
     ),
-    ("DELETE", "/admin/documents/{document_id}"): Call("/admin/documents/4"),
+    ("DELETE", "/admin/documents/{document_id}"): Call("/admin/documents/<4>"),
     ("PUT", "/admin/documents/{document_id}/grants"): Call(
-        "/admin/documents/9/grants", json={"email": email("david")}
+        "/admin/documents/<9>/grants", json={"email": email("david")}
     ),
     ("DELETE", "/admin/documents/{document_id}/grants/{email}"): Call(
-        f"/admin/documents/9/grants/{email('david')}"
+        f"/admin/documents/<9>/grants/{email('david')}"
     ),
     ("GET", "/audit"): Call("/audit"),
 }
@@ -288,7 +291,7 @@ def test_a_route_that_needs_a_permission_refuses_everyone_without_it_and_changes
 
     assert state(db) == before
     # Henry holds one permission and Irene the other; nobody holds both.
-    assert len(refused) == {"henry": 1, "irene": 7}.get(name, 8)
+    assert len(refused) == {"henry": 1, "irene": 8}.get(name, 9)
 
 
 @pytest.mark.parametrize(
@@ -349,7 +352,7 @@ def test_no_route_gives_anyone_a_fact_or_title_from_a_document_they_may_not_read
     client: TestClient, db: Session, name: str
 ) -> None:
     auth = headers(client, name)
-    ids = list(db.scalars(select(Document.id).order_by(Document.id)))
+    ids = [d.public_id for d in db.scalars(select(Document).order_by(Document.id))]
     responses = [
         client.get("/auth/me", headers=auth),
         client.get("/documents", headers=auth),
@@ -357,6 +360,7 @@ def test_no_route_gives_anyone_a_fact_or_title_from_a_document_they_may_not_read
         *(client.post("/search", headers=auth, json={"question": q}) for q in WALK_QUESTIONS),
         *(client.post("/ask", headers=auth, json={"question": q}) for q in WALK_QUESTIONS),
         *(client.get(f"/admin/documents/{i}", headers=auth) for i in ids),
+        client.get("/admin/documents", headers=auth),
         client.get("/audit", headers=auth, params={"limit": 500}),
     ]
 
@@ -365,7 +369,7 @@ def test_no_route_gives_anyone_a_fact_or_title_from_a_document_they_may_not_read
     hidden_facts = [f for f, title in FACTS.items() if title not in MAY_READ[name]]
     assert not [fact for fact in hidden_facts if fact in received]
     assert titles <= MAY_READ[name]
-    assert len(responses) == 2 + 2 * len(ids) + 2 * len(WALK_QUESTIONS) + 1
+    assert len(responses) == 2 + 2 * len(ids) + 2 * len(WALK_QUESTIONS) + 2
 
 
 # --- the shape of every response --------------------------------------------------------
@@ -410,7 +414,7 @@ def test_a_cross_origin_request_is_not_allowed(client: TestClient) -> None:
 @pytest.mark.parametrize("path", sorted({path for _, path in ACCESS}), ids=lambda path: path)
 def test_a_method_a_path_does_not_serve_is_405(client: TestClient, path: str) -> None:
     served = {method for method, served_path in ACCESS if served_path == path}
-    concrete = next(CALLS[(m, p)].path for m, p in ACCESS if p == path)
+    concrete = public_path(client, next(CALLS[(m, p)].path for m, p in ACCESS if p == path))
     auth = headers(client, "henry")
 
     for method in {"GET", "POST", "PUT", "PATCH", "DELETE"} - served:
@@ -428,14 +432,16 @@ MARKER = "<script>zq-marker-7731</script>"
         ("POST", "/auth/login", {"email": MARKER, "password": "x", MARKER: MARKER}),
         ("POST", "/search", {"question": QUESTION["question"], MARKER: MARKER}),
         ("POST", "/ask", {"question": [MARKER], "filters": {"departments": [MARKER]}}),
-        ("PATCH", "/admin/documents/3", {"classification": [MARKER], MARKER: 1}),
-        ("PUT", "/admin/documents/9/grants", {"email": {MARKER: MARKER}}),
+        ("PATCH", "/admin/documents/<3>", {"classification": [MARKER], MARKER: 1}),
+        ("PUT", "/admin/documents/<9>/grants", {"email": {MARKER: MARKER}}),
     ],
 )
 def test_a_refused_body_names_the_fields_and_never_echoes_what_was_sent(
     client: TestClient, method: str, path: str, body: dict[str, Any]
 ) -> None:
-    response = client.request(method, path, headers=headers(client, "henry"), json=body)
+    response = client.request(
+        method, public_path(client, path), headers=headers(client, "henry"), json=body
+    )
 
     assert response.status_code == 422, response.text
     assert MARKER not in response.text
@@ -461,7 +467,7 @@ def test_a_refusal_is_recorded_as_one_and_never_as_a_read(client: TestClient, db
     before = db.scalar(select(func.count()).select_from(AuditRecord))
 
     # No token: nobody to record, and anyone could fill the trail with these.
-    client.get("/documents/1")
+    client.get(public_path(client, "/documents/<1>"))
     client.get("/audit", headers=david)
 
     db.expire_all()

@@ -3,6 +3,7 @@
 import ast
 from collections.abc import Callable
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import pytest
@@ -38,6 +39,7 @@ CONTRACT: list[tuple[type[BaseModel], type[BaseModel]]] = [
     (client.Answer, questions.AskResponse),
     (client.Grant, admin.GrantOut),
     (client.ManagedDocument, admin.ManagedDocument),
+    (client.ManagedList, admin.ManagedList),
     (client.Actor, audit.Actor),
     (client.AuditEntry, audit.AuditEntry),
     (client.AuditPage, audit.AuditList),
@@ -215,9 +217,11 @@ def test_an_empty_token_is_not_sent_at_all() -> None:
 def test_an_email_can_not_change_which_route_a_revoke_reaches() -> None:
     api, seen = api_answering(lambda _: httpx.Response(204))
 
-    api.revoke("token", 9, "a/b?c#d@acmecorp.example")
+    api.revoke("token", UUID(int=9), "a/b?c#d@acmecorp.example")
 
-    assert seen[0].url.raw_path == b"/admin/documents/9/grants/a%2Fb%3Fc%23d@acmecorp.example"
+    assert seen[0].url.raw_path == (
+        b"/admin/documents/00000000-0000-0000-0000-000000000009/grants/a%2Fb%3Fc%23d@acmecorp.example"
+    )
     assert seen[0].method == "DELETE"
 
 

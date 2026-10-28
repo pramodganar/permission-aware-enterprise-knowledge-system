@@ -93,6 +93,12 @@ RECORDED: dict[tuple[str, str], Recorded] = {
         ("document.ingested",),
         permission="documents:manage",
     ),
+    ("GET", "/admin/documents"): Recorded(
+        "henry",
+        Call("GET", "/admin/documents"),
+        reason="How every document is managed, never content. Every change to it is recorded.",
+        permission="documents:manage",
+    ),
     ("GET", "/admin/documents/{document_id}"): Recorded(
         "henry",
         Call("GET", "/admin/documents/{Leave Policy}"),
@@ -146,7 +152,9 @@ def send(client: TestClient, db: Session, call: Call, auth: dict[str, str]) -> t
     request_id = f"audit-walk-{next(_numbers)}"
     path = re.sub(
         r"\{([^}]+)\}",
-        lambda found: str(db.scalars(select(Document.id).where(Document.title == found[1])).one()),
+        lambda found: str(
+            db.scalars(select(Document).where(Document.title == found[1])).one().public_id
+        ),
         call.path,
     )
     sent = {**auth, "X-Request-ID": request_id}

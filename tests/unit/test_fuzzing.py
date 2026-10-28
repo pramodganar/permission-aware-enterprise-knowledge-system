@@ -29,6 +29,7 @@ import random
 import re
 from collections.abc import Callable
 from pathlib import Path
+from uuid import UUID
 
 import numpy as np
 import pytest
@@ -151,7 +152,8 @@ ANY_TEXT = st.one_of(st.text(max_size=200), MARKUP)
 
 def context_of(texts: list[tuple[str, str]]) -> Context:
     sources = tuple(
-        Source(f"S{n}", n, title, 1, (n,), text, 0.5) for n, (title, text) in enumerate(texts, 1)
+        Source(f"S{n}", n, UUID(int=n), title, 1, (n,), text, 0.5)
+        for n, (title, text) in enumerate(texts, 1)
     )
     return Context(user_id=1, sources=sources, left_out=0)
 
@@ -306,8 +308,8 @@ def test_a_filter_is_valid_or_refused_whatever_shape_it_comes_in(value: object) 
     except ValidationError:
         return
     assert isinstance(filters, SearchFilters)
-    for ids in filters.document_ids or ():
-        assert 1 <= ids < 2**63
+    for document_id in filters.document_ids or ():
+        assert isinstance(document_id, UUID)
 
 
 # --- what the parsers log ---------------------------------------------------------------

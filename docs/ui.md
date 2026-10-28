@@ -97,7 +97,7 @@ The **Documents** page, offered with asking to anyone who may read, lists the do
 
 ## Managing documents
 
-Someone with the manage-documents permission (Henry) gets a **Manage documents** page. Managing a document isn't reading it, and the service never tells an admin a document's title, file name or text, so the page works with documents by ID. For a document it shows how it is managed, from `GET /admin/documents/{id}`: status, version, department, classification, file type, size, number of chunks, which document it replaced, who holds a grant and until when, and whether search can find it yet. A new document or version can't be found by search until the index is rebuilt, and the page says so.
+Someone with the manage-documents permission (Henry) gets a **Manage documents** page. Managing a document isn't reading it, and the service never tells an admin a document's title, file name or text, so the page works with documents by ID. The admin picks one from the list of every document, `GET /admin/documents`, each shown by its department, classification, version, status and ID; the IDs are random, so there is nothing to type. For a document it shows how it is managed, from `GET /admin/documents/{id}`: status, version, department, classification, file type, size, number of chunks, which document it replaced, who holds a grant and until when, and whether search can find it yet. A new document or version can't be found by search until the index is rebuilt, and the page says so.
 
 From there an admin can:
 

@@ -118,7 +118,7 @@ docker compose -f compose.yaml -f compose.tls.yaml up -d --build --wait
 
 The images are rebuilt, and `setup` runs again before the API: the seed adds nothing that is already there, and the index is rebuilt only if it is out of date. The data stays on its volume. Each start of `setup` adds one audit record, a re-chunk of the documents by the knowledge admin that changes none of them: the seed checks the chunks against the settings every time, and checking them is an admin action, so it is recorded.
 
-**Going back** is the same command on the earlier commit: `git checkout <commit>`, then `up -d --build --wait`. There are no database migrations: at startup the service only creates the tables that are missing. So going back works as long as no version in between changed a table that already existed; one that did would need a migration, which isn't built. A bad index goes back on its own: `docker compose exec api python -m scripts.index rollback` ([vector index](../README.md#vector-index)).
+**Going back** is the same command on the earlier commit: `git checkout <commit>`, then `up -d --build --wait`. There are no database migrations: at startup the service only creates the tables that are missing. So going back works as long as no version in between changed a table that already existed; one that did would need a migration, which isn't built. Public document IDs came in a table of their own for this reason: an older version ignores it, and a document added while it runs gets a public ID when the newer version starts again. A bad index goes back on its own: `docker compose exec api python -m scripts.index rollback` ([vector index](../README.md#vector-index)).
 
 Take a backup first.
 

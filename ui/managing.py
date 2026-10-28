@@ -2,8 +2,9 @@
 
 Managing a document is not reading it. The service never tells an admin a
 document's title, file name or text, so this page works with documents by
-ID and shows only how each is managed: its labels, its version, who holds
-a grant and whether search can find it yet.
+ID, picked from the list of every document, and shows only how each is
+managed: its labels, its version, who holds a grant and whether search can
+find it yet.
 
 The service checks every rule: who may manage, what labels exist, who can
 be granted. The lists here are only there to offer sensible choices, and a
@@ -27,6 +28,7 @@ NO_TITLE = "Give the document a title."
 NO_DEPARTMENT = "Give the department that owns the document, such as hr."
 TOO_MANY_READERS = f"Name at most {MAX_READERS} readers in one upload; grant the rest after."
 NOT_FOUND = "No document has that ID."
+NO_DOCUMENTS = "No documents are stored yet."
 
 _SEPARATORS = re.compile(r"[\s,;]+")
 
@@ -56,6 +58,14 @@ def until_end_of(day: date | None) -> datetime | None:
     if day is None:
         return None
     return datetime.combine(day + timedelta(days=1), time.min, tzinfo=UTC)
+
+
+def choice(document: ManagedDocument) -> str:
+    """How a document is told apart in the list: everything but what it says."""
+    return (
+        f"{document.department}, {document.classification}, version {document.version}, "
+        f"{document.status} ({document.id})"
+    )
 
 
 def label_changes(

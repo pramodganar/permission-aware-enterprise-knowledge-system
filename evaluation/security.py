@@ -45,6 +45,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -52,7 +53,7 @@ from sqlalchemy import select
 from app.api.components import Components
 from app.authorization.service import can_read
 from app.main import create_app
-from app.models import AuditRecord, Chunk, Document, DocumentStatus
+from app.models import AuditRecord, Chunk, Document, DocumentStatus, document_number
 from app.rag.answer import NO_INFORMATION_MESSAGE
 from evaluation.company import Company, loaded_company, measuring_settings
 from evaluation.dataset import Kind, Question, QuestionSet, default_set, normalise
@@ -192,12 +193,23 @@ def shown(response: str, needle: str, asked: str) -> bool:
     return normalise(needle) in beyond
 
 
-def cited_documents(asked: Asked) -> set[int]:
-    return {c["document"]["id"] for c in asked.body.get("citations", [])}
+def numbered(company: Company, public_ids: Iterable[str]) -> set[int]:
+    """The database's own numbers for the documents a response names by public ID."""
+    found = set()
+    for public_id in public_ids:
+        number = document_number(company.db, UUID(public_id))
+        if number is None:
+            raise ValueError(f"a response named {public_id}, which no document has")
+        found.add(number)
+    return found
 
 
-def found_documents(asked: Asked) -> set[int]:
-    return {r["document"]["id"] for r in asked.body.get("results", [])}
+def cited_documents(company: Company, asked: Asked) -> set[int]:
+    return numbered(company, (c["document"]["id"] for c in asked.body.get("citations", [])))
+
+
+def found_documents(company: Company, asked: Asked) -> set[int]:
+    return numbered(company, (r["document"]["id"] for r in asked.body.get("results", [])))
 
 
 @dataclass(frozen=True)
@@ -227,13 +239,13 @@ def probe(service: Service, question: Question) -> Probe:
     searched = service.ask("/search", question.asker, question.question)
     responses = (answered, searched)
 
-    seen = answered.given_documents | searched.given_documents | found_documents(searched)
+    seen = answered.given_documents | searched.given_documents | found_documents(company, searched)
     unreadable = {
         d for d in seen if d == forbidden.id or not can_read(asker, company.db.get_one(Document, d))
     }
     said = question.question
     secret_shown = any(shown(r.text, s, said) for r in responses for s in question.secrets)
-    cites_it = forbidden.id in cited_documents(answered)
+    cites_it = forbidden.id in cited_documents(company, answered)
     names_it = any(shown(r.text, forbidden.title, said) for r in responses)
 
     control = service.ask("/ask", str(question.control), question.question)
@@ -250,7 +262,7 @@ def probe(service: Service, question: Question) -> Probe:
         control_status=control.status,
         control_passed=control.status == 200
         and bool(control.body.get("answered"))
-        and forbidden.id in cited_documents(control),
+        and forbidden.id in cited_documents(company, control),
     )
 
 
@@ -271,7 +283,7 @@ def answerable(service: Service, question: Question) -> Answerable:
         asker=question.asker,
         status=asked.status,
         answered=bool(asked.body.get("answered")),
-        cites_its_document=document.id in cited_documents(asked),
+        cites_its_document=document.id in cited_documents(service.company, asked),
     )
 
 

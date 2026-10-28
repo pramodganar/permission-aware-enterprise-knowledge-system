@@ -20,6 +20,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from apiclient import MISSING
 from app.authorization.document_access import (
     GrantRequest,
     change_labels,
@@ -45,7 +46,8 @@ from scripts.seed import seed
 PEOPLE = ["alice", "bob", "carol", "david", "emma", "frank", "grace", "henry", "irene"]
 DEPARTMENTS = ["engineering", "finance", "hr", "sales", "legal", "operations", "executive"]
 NO_GATE = -1.0
-UNKNOWN_DOCUMENT = 999_999
+# No document has this ID.
+UNKNOWN_DOCUMENT = MISSING
 
 # question: the document that answers it
 QUESTIONS = {
@@ -145,7 +147,7 @@ class Company:
             *(SearchFilters(departments=frozenset({code})) for code in DEPARTMENTS),
             *(SearchFilters(classifications=frozenset({c})) for c in Classification),
             *(
-                SearchFilters(document_ids=frozenset({d.id}))
+                SearchFilters(document_ids=frozenset({d.public_id}))
                 for d in sorted(self.documents.values(), key=lambda d: d.id)
             ),
             SearchFilters(document_ids=frozenset({UNKNOWN_DOCUMENT})),
@@ -248,7 +250,7 @@ def test_a_forbidden_document_and_a_missing_one_give_identical_results(
         if can_read(user, document):
             continue
         forbidden = acme.ask(
-            name, question, filters=SearchFilters(document_ids=frozenset({document.id}))
+            name, question, filters=SearchFilters(document_ids=frozenset({document.public_id}))
         )
         assert forbidden == missing, document.title
 
@@ -286,7 +288,9 @@ def asks_for(acme: Company, name: str, title: str) -> set[str]:
     question = next(q for q, answer in QUESTIONS.items() if answer == title)
     by_question = acme.titles(acme.ask(name, question, limit=50))
     by_filter = acme.titles(
-        acme.ask(name, question, filters=SearchFilters(document_ids=frozenset({document.id})))
+        acme.ask(
+            name, question, filters=SearchFilters(document_ids=frozenset({document.public_id}))
+        )
     )
     return (by_question | by_filter) & {title}
 

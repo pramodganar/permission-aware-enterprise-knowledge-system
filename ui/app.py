@@ -15,6 +15,7 @@ the API refuses it either way.
 import os
 import sys
 from pathlib import Path
+from uuid import UUID
 
 import streamlit as st
 
@@ -258,7 +259,7 @@ def show_documents(client: Api) -> None:
             key="documents_open",
         )
         if chosen is not None:
-            show_document(client, signed_in, int(chosen))
+            show_document(client, signed_in, chosen)
     except NotSignedIn:
         sign_out(st.session_state, notice=SESSION_ENDED)
         st.rerun()
@@ -266,7 +267,7 @@ def show_documents(client: Api) -> None:
         st.error(literal(asking.explain(error)))
 
 
-def title_of(listed: list[DocumentSummary], document_id: int) -> str:
+def title_of(listed: list[DocumentSummary], document_id: UUID) -> str:
     return next((d.title for d in listed if d.id == document_id), str(document_id))
 
 
@@ -287,7 +288,7 @@ def show_listing(page: documents.Listing) -> None:
         )
 
 
-def show_document(client: Api, signed_in: str, document_id: int) -> None:
+def show_document(client: Api, signed_in: str, document_id: UUID) -> None:
     try:
         # Fetched again on every interaction, never kept, so a document the
         # person may no longer read is gone on their next click.
@@ -304,7 +305,7 @@ def show_document(client: Api, signed_in: str, document_id: int) -> None:
 # --- managing documents -----------------------------------------------------------------
 
 MANAGE_ID = "manage_id"
-# Set by an action, applied before the ID box is drawn on the next run: a
+# Set by an action, applied before the list is drawn on the next run: a
 # widget's value can't be changed once it is drawn.
 MANAGE_NEXT = "manage_next"
 MANAGE_DONE = "manage_done"
@@ -319,7 +320,7 @@ def form_name(name: str) -> str:
     return f"{name} {st.session_state.get(MANAGE_ROUND, 0)}"
 
 
-def finished(message: str, document_id: int | None = None) -> None:
+def finished(message: str, document_id: UUID | None = None) -> None:
     st.session_state[MANAGE_DONE] = message
     st.session_state[MANAGE_ROUND] = st.session_state.get(MANAGE_ROUND, 0) + 1
     if document_id is not None:
@@ -351,13 +352,27 @@ def show_manage(client: Api) -> None:
 
 
 def show_managed(client: Api, signed_in: str) -> None:
-    chosen = st.number_input("Document ID", min_value=1, step=1, value=None, key=MANAGE_ID)
-    if chosen is None:
-        st.caption("Enter a document's ID to see how it is managed.")
+    listed = client.managed_documents(signed_in)
+    if not listed.documents:
+        st.caption(managing.NO_DOCUMENTS)
         return
-    document_id = int(chosen)
+    by_id = {document.id: document for document in listed.documents}
+    if st.session_state.get(MANAGE_ID) not in by_id:
+        st.session_state.pop(MANAGE_ID, None)
+    chosen = st.selectbox(
+        "Document",
+        [None, *by_id],
+        format_func=lambda key: "" if key is None else managing.choice(by_id[key]),
+        key=MANAGE_ID,
+    )
+    if listed.total > len(listed.documents):
+        st.caption(f"The newest {len(listed.documents)} of {listed.total} documents.")
+    if chosen is None:
+        st.caption("Choose a document to see how it is managed.")
+        return
     try:
-        document = client.managed(signed_in, document_id)
+        # Fetched again, so what is shown is as it is now.
+        document = client.managed(signed_in, chosen)
     except NotSignedIn:
         raise
     except ApiError as error:
@@ -495,12 +510,14 @@ def show_audit(client: Api) -> None:
         action = middle.selectbox(
             "Action", [None, *reviewing.ACTIONS], format_func=lambda a: "Any" if a is None else a
         )
-        document_id = right.number_input("Document ID", min_value=1, step=1, value=None)
+        typed_id = right.text_input("Document ID")
         first_col, last_col = st.columns(2)
         first = first_col.date_input("From", value=None)
         last = last_col.date_input("To", value=None)
         st.form_submit_button("Show")
-    problem = reviewing.window_problem(first or None, last or None)
+    problem = reviewing.document_id_problem(typed_id) or reviewing.window_problem(
+        first or None, last or None
+    )
     if problem:
         st.error(problem)
         return
@@ -511,7 +528,7 @@ def show_audit(client: Api) -> None:
             token(st.session_state),
             actor=actor.strip() or None,
             action=action,
-            document_id=None if document_id is None else int(document_id),
+            document_id=reviewing.document_id_from(typed_id),
             since=since,
             until=until,
             page=int(st.session_state.get("audit_page", 1)),

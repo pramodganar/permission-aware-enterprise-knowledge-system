@@ -165,7 +165,7 @@ python -m scripts.run
 
 It starts the API, waits until it answers its health check, then starts the UI pointed at it, and prints where to go: http://127.0.0.1:8501 by default. Ctrl+C stops both, and if either stops the other is stopped too. `--api-port`, `--ui-port` and `--host` change where they listen; both listen on this machine only unless told otherwise.
 
-Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. Each person sees the pages their role allows: David asks and reads, Henry manages documents by ID without reading them, Irene reviews the audit trail. The UI only talks to the API; see [docs/ui.md](docs/ui.md).
+Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. Each person sees the pages their role allows: David asks and reads, Henry manages documents, picked from a list by ID, without reading them, Irene reviews the audit trail. The UI only talks to the API; see [docs/ui.md](docs/ui.md).
 
 To run them separately, start the API as above and, in a second terminal, `streamlit run ui/app.py`; the UI finds the API at `UI_API_URL`, `http://127.0.0.1:8000` by default.
 

@@ -3,6 +3,7 @@
 import logging
 from datetime import timedelta
 from typing import Annotated
+from uuid import UUID
 
 import pytest
 from fastapi import Depends, FastAPI, Request
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from acmecorp import World
+from apiclient import MISSING
 from app.auth.dependencies import CurrentUser, DbSession
 from app.auth.tokens import create_access_token
 from app.authorization.checks import get_readable_document
@@ -53,7 +55,7 @@ def client(engine: Engine, settings: Settings) -> TestClient:
         return {"read_by": user.id}
 
     @app.get("/documents/{document_id}")
-    def read_document(document_id: int, user: CurrentUser, db: DbSession) -> dict[str, object]:
+    def read_document(document_id: UUID, user: CurrentUser, db: DbSession) -> dict[str, object]:
         document = get_readable_document(db, user, document_id)
         return {"id": document.id, "title": document.title}
 
@@ -156,7 +158,7 @@ def test_user_can_fetch_a_document_they_may_read(
 ) -> None:
     runbook = world.documents["runbook"]
 
-    response = client.get(f"/documents/{runbook.id}", headers=as_user["alice"])
+    response = client.get(f"/documents/{runbook.public_id}", headers=as_user["alice"])
 
     assert response.status_code == 200
     assert response.json() == {"id": runbook.id, "title": "Deployment Runbook"}
@@ -181,7 +183,9 @@ def test_user_can_fetch_a_document_they_may_read(
 def test_document_the_user_may_not_read_is_not_found(
     client: TestClient, world: World, as_user: Headers, user: str, document: str
 ) -> None:
-    response = client.get(f"/documents/{world.documents[document].id}", headers=as_user[user])
+    response = client.get(
+        f"/documents/{world.documents[document].public_id}", headers=as_user[user]
+    )
 
     assert response.status_code == 404
     assert response.json() == NOT_FOUND
@@ -190,8 +194,10 @@ def test_document_the_user_may_not_read_is_not_found(
 def test_hidden_document_and_missing_document_are_indistinguishable(
     client: TestClient, world: World, as_user: Headers
 ) -> None:
-    hidden = client.get(f"/documents/{world.documents['exec_comp'].id}", headers=as_user["alice"])
-    missing = client.get("/documents/999999", headers=as_user["alice"])
+    hidden = client.get(
+        f"/documents/{world.documents['exec_comp'].public_id}", headers=as_user["alice"]
+    )
+    missing = client.get(f"/documents/{MISSING}", headers=as_user["alice"])
 
     assert hidden.status_code == missing.status_code == 404
     assert hidden.json() == missing.json()
@@ -202,7 +208,7 @@ def test_hidden_document_and_missing_document_are_indistinguishable(
 def test_grant_makes_a_restricted_document_fetchable_until_it_expires(
     client: TestClient, world: World, as_user: Headers
 ) -> None:
-    url = f"/documents/{world.documents['case_file'].id}"
+    url = f"/documents/{world.documents['case_file'].public_id}"
     assert client.get(url, headers=as_user["carol"]).status_code == 404
 
     world.grant("case_file", "carol", expires_at=utc_now() + timedelta(hours=1))
@@ -220,16 +226,16 @@ def test_a_denied_document_and_a_missing_one_each_leave_one_line_that_tells_them
     caplog.set_level(logging.WARNING, logger="app.authorization.checks")
     exec_comp = world.documents["exec_comp"]
 
-    client.get("/documents/999999", headers=as_user["alice"])
-    client.get(f"/documents/{exec_comp.id}", headers=as_user["alice"])
+    client.get(f"/documents/{MISSING}", headers=as_user["alice"])
+    client.get(f"/documents/{exec_comp.public_id}", headers=as_user["alice"])
 
     missing, denied = caplog.records
     assert missing.getMessage() == denied.getMessage() == "document not returned"
-    assert (missing.__dict__["document_id"], missing.__dict__["exists"]) == (999999, False)
+    assert (missing.__dict__["document_id"], missing.__dict__["exists"]) == (None, False)
     assert (denied.__dict__["document_id"], denied.__dict__["exists"]) == (exec_comp.id, True)
     assert denied.__dict__["user_id"] == world.users["alice"].id
     assert "Executive" not in "".join(str(vars(record)) for record in caplog.records)
 
 
 def test_unauthenticated_document_request_is_401(client: TestClient, world: World) -> None:
-    assert client.get(f"/documents/{world.documents['leave_policy'].id}").status_code == 401
+    assert client.get(f"/documents/{world.documents['leave_policy'].public_id}").status_code == 401

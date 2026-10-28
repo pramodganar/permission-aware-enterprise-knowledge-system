@@ -10,6 +10,7 @@ import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +18,7 @@ from httpx2 import Response
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from apiclient import company_client, email, headers
+from apiclient import MISSING, company_client, email, headers, public_path
 from app.core.config import Settings
 from app.models import Document, DocumentGrant, Role, RoleCode, User
 from files import make_docx
@@ -87,8 +88,9 @@ def titles_for(client: TestClient, name: str) -> set[str]:
     return {document["title"] for document in documents}
 
 
-def document_id(db: Session, title: str) -> int:
-    return db.scalars(select(Document.id).where(Document.title == title)).one()
+def document_id(db: Session, title: str) -> UUID:
+    """The ID the service gives the document: its public one."""
+    return db.scalars(select(Document).where(Document.title == title)).one().public_id
 
 
 def state(db: Session) -> list[tuple[Any, ...]]:
@@ -118,12 +120,21 @@ def calls(client: TestClient) -> list[tuple[str, str, dict[str, Any]]]:
     }
     return [
         ("POST", "/admin/documents", form),
-        ("GET", "/admin/documents/1", {}),
-        ("POST", "/admin/documents/1/versions", {"files": form["files"]}),
-        ("PATCH", "/admin/documents/1", {"json": {"classification": "restricted"}}),
-        ("DELETE", "/admin/documents/1", {}),
-        ("PUT", "/admin/documents/1/grants", {"json": {"email": email("david")}}),
-        ("DELETE", f"/admin/documents/16/grants/{email('carol')}", {}),
+        ("GET", "/admin/documents", {}),
+        ("GET", public_path(client, "/admin/documents/<1>"), {}),
+        ("POST", public_path(client, "/admin/documents/<1>/versions"), {"files": form["files"]}),
+        (
+            "PATCH",
+            public_path(client, "/admin/documents/<1>"),
+            {"json": {"classification": "restricted"}},
+        ),
+        ("DELETE", public_path(client, "/admin/documents/<1>"), {}),
+        (
+            "PUT",
+            public_path(client, "/admin/documents/<1>/grants"),
+            {"json": {"email": email("david")}},
+        ),
+        ("DELETE", public_path(client, f"/admin/documents/<16>/grants/{email('carol')}"), {}),
     ]
 
 
@@ -205,6 +216,32 @@ def test_what_the_admin_sees_has_no_title_file_name_or_text(
     }
     for secret in ("Trade Fair Logistics", "fair-logistics", "zebra"):
         assert secret not in response.text
+
+
+def test_the_list_has_every_document_newest_first_as_it_is_managed(
+    client: TestClient, db: Session, henry: dict[str, str]
+) -> None:
+    new = uploaded(client, henry, data=note("Marker words zebra quartz."))
+    replaced = client.post(
+        f"/admin/documents/{document_id(db, 'Code of Conduct')}/versions",
+        headers=henry,
+        files={"file": ("conduct.txt", note("A second version."), "text/plain")},
+    ).json()
+
+    listed = client.get("/admin/documents", headers=henry)
+    first = client.get("/admin/documents", headers=henry, params={"limit": 2}).json()
+    rest = client.get("/admin/documents", headers=henry, params={"offset": 2}).json()
+
+    body = listed.json()
+    stored = db.scalars(select(Document).order_by(Document.id.desc())).all()
+    assert body["total"] == len(stored) == 19
+    assert [d["id"] for d in body["documents"]] == [str(d.public_id) for d in stored]
+    assert body["documents"][:2] == [replaced, new]
+    assert {d["status"] for d in body["documents"]} == {"active", "superseded"}
+    assert first["documents"] + rest["documents"] == body["documents"]
+    assert first["total"] == rest["total"] == 19
+    for secret in ("Trade Fair Logistics", "fair-logistics", "zebra", "Code of Conduct"):
+        assert secret not in listed.text
 
 
 def test_a_new_upload_is_not_in_the_index_until_it_is_rebuilt(
@@ -347,7 +384,7 @@ def test_a_new_version_replaces_the_old_one_for_readers_and_keeps_its_audience(
 
     assert response.status_code == 201, response.text
     new = response.json()
-    assert (new["version"], new["supersedes_id"]) == (2, case_file)
+    assert (new["version"], new["supersedes_id"]) == (2, str(case_file))
     assert (new["classification"], new["department"]) == ("restricted", "hr")
     assert [grant["email"] for grant in new["grants"]] == [email("carol")]
     assert client.get(f"/documents/{case_file}", headers=carol).status_code == 404
@@ -385,7 +422,7 @@ def test_only_a_current_document_can_be_replaced(
     leave = document_id(db, "Leave Policy")
     if target == "deleted":
         client.delete(f"/admin/documents/{leave}", headers=henry)
-    path_id = leave if target == "deleted" else 999_999
+    path_id = leave if target == "deleted" else MISSING
 
     response = client.post(
         f"/admin/documents/{path_id}/versions",
@@ -524,7 +561,9 @@ def test_a_grant_that_can_not_be_given_says_why_and_changes_nothing(
 ) -> None:
     before = state(db)
 
-    response = client.put("/admin/documents/1/grants", headers=henry, json=body)
+    response = client.put(
+        public_path(client, "/admin/documents/<1>/grants"), headers=henry, json=body
+    )
 
     assert response.status_code == 422
     assert message in response.json()["error"]["message"]
@@ -573,7 +612,7 @@ def test_managing_logs_ids_and_labels_never_titles_file_names_or_text(
 def test_the_admin_view_of_a_missing_document_is_not_found(
     client: TestClient, henry: dict[str, str]
 ) -> None:
-    response = client.get("/admin/documents/999999", headers=henry)
+    response = client.get(f"/admin/documents/{MISSING}", headers=henry)
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"

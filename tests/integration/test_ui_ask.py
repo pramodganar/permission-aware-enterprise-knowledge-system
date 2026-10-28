@@ -287,7 +287,7 @@ def test_without_a_model_asking_says_so_and_search_still_works(open_as: Open) ->
 
 def test_choosing_a_document_narrows_to_it(open_as: Open, db: Session) -> None:
     page = go_to_ask(open_as("grace", FakeLLM(repeat_everything)))
-    leave = db.scalars(select(Document.id).where(Document.title == "Leave Policy")).one()
+    leave = db.scalars(select(Document).where(Document.title == "Leave Policy")).one().public_id
 
     search(page, "What is the approval limit for vendor payments?", Documents=[leave])
 

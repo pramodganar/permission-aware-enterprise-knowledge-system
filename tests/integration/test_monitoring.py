@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from apiclient import company_client, email, headers
+from apiclient import MISSING, company_client, email, headers, public_path
 from app.core.config import Settings
 from app.core.logging_setup import configure_logging
 from logcheck import logging_restored
@@ -93,10 +93,11 @@ def test_asking_for_a_restricted_document_again_and_again_fires_its_rule(
     ordinary_use(client)
     auth = headers(client, "david")
     for _ in range(10):
-        assert client.get(f"/documents/{RESTRICTED}", headers=auth).status_code == 404
+        restricted = public_path(client, f"/documents/<{RESTRICTED}>")
+        assert client.get(restricted, headers=auth).status_code == 404
     # A document that doesn't exist is a typo, not a probe.
     for _ in range(10):
-        client.get("/documents/999", headers=auth)
+        client.get(f"/documents/{MISSING}", headers=auth)
 
     found = report()
     probed = next(c for c in found.checked if c.rule.name == "documents-probed")
@@ -112,6 +113,8 @@ def test_trying_actions_without_the_permission_fires_its_rule(
     ordinary_use(client)
     auth = headers(client, "david")
     for _ in range(10):
-        assert client.get("/admin/documents/1", headers=auth).status_code == 403
+        assert (
+            client.get(public_path(client, "/admin/documents/<1>"), headers=auth).status_code == 403
+        )
 
     assert fired(report()) == ["actions-denied"]

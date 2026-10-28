@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
@@ -14,7 +15,7 @@ UPDATED = datetime(2026, 3, 9, 14, 30, tzinfo=UTC)
 
 def summary(n: int) -> dict[str, Any]:
     return {
-        "id": n,
+        "id": str(UUID(int=n)),
         "title": f"Doc {n:03}",
         "department": {"code": "sales", "name": "Sales"},
         "classification": "general",
@@ -51,7 +52,7 @@ def test_a_page_is_asked_for_by_offset_with_the_filters() -> None:
 
     page = listing(api, "tok", department="sales", classification="general", page=3)
 
-    assert [d.id for d in page.documents] == [41, 42, 43]
+    assert [d.id for d in page.documents] == [UUID(int=n) for n in (41, 42, 43)]
     assert (page.total, page.page, page.pages) == (43, 3, 3)
     assert seen[0].url.params["offset"] == str(2 * PAGE_SIZE)
     assert seen[0].url.params["limit"] == str(PAGE_SIZE)

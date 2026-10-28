@@ -26,6 +26,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import Base, create_db_engine, create_session_factory
 from app.core.logging_setup import configure_logging
 from app.core.rate_limit import RateLimiter, Window
+from app.models import give_public_ids
 
 FORM_OVERHEAD_BYTES = 64 * 1024
 
@@ -46,10 +47,11 @@ def create_app(
         # Creates tables that are missing, such as the audit trail in a
         # database seeded before it existed. Never changes an existing one.
         Base.metadata.create_all(database)
-        if components is None:
-            with session_factory() as db:
+        with session_factory() as db:
+            give_public_ids(db)
+            if components is None:
                 app.state.components = load_components(current, db)
-        else:
+        if components is not None:
             app.state.components = components
         try:
             yield

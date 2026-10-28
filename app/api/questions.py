@@ -39,6 +39,7 @@ stored, the caller gets 503 instead of the results (decision record 0006).
 
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -72,7 +73,7 @@ class QuestionRequest(BaseModel):
 
 
 class DocumentRef(BaseModel):
-    id: int
+    id: UUID
     title: str
     version: int
 
@@ -174,7 +175,9 @@ def search(
         results=[
             Passage(
                 document=DocumentRef(
-                    id=chunk.document_id, title=chunk.document_title, version=chunk.document_version
+                    id=chunk.document_public_id,
+                    title=chunk.document_title,
+                    version=chunk.document_version,
                 ),
                 start_offset=chunk.start_offset,
                 end_offset=chunk.end_offset,
@@ -219,7 +222,7 @@ def ask(
             Citation(
                 label=source.label,
                 document=DocumentRef(
-                    id=source.document_id,
+                    id=source.document_public_id,
                     title=source.document_title,
                     version=source.document_version,
                 ),

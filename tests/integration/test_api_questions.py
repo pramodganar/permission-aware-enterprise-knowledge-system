@@ -12,6 +12,7 @@ import logging
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,9 +20,9 @@ from httpx2 import Response
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from apiclient import company_client, headers
+from apiclient import MISSING, company_client, headers
 from app.core.config import Settings
-from app.models import Document
+from app.models import Document, document_number
 from app.rag.answer import NO_INFORMATION_MESSAGE
 from app.rag.llm import Completion, LLMError, LLMProvider, LLMUnavailableError, StopReason
 from app.rag.prompt import NOT_IN_SOURCES, Prompt
@@ -101,8 +102,9 @@ def post(client: TestClient, path: str, name: str, question: str, **body: Any) -
     return client.post(path, headers=headers(client, name), json={"question": question, **body})
 
 
-def document_id(db: Session, title: str) -> int:
-    return db.scalars(select(Document.id).where(Document.title == title)).one()
+def document_id(db: Session, title: str) -> UUID:
+    """The ID the service gives the document: its public one."""
+    return db.scalars(select(Document).where(Document.title == title)).one().public_id
 
 
 def unreadable_facts(name: str) -> dict[str, str]:
@@ -151,7 +153,9 @@ def test_a_search_result_says_where_the_passage_is_and_nothing_about_the_decisio
     result = body["results"][0]
     assert set(result) == {"document", "start_offset", "end_offset", "text", "score"}
     assert set(result["document"]) == {"id", "title", "version"}
-    document = db.get(Document, result["document"]["id"])
+    document = db.scalars(
+        select(Document).where(Document.id == document_number(db, UUID(result["document"]["id"])))
+    ).one()
     assert document is not None
     assert document.content[result["start_offset"] : result["end_offset"]] == result["text"]
     assert response.headers["Cache-Control"] == "no-store"
@@ -211,8 +215,10 @@ def test_filtering_on_an_unreadable_document_looks_like_filtering_on_a_missing_o
     question = "Which employees are on a performance improvement plan?"
 
     for path in ("/search", "/ask"):
-        unreadable = post(client, path, "david", question, filters={"document_ids": [case_file]})
-        missing = post(client, path, "david", question, filters={"document_ids": [999_999]})
+        unreadable = post(
+            client, path, "david", question, filters={"document_ids": [str(case_file)]}
+        )
+        missing = post(client, path, "david", question, filters={"document_ids": [str(MISSING)]})
 
         assert unreadable.status_code == missing.status_code == 200
         assert unreadable.json() == missing.json()
@@ -228,7 +234,7 @@ def test_a_granted_reader_can_ask_about_one_restricted_document(
         "/ask",
         "emma",
         "What acquisitions is the company considering?",
-        filters={"document_ids": [falcon]},
+        filters={"document_ids": [str(falcon)]},
     )
 
     body = response.json()

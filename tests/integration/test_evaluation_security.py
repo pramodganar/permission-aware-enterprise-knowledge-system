@@ -91,8 +91,15 @@ def case_file_probe() -> Question:
 
 
 def document_id(company: Company, title: str) -> int:
+    """The database's own number, as the audit trail's chunks give it."""
     found: int = company.db.scalars(select(Document.id).where(Document.title == title)).one()
     return found
+
+
+def public_id(company: Company, title: str) -> str:
+    """The ID a response names the document by."""
+    document = company.db.scalars(select(Document).where(Document.title == title)).one()
+    return str(document.public_id)
 
 
 def run_probe(
@@ -107,7 +114,15 @@ def run_probe(
         "answered": True,
         "answer": "E-2291 [S1]",
         "citations": [
-            {"label": "S1", "document": {"id": case, "title": "x", "version": 1}, "text": ""}
+            {
+                "label": "S1",
+                "document": {
+                    "id": public_id(company, "HR Case File 2026-014"),
+                    "title": "x",
+                    "version": 1,
+                },
+                "text": "",
+            }
         ],
         "cut_off": False,
         "uncited": False,
@@ -153,7 +168,7 @@ def test_the_title_in_a_search_response_is_an_existence_leak(company: Company) -
 
 
 def test_a_citation_to_the_forbidden_document_is_a_leak(company: Company) -> None:
-    case = document_id(company, "HR Case File 2026-014")
+    case = public_id(company, "HR Case File 2026-014")
     cited = {
         "answered": True,
         "answer": "See [S1].",
@@ -214,7 +229,7 @@ def test_a_control_that_isnt_answered_from_the_document_fails(company: Company) 
 
 def test_a_control_answered_from_another_document_fails(company: Company) -> None:
     question = case_file_probe()
-    leave = document_id(company, "Leave Policy")
+    leave = public_id(company, "Leave Policy")
     elsewhere = {
         "answered": True,
         "answer": "See [S1].",
@@ -228,7 +243,9 @@ def test_a_control_answered_from_another_document_fails(company: Company) -> Non
         {
             "/ask": security.Asked(200, security.NO_INFORMATION, frozenset()),
             "/search": security.Asked(200, {"results": []}, frozenset()),
-            "/ask control": security.Asked(200, elsewhere, frozenset({leave})),
+            "/ask control": security.Asked(
+                200, elsewhere, frozenset({document_id(company, "Leave Policy")})
+            ),
         },
     )
 

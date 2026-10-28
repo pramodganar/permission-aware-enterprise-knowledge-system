@@ -13,6 +13,7 @@ import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 import jwt
 import pytest
@@ -21,6 +22,7 @@ from httpx2 import Response
 from sqlalchemy import Engine
 
 from acmecorp import COMPANY_DOCUMENTS, PERSONAS, World
+from apiclient import MISSING
 from app.api.components import Components
 from app.auth.tokens import create_access_token
 from app.core.config import Settings
@@ -166,7 +168,7 @@ def test_identity_claimed_in_headers_or_parameters_is_ignored(
         "role": "executive",
         "department": "executive",
     }
-    hidden = company.documents["exec_comp"].id
+    hidden = company.documents["exec_comp"].public_id
 
     listed = client.get("/documents", headers=spoof_headers, params=spoof_params).json()[
         "documents"
@@ -202,7 +204,7 @@ def test_token_is_only_accepted_in_the_authorization_header(
     assert client.get("/documents").status_code == 401
 
 
-@pytest.mark.parametrize("path", ["/auth/me", "/documents", "/documents/1", "/audit"])
+@pytest.mark.parametrize("path", ["/auth/me", "/documents", f"/documents/{MISSING}", "/audit"])
 def test_nothing_is_served_without_authentication(
     client: TestClient, company: World, path: str
 ) -> None:
@@ -227,7 +229,7 @@ def test_no_account_can_fetch_any_document_it_may_not_read(
             if name in readable:
                 continue
             probes += 1
-            response = client.get(f"/documents/{document.id}", headers=login[user])
+            response = client.get(f"/documents/{document.public_id}", headers=login[user])
             if response.status_code != 404 or without_request_id(response) != NOT_FOUND:
                 exposed += 1
 
@@ -249,11 +251,17 @@ def test_document_list_shows_only_what_the_account_may_read(
 def test_walking_every_id_finds_only_the_accounts_own_documents(
     client: TestClient, company: World, login: Login
 ) -> None:
+    # Every document's public ID, and the database's numbers written as IDs.
     highest = max(document.id for document in company.documents.values())
+    walk = [
+        *(document.public_id for document in company.documents.values()),
+        *(UUID(int=number) for number in range(1, highest + 25)),
+        MISSING,
+    ]
     found: set[str] = set()
     refusals: set[str] = set()
 
-    for document_id in range(1, highest + 25):
+    for document_id in walk:
         response = client.get(f"/documents/{document_id}", headers=login["alice"])
         if response.status_code == 200:
             found.add(response.json()["title"])
@@ -274,7 +282,7 @@ def test_refusals_never_contain_a_hidden_title(
 
     for document in company.documents.values():
         everything_alice_received += client.get(
-            f"/documents/{document.id}", headers=login["alice"]
+            f"/documents/{document.public_id}", headers=login["alice"]
         ).text
     everything_alice_received += client.get("/documents", headers=login["alice"]).text
     everything_alice_received += client.post("/admin/documents", headers=login["alice"]).text
@@ -304,10 +312,12 @@ def test_odd_ids_never_return_a_hidden_document_or_crash(
 def test_adding_a_document_id_parameter_does_not_redirect_the_lookup(
     client: TestClient, company: World, login: Login
 ) -> None:
-    own, hidden = company.documents["runbook"].id, company.documents["exec_comp"].id
+    own, hidden = company.documents["runbook"].public_id, company.documents["exec_comp"].public_id
 
     response = client.get(
-        f"/documents/{own}", headers=login["alice"], params={"document_id": hidden, "id": hidden}
+        f"/documents/{own}",
+        headers=login["alice"],
+        params={"document_id": str(hidden), "id": str(hidden)},
     )
 
     assert response.json()["title"] == "Deployment Runbook"
@@ -322,7 +332,9 @@ def test_non_reader_accounts_get_no_document_by_any_route(
 ) -> None:
     assert client.get("/documents", headers=login[user]).json()["documents"] == []
     for document in company.documents.values():
-        assert client.get(f"/documents/{document.id}", headers=login[user]).status_code == 404
+        assert (
+            client.get(f"/documents/{document.public_id}", headers=login[user]).status_code == 404
+        )
 
 
 def test_admin_who_can_ingest_still_cannot_read(
@@ -359,7 +371,7 @@ def test_grant_given_to_an_admin_does_not_let_them_read(
     assert client.get("/documents", headers=login["admin"]).json()["documents"] == []
     assert (
         client.get(
-            f"/documents/{company.documents['case_file'].id}", headers=login["admin"]
+            f"/documents/{company.documents['case_file'].public_id}", headers=login["admin"]
         ).status_code
         == 404
     )
@@ -385,7 +397,7 @@ def test_only_the_reviewer_can_read_the_audit_log(
 def test_demoted_executive_loses_cross_department_access_at_once(
     client: TestClient, company: World, login: Login
 ) -> None:
-    hidden_after = company.documents["salary_bands"].id
+    hidden_after = company.documents["salary_bands"].public_id
     assert client.get(f"/documents/{hidden_after}", headers=login["grace"]).status_code == 200
 
     employee = next(role for role in company.users["alice"].roles if role.code == RoleCode.EMPLOYEE)
@@ -400,7 +412,7 @@ def test_demoted_executive_loses_cross_department_access_at_once(
 def test_employee_who_moves_department_loses_the_old_departments_documents(
     client: TestClient, company: World, login: Login
 ) -> None:
-    runbook = company.documents["runbook"].id
+    runbook = company.documents["runbook"].public_id
     assert client.get(f"/documents/{runbook}", headers=login["alice"]).status_code == 200
 
     company.users["alice"].department = company.users["bob"].department
@@ -418,14 +430,18 @@ def test_deactivated_user_is_locked_out_with_a_still_valid_token(
     company.users["grace"].is_active = False
     company.db.commit()
 
-    for path in ("/auth/me", "/documents", f"/documents/{company.documents['exec_comp'].id}"):
+    for path in (
+        "/auth/me",
+        "/documents",
+        f"/documents/{company.documents['exec_comp'].public_id}",
+    ):
         assert client.get(path, headers=login["grace"]).status_code == 401
 
 
 def test_revoked_grant_stops_working_at_once(
     client: TestClient, company: World, login: Login
 ) -> None:
-    url = f"/documents/{company.documents['acquisition'].id}"
+    url = f"/documents/{company.documents['acquisition'].public_id}"
     company.grant("acquisition", "grace")
     assert client.get(url, headers=login["grace"]).status_code == 200
 
@@ -439,7 +455,7 @@ def test_revoked_grant_stops_working_at_once(
 def test_expired_grant_stops_working_without_anyone_removing_it(
     client: TestClient, company: World, login: Login
 ) -> None:
-    url = f"/documents/{company.documents['runbook'].id}"
+    url = f"/documents/{company.documents['runbook'].public_id}"
     company.grant("runbook", "bob", expires_at=utc_now() + timedelta(hours=1))
     assert client.get(url, headers=login["bob"]).status_code == 200
 
@@ -453,7 +469,7 @@ def test_expired_grant_stops_working_without_anyone_removing_it(
 def test_reclassifying_a_document_as_restricted_hides_it_from_everyone(
     client: TestClient, company: World, login: Login
 ) -> None:
-    url = f"/documents/{company.documents['exec_comp'].id}"
+    url = f"/documents/{company.documents['exec_comp'].public_id}"
     assert client.get(url, headers=login["grace"]).status_code == 200
 
     company.documents["exec_comp"].classification = "restricted"
@@ -467,7 +483,7 @@ def test_one_users_grant_cannot_be_used_by_another(
     client: TestClient, company: World, login: Login
 ) -> None:
     company.grant("case_file", "carol")
-    url = f"/documents/{company.documents['case_file'].id}"
+    url = f"/documents/{company.documents['case_file'].public_id}"
 
     assert client.get(url, headers=login["carol"]).status_code == 200
     for user in company.users:

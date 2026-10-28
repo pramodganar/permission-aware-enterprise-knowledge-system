@@ -12,13 +12,14 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, func, inspect, select, text
 from sqlalchemy.orm import Session
 
-from apiclient import PASSWORD, company_client, email, headers
+from apiclient import MISSING, PASSWORD, company_client, email, headers
 from app.api.components import Components
 from app.core.config import Settings
 from app.main import create_app
@@ -66,8 +67,9 @@ def user_id(db: Session, name: str) -> int:
     return db.scalars(select(User.id).where(User.email == email(name))).one()
 
 
-def document_id(db: Session, title: str) -> int:
-    return db.scalars(select(Document.id).where(Document.title == title)).one()
+def document_id(db: Session, title: str) -> UUID:
+    """The ID the service gives the document: its public one."""
+    return db.scalars(select(Document).where(Document.title == title)).one().public_id
 
 
 def titles_of_chunks(db: Session, chunk_ids: list[int]) -> set[str]:
@@ -113,6 +115,18 @@ def test_reading_the_trail_is_itself_recorded(client: TestClient, db: Session) -
     read = latest(client, "audit.read")
     assert read["actor"] == {"id": user_id(db, "irene"), "email": email("irene")}
     assert read["details"]["filters"]["actor_email"] == email("david")
+
+
+@pytest.mark.parametrize("title", ["Leave Policy", None])
+def test_a_read_for_one_document_records_the_id_as_it_was_asked_for(
+    client: TestClient, db: Session, title: str | None
+) -> None:
+    # The ID the reviewer gave, whether or not a document has it.
+    asked = str(MISSING if title is None else document_id(db, title))
+    client.get("/audit", headers=headers(client, "irene"), params={"document_id": asked})
+
+    read = latest(client, "audit.read")
+    assert read["details"]["filters"]["document_id"] == asked
 
 
 def test_the_trail_must_not_be_stored(client: TestClient) -> None:
@@ -213,15 +227,16 @@ def test_opening_a_document_is_recorded_and_so_is_every_refusal(
     auth = headers(client, "david")
     leave, case_file = document_id(db, "Leave Policy"), document_id(db, "HR Case File 2026-014")
 
-    responses = [client.get(f"/documents/{i}", headers=auth) for i in (leave, case_file, 999_999)]
+    responses = [client.get(f"/documents/{i}", headers=auth) for i in (leave, case_file, MISSING)]
 
     entries = trail(client, action="document.read")[:3][::-1]
     assert [(e["outcome"], e["document_id"]) for e in entries] == [
-        ("allowed", leave),
-        ("denied", case_file),
+        ("allowed", str(leave)),
+        ("denied", str(case_file)),
         ("not_found", None),
     ]
-    assert entries[2]["details"] == {"requested_id": 999_999}
+    # As asked for: no document has it, so there is nothing else to name.
+    assert entries[2]["details"] == {"requested_id": str(MISSING)}
     # The responses to the last two were identical; only the trail tells them apart.
     assert responses[1].json()["error"]["message"] == responses[2].json()["error"]["message"]
     assert [e["request_id"] for e in entries] == [r.headers["X-Request-ID"] for r in responses]
@@ -292,9 +307,9 @@ def test_every_change_an_admin_makes_is_recorded_with_its_document(
     assert [(e["action"], e["document_id"]) for e in entries] == [
         ("document.ingested", uploaded["id"]),
         ("document.replaced", replaced["id"]),
-        ("document.relabelled", leave),
-        ("grant.given", bands),
-        ("grant.revoked", bands),
+        ("document.relabelled", str(leave)),
+        ("grant.given", str(bands)),
+        ("grant.revoked", str(bands)),
         ("document.deleted", replaced["id"]),
     ]
     assert entries[1]["details"]["replaced_document_id"] == uploaded["id"]
@@ -324,9 +339,10 @@ def test_the_trail_can_be_narrowed_and_paged(client: TestClient, db: Session) ->
     searches = trail(client, actor=email("david"), action="search")
     assert len(searches) == 3
     assert [e["id"] for e in searches] == sorted((e["id"] for e in searches), reverse=True)
-    assert [e["document_id"] for e in trail(client, document_id=leave, action="document.read")] == [
-        leave
-    ]
+    assert [
+        e["document_id"] for e in trail(client, document_id=str(leave), action="document.read")
+    ] == [str(leave)]
+    assert trail(client, document_id=str(MISSING)) == []
     page = client.get(
         "/audit", headers=headers(client, "irene"), params={"action": "search", "limit": 2}
     ).json()
@@ -425,8 +441,8 @@ def test_without_an_audit_store_a_change_is_not_made(
 
     assert deleted.status_code >= 500
     db.expire_all()
-    leave_policy = db.get(Document, leave)
-    assert leave_policy is not None
+    leave_policy = db.scalars(select(Document).where(Document.title == "Leave Policy")).one()
+    assert leave_policy.public_id == leave
     assert leave_policy.status == "active"
     # Lists aren't audited, so Frank's still works, and still has it.
     listed = client.get("/documents", headers=frank).json()["documents"]

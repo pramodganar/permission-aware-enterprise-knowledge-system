@@ -54,7 +54,7 @@ def trail(page: AppTest) -> list[tuple[object, ...]]:
 def test_access_given_and_taken_away_shows_on_the_next_click_and_in_the_trail(
     service: str, monkeypatch: pytest.MonkeyPatch, db: Session
 ) -> None:
-    case = db.scalars(select(Document.id).where(Document.title == CASE_FILE)).one()
+    case = db.scalars(select(Document).where(Document.title == CASE_FILE)).one().public_id
     david = on_page(service, monkeypatch, "david", DOCUMENTS)
     henry = on_page(service, monkeypatch, "henry", MANAGE)
     irene = on_page(service, monkeypatch, "irene", AUDIT)
@@ -63,7 +63,7 @@ def test_access_given_and_taken_away_shows_on_the_next_click_and_in_the_trail(
     assert CASE_FILE not in listed(david)
 
     # Henry gives David access.
-    henry.number_input(key="manage_id").set_value(case).run()
+    henry.selectbox(key="manage_id").set_value(case).run()
     next(t for t in henry.text_input if t.label == "Email").input(email("david"))
     next(b for b in henry.button if b.label == "Grant").click().run()
     assert [unescape(s.value) for s in henry.success] == [
@@ -78,8 +78,8 @@ def test_access_given_and_taken_away_shows_on_the_next_click_and_in_the_trail(
 
     # Irene sees both.
     seen = trail(irene)
-    assert (email("henry"), "grant.given", "done", case) in seen
-    assert (email("david"), "document.read", "allowed", case) in seen
+    assert (email("henry"), "grant.given", "done", str(case)) in seen
+    assert (email("david"), "document.read", "allowed", str(case)) in seen
 
     # Henry takes it away.
     henry.button(key=f"revoke {email('david')}").click().run()
@@ -90,7 +90,7 @@ def test_access_given_and_taken_away_shows_on_the_next_click_and_in_the_trail(
     assert IN_THE_CASE_FILE not in everything_shown(david)
 
     seen = trail(irene)
-    assert (email("henry"), "grant.revoked", "done", case) in seen
+    assert (email("henry"), "grant.revoked", "done", str(case)) in seen
     # Henry managed it throughout without ever reading it.
     assert not [row for row in seen if row[0] == email("henry") and row[1] == "document.read"]
     assert IN_THE_CASE_FILE not in everything_shown(henry)

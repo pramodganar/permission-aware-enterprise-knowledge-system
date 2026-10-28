@@ -6,19 +6,21 @@ action working, the page must never show him a title, a file name or text.
 
 from collections.abc import Iterator
 from datetime import UTC, date, timedelta
+from uuid import UUID
 
 import pytest
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
 
-from apiclient import PASSWORD, company_app, email
+from apiclient import MISSING, PASSWORD, company_app, email
 from app.core.config import Settings
 from app.models import Document, DocumentGrant, User
 from liveserver import live_server
 from questions import FACTS
 from shown import everything_shown, open_ui, unescape
 from ui import managing
+from ui.client import Api
 from ui.session import AUDIT, DOCUMENTS, HOME, MANAGE
 
 BANDS = "Salary Bands 2026"
@@ -53,8 +55,9 @@ def document(db: Session, title: str) -> Document:
     return db.scalars(select(Document).where(Document.title == title)).one()
 
 
-def look_up(page: AppTest, document_id: int) -> AppTest:
-    page.number_input(key="manage_id").set_value(document_id).run()
+def look_up(page: AppTest, document_id: UUID) -> AppTest:
+    # Picked from the list of every document, as an admin does.
+    page.selectbox(key="manage_id").set_value(document_id).run()
     assert not page.exception
     return page
 
@@ -111,7 +114,7 @@ def test_a_document_is_shown_as_it_is_managed_and_never_what_it_says(
 ) -> None:
     case = document(db, CASE_FILE)
 
-    look_up(henry, case.id)
+    look_up(henry, case.public_id)
 
     facts = facts_shown(henry)
     assert facts["Classification"] == "restricted"
@@ -126,8 +129,17 @@ def test_a_document_is_shown_as_it_is_managed_and_never_what_it_says(
     assert not [fact for fact in FACTS if fact in shown]
 
 
-def test_a_missing_id_says_so(henry: AppTest) -> None:
-    look_up(henry, 10**9)
+def test_a_document_the_service_no_longer_finds_says_so(
+    henry: AppTest, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Listed a moment before, then not found when it is fetched.
+    real = Api.managed
+
+    def gone(self: Api, token: str, document_id: UUID) -> object:
+        return real(self, token, MISSING)
+
+    monkeypatch.setattr(Api, "managed", gone)
+    look_up(henry, document(db, "Leave Policy").public_id)
 
     assert errors(henry) == [managing.NOT_FOUND]
     assert not henry.dataframe
@@ -148,8 +160,8 @@ def test_uploading_a_document_files_it_and_shows_how_it_is_managed(
     press(henry, "Upload")
 
     new = document(db, "Trade Fair Logistics")
-    assert success(henry) == [f"Uploaded as document {new.id}."]
-    assert henry.number_input(key="manage_id").value == new.id
+    assert success(henry) == [f"Uploaded as document {new.public_id}."]
+    assert henry.selectbox(key="manage_id").value == new.public_id
     assert facts_shown(henry)["Search"] == "can't find it until the index is rebuilt"
     assert (new.classification, new.department.code) == ("restricted", "sales")
     granted = db.scalars(
@@ -190,14 +202,14 @@ def test_the_service_says_what_is_wrong_with_an_upload(henry: AppTest) -> None:
 
 def test_granting_and_revoking_access(henry: AppTest, db: Session) -> None:
     case = document(db, CASE_FILE)
-    look_up(henry, case.id)
+    look_up(henry, case.public_id)
     type_into(henry, "Email", email("david"))
     last_day = date.today() + timedelta(days=7)
     henry.date_input[0].set_value(last_day)
 
     press(henry, "Grant")
 
-    assert success(henry) == [f"Gave {email('david')} access to document {case.id}."]
+    assert success(henry) == [f"Gave {email('david')} access to document {case.public_id}."]
     grant = db.scalars(
         select(DocumentGrant)
         .join(User, User.id == DocumentGrant.user_id)
@@ -209,7 +221,7 @@ def test_granting_and_revoking_access(henry: AppTest, db: Session) -> None:
 
     henry.button(key=f"revoke {email('david')}").click().run()
 
-    assert success(henry) == [f"Revoked access to document {case.id} for {email('david')}."]
+    assert success(henry) == [f"Revoked access to document {case.public_id} for {email('david')}."]
     db.expire_all()
     assert (
         db.scalars(
@@ -223,7 +235,7 @@ def test_granting_and_revoking_access(henry: AppTest, db: Session) -> None:
 
 def test_a_grant_the_service_refuses_shows_its_reason(henry: AppTest, db: Session) -> None:
     case = document(db, CASE_FILE)
-    look_up(henry, case.id)
+    look_up(henry, case.public_id)
     # Henry himself: he has no role that reads documents, so a grant would
     # give him nothing, and the service says so.
     type_into(henry, "Email", email("henry"))
@@ -239,19 +251,19 @@ def test_a_grant_the_service_refuses_shows_its_reason(henry: AppTest, db: Sessio
 
 def test_changing_a_label(henry: AppTest, db: Session) -> None:
     bands = document(db, BANDS)
-    look_up(henry, bands.id)
+    look_up(henry, bands.public_id)
     next(s for s in henry.selectbox if s.label == "Classification").set_value("restricted")
 
     press(henry, "Save labels")
 
-    assert success(henry) == [f"Changed the labels of document {bands.id}."]
+    assert success(henry) == [f"Changed the labels of document {bands.public_id}."]
     assert document(db, BANDS).classification == "restricted"
     assert facts_shown(henry)["Classification"] == "restricted"
 
 
 def test_saving_unchanged_labels_sends_nothing(henry: AppTest, db: Session) -> None:
     bands = document(db, BANDS)
-    look_up(henry, bands.id)
+    look_up(henry, bands.public_id)
 
     press(henry, "Save labels")
 
@@ -261,7 +273,7 @@ def test_saving_unchanged_labels_sends_nothing(henry: AppTest, db: Session) -> N
 
 def test_a_new_version_replaces_the_document_and_is_shown_next(henry: AppTest, db: Session) -> None:
     bands = document(db, BANDS)
-    look_up(henry, bands.id)
+    look_up(henry, bands.public_id)
     henry.file_uploader[0].upload("bands.txt", b"Senior engineers: new bands.", "text/plain")
 
     press(henry, "Upload new version")
@@ -269,22 +281,22 @@ def test_a_new_version_replaces_the_document_and_is_shown_next(henry: AppTest, d
     db.expire_all()
     new = db.scalars(select(Document).where(Document.supersedes_id == bands.id)).one()
     assert success(henry) == [
-        f"Version {new.version} is document {new.id}; it replaces {bands.id}."
+        f"Version {new.version} is document {new.public_id}; it replaces {bands.public_id}."
     ]
-    assert henry.number_input(key="manage_id").value == new.id
-    assert facts_shown(henry)["Replaces"] == str(bands.id)
+    assert henry.selectbox(key="manage_id").value == new.public_id
+    assert facts_shown(henry)["Replaces"] == str(bands.public_id)
 
 
 def test_withdrawing_needs_saying_so_first(henry: AppTest, db: Session) -> None:
     bands = document(db, BANDS)
-    look_up(henry, bands.id)
+    look_up(henry, bands.public_id)
     withdraw = next(b for b in henry.button if b.label == "Withdraw document")
     assert withdraw.disabled
 
-    henry.checkbox(key=f"withdraw {bands.id}").check().run()
+    henry.checkbox(key=f"withdraw {bands.public_id}").check().run()
     press(henry, "Withdraw document")
 
-    assert success(henry) == [f"Withdrew document {bands.id}."]
+    assert success(henry) == [f"Withdrew document {bands.public_id}."]
     assert document(db, BANDS).status == "deleted"
     assert facts_shown(henry)["Status"] == "deleted"
     assert [i.value for i in henry.info] == [

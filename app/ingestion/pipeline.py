@@ -195,7 +195,7 @@ def replace_document(
         actor_id=user.id,
         document_id=new_version.id,
         details={
-            "replaced_document_id": current.id,
+            "replaced_document_id": str(current.public_id),
             "version": new_version.version,
             "chunks": len(new_version.chunks),
             "sha256": checksum,
@@ -296,12 +296,13 @@ def _read_file(db: Session, filename: str, data: bytes, settings: Settings) -> t
     # Checked before parsing: a file that is already in use needs no more work.
     checksum = hashlib.sha256(data).hexdigest()
     existing = db.scalars(
-        select(Document.id).where(
+        select(Document).where(
             Document.sha256 == checksum, Document.status == DocumentStatus.ACTIVE
         )
     ).first()
     if existing is not None:
-        raise InvalidInputError(f"this file is already stored as document {existing}")
+        # The admin is told which, by the ID they know it by.
+        raise InvalidInputError(f"this file is already stored as document {existing.public_id}")
 
     extracted = extract_text(filename, data)
     if len(extracted) > MAX_EXTRACTED_CHARACTERS:

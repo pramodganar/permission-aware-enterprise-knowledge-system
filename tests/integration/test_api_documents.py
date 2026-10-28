@@ -7,6 +7,7 @@ docs/personas.md, and not from the authorization code these routes call.
 import logging
 from collections.abc import Iterator
 from datetime import timedelta
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,15 +15,13 @@ from httpx2 import Response
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from apiclient import company_client, email, headers
+from apiclient import MISSING, company_client, email, headers
 from app.core.config import Settings
 from app.core.database import utc_now
 from app.models import Department, Document, DocumentGrant, DocumentStatus, Role, RoleCode, User
 from questions import ALL_DEPARTMENTAL, DEPARTMENT_DOCUMENTS, GENERAL, MAY_READ
 
 PEOPLE = sorted(MAY_READ)
-# No document has this ID.
-MISSING = 999_999
 
 
 @pytest.fixture
@@ -40,8 +39,9 @@ def listed(client: TestClient, name: str, **params: str) -> set[str]:
     return titles(client.get("/documents", headers=headers(client, name), params=params))
 
 
-def document_id(db: Session, title: str) -> int:
-    return db.scalars(select(Document.id).where(Document.title == title)).one()
+def document_id(db: Session, title: str) -> UUID:
+    """The ID the service gives the document: its public one."""
+    return db.scalars(select(Document).where(Document.title == title)).one().public_id
 
 
 def user(db: Session, name: str) -> User:
@@ -113,7 +113,7 @@ def test_each_person_can_open_exactly_what_they_may_read(
     assert len(every_document) == 17
 
     for document in every_document:
-        response = client.get(f"/documents/{document.id}", headers=auth)
+        response = client.get(f"/documents/{document.public_id}", headers=auth)
         if document.title in MAY_READ[name]:
             assert response.status_code == 200, document.title
             assert response.json()["title"] == document.title
@@ -150,7 +150,9 @@ def test_an_opened_document_has_its_text_and_file_details_but_no_grantees(
     assert response.headers["Cache-Control"] == "no-store"
 
 
-@pytest.mark.parametrize("path", ["abc", "0", "-1", "1.5", str(2**63), "1e3"])
+@pytest.mark.parametrize(
+    "path", ["abc", "0", "-1", "1.5", str(2**63), "1e3", str(MISSING)[:-1], f"{MISSING}0"]
+)
 def test_an_id_that_is_not_a_valid_document_id_is_invalid_input_not_a_crash(
     client: TestClient, path: str
 ) -> None:
@@ -160,13 +162,15 @@ def test_an_id_that_is_not_a_valid_document_id_is_invalid_input_not_a_crash(
     assert response.json()["error"]["fields"] == ["path.document_id"]
 
 
-def test_the_largest_possible_id_is_simply_not_found(client: TestClient) -> None:
-    response = client.get(f"/documents/{2**63 - 1}", headers=headers(client, "david"))
+@pytest.mark.parametrize("missing", [MISSING, UUID(int=0), UUID(int=2**128 - 1), UUID(int=1)])
+def test_an_id_no_document_has_is_simply_not_found(client: TestClient, missing: UUID) -> None:
+    # UUID(int=1) is how the database numbers the first document, written as a UUID.
+    response = client.get(f"/documents/{missing}", headers=headers(client, "david"))
 
     assert without_request_id(response) == NOT_FOUND
 
 
-@pytest.mark.parametrize("path", ["/documents", "/documents/1"])
+@pytest.mark.parametrize("path", ["/documents", f"/documents/{MISSING}"])
 @pytest.mark.parametrize("auth", [{}, {"Authorization": "Bearer not-a-token"}], ids=["none", "bad"])
 def test_both_routes_need_a_valid_token(
     client: TestClient, path: str, auth: dict[str, str]
@@ -190,7 +194,7 @@ def test_a_replaced_or_deleted_document_disappears_and_looks_missing(
     db.commit()
 
     assert "Leave Policy" not in titles(client.get("/documents", headers=auth))
-    response = client.get(f"/documents/{leave.id}", headers=auth)
+    response = client.get(f"/documents/{leave.public_id}", headers=auth)
     assert without_request_id(response) == NOT_FOUND
 
 
@@ -200,8 +204,11 @@ def test_an_expired_grant_stops_working(client: TestClient, db: Session) -> None
     assert client.get(f"/documents/{falcon}", headers=auth).status_code == 200
 
     grant = db.scalars(
-        select(DocumentGrant).where(
-            DocumentGrant.document_id == falcon, DocumentGrant.user_id == user(db, "emma").id
+        select(DocumentGrant)
+        .join(Document)
+        .where(
+            Document.title == "Project Falcon Acquisition Paper",
+            DocumentGrant.user_id == user(db, "emma").id,
         )
     ).one()
     grant.expires_at = utc_now() - timedelta(seconds=1)
@@ -305,11 +312,11 @@ def test_a_denied_lookup_and_a_missing_one_are_each_logged_once_and_no_title_is_
     client: TestClient, db: Session, caplog: pytest.LogCaptureFixture
 ) -> None:
     auth = headers(client, "david")
-    case_file = document_id(db, "HR Case File 2026-014")
+    case_file = db.scalars(select(Document).where(Document.title == "HR Case File 2026-014")).one()
 
     with caplog.at_level(logging.INFO):
         client.get("/documents", headers=auth)
-        client.get(f"/documents/{case_file}", headers=auth)
+        client.get(f"/documents/{case_file.public_id}", headers=auth)
         client.get(f"/documents/{MISSING}", headers=auth)
 
     refused = [
@@ -317,7 +324,8 @@ def test_a_denied_lookup_and_a_missing_one_are_each_logged_once_and_no_title_is_
         for r in caplog.records
         if r.message == "document not returned"
     ]
-    assert refused == [(case_file, True), (MISSING, False)]
+    # The log has the database's own number; no document has the missing one.
+    assert refused == [(case_file.id, True), (None, False)]
     service = "\n".join(str(vars(r)) for r in caplog.records if r.name.startswith("app."))
     every_title = {title for readable in MAY_READ.values() for title in readable}
     assert every_title, "nothing to look for"

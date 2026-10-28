@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
@@ -52,7 +53,7 @@ def test_an_audit_page_is_one_the_service_will_give() -> None:
 def managed(**changes: Any) -> ManagedDocument:
     return ManagedDocument.model_validate(
         {
-            "id": 7,
+            "id": "00000000-0000-4000-8000-000000000007",
             "version": 2,
             "status": "active",
             "department": "hr",
@@ -60,7 +61,7 @@ def managed(**changes: Any) -> ManagedDocument:
             "file_type": "pdf",
             "size_bytes": 2048,
             "chunks": 3,
-            "supersedes_id": 4,
+            "supersedes_id": "00000000-0000-4000-8000-000000000004",
             "grants": [
                 {"email": "carol@acmecorp.example", "expires_at": None},
                 {"email": "emma@acmecorp.example", "expires_at": "2026-12-01T00:00:00+00:00"},
@@ -145,7 +146,7 @@ def test_what_is_shown_of_a_managed_document_holds_no_title_or_text() -> None:
         "File type": "pdf",
         "Size": "2048 bytes",
         "Chunks": "3",
-        "Replaces": "4",
+        "Replaces": "00000000-0000-4000-8000-000000000004",
         "Search": "can't find it until the index is rebuilt",
     }
     assert managing.facts(managed(in_index=True, supersedes_id=None))["Search"] == "finds it"
@@ -187,6 +188,34 @@ def test_a_window_runs_from_the_start_of_the_first_day_to_the_end_of_the_last() 
     assert reviewing.window(None, None) == (None, None)
 
 
+def test_a_document_is_told_apart_by_everything_but_what_it_says() -> None:
+    assert managing.choice(managed()) == (
+        "hr, restricted, version 2, active (00000000-0000-4000-8000-000000000007)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("typed", "found"),
+    [
+        ("", None),
+        ("   ", None),
+        ("00000000-0000-4000-8000-000000000007", UUID("00000000-0000-4000-8000-000000000007")),
+        ("  00000000-0000-4000-8000-000000000007  ", UUID("00000000-0000-4000-8000-000000000007")),
+    ],
+)
+def test_a_typed_document_id_is_read_as_one(typed: str, found: UUID | None) -> None:
+    assert reviewing.document_id_problem(typed) is None
+    assert reviewing.document_id_from(typed) == found
+
+
+@pytest.mark.parametrize(
+    "typed",
+    ["16", "abc", "00000000-0000-4000-8000-000000000007x", "00000000-0000-4000-8000-00000000000"],
+)
+def test_anything_else_typed_as_a_document_id_is_explained(typed: str) -> None:
+    assert reviewing.document_id_problem(typed) == reviewing.NOT_AN_ID
+
+
 def test_a_window_backwards_is_caught() -> None:
     assert reviewing.window_problem(date(2026, 10, 3), date(2026, 10, 1)) == reviewing.BACKWARDS
     assert reviewing.window_problem(date(2026, 10, 1), date(2026, 10, 1)) is None
@@ -224,7 +253,7 @@ def test_a_record_is_shown_as_the_service_gave_it() -> None:
         "Who": "david@acmecorp.example",
         "Action": "question.asked",
         "Outcome": "answered",
-        "Document": None,
+        "Document": "",
         "Question": "How many days of **annual leave** do I get?",
         "Chunks": "12, 3",
         "Details": '{"chunks": 2, "model": "fake"}',
@@ -273,7 +302,7 @@ def test_a_page_of_the_trail_is_asked_for_by_offset_with_the_filters() -> None:
         2,
         actor="david@acmecorp.example",
         action="search",
-        document_id=9,
+        document_id=UUID(int=9),
         since=datetime(2026, 10, 1, tzinfo=UTC),
     )
 
@@ -283,7 +312,7 @@ def test_a_page_of_the_trail_is_asked_for_by_offset_with_the_filters() -> None:
     assert (params["actor"], params["action"], params["document_id"]) == (
         "david@acmecorp.example",
         "search",
-        "9",
+        "00000000-0000-0000-0000-000000000009",
     )
     assert params["since"] == "2026-10-01T00:00:00+00:00"
     assert "until" not in params

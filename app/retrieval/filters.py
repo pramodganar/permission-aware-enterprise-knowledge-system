@@ -8,7 +8,8 @@ whatever is in the filter, nothing outside the scope can come back.
 A filter that names something the person may not read is not an error. It
 matches nothing, and the answer is the same "no information available" as for
 a department or document that doesn't exist. Otherwise filtering by document
-ID would be a way to find out which IDs exist.
+ID would be a way to find out which IDs exist. Documents are named by their
+public IDs, the ones every response gives.
 
 Within one field the values are alternatives (finance or legal); across
 fields all must hold (finance, and general).
@@ -17,13 +18,13 @@ fields all must hold (finance, and general).
 import dataclasses
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.database import MAX_ID
-from app.models import Chunk, Classification, Department, Document
+from app.models import Chunk, Classification, Department, Document, DocumentPublicId
 from app.retrieval.scope import AccessScope
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,6 @@ MAX_DEPARTMENTS = 20
 MAX_DOCUMENTS = 50
 
 DepartmentCode = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,49}$")]
-DocumentId = Annotated[int, Field(ge=1, le=MAX_ID)]
 
 
 class SearchFilters(BaseModel):
@@ -46,7 +46,7 @@ class SearchFilters(BaseModel):
         default=None, min_length=1, max_length=MAX_DEPARTMENTS
     )
     classifications: frozenset[Classification] | None = Field(default=None, min_length=1)
-    document_ids: frozenset[DocumentId] | None = Field(
+    document_ids: frozenset[UUID] | None = Field(
         default=None, min_length=1, max_length=MAX_DOCUMENTS
     )
 
@@ -82,7 +82,9 @@ def narrow_scope(db: Session, scope: AccessScope, filters: SearchFilters | None)
     if filters.classifications is not None:
         query = query.where(Document.classification.in_(filters.classifications))
     if filters.document_ids is not None:
-        query = query.where(Document.id.in_(filters.document_ids))
+        query = query.join(DocumentPublicId, DocumentPublicId.document_id == Document.id).where(
+            DocumentPublicId.public_id.in_(filters.document_ids)
+        )
 
     rows = db.execute(query).all()
     # The intersection is what guarantees a filter can't widen the scope,

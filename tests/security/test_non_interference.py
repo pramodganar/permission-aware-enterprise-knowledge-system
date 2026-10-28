@@ -9,39 +9,45 @@ both, byte for byte, headers included.
 In the second company every document the person may not read has another
 title, other text, another file name and size, and a different number of
 chunks, and three more documents they may not read are added, written to
-match every question better than anything they may read does. So any
-channel that depended on those documents would show up as a difference: a
-count, a page, a score, an order, the relevance gate's decision, an error, a
-header, the length of a body.
+match every question better than anything they may read does. And every
+document's own ID is another, with gaps between them, as if other documents
+had been stored in between. So any channel that depended on those documents
+would show up as a difference: a count, a page, a score, an order, the
+relevance gate's decision, an error, a header, the length of a body, or the
+IDs themselves (threat model T36).
+
+The service knows each document outside by a public ID, which is random. So
+the two companies can be compared byte for byte, each is given the same
+public ID for a document with the same title and version; that it is random
+in the service, and taken from nothing else, is checked by
+``tests/unit/test_public_ids.py``.
 
 What it can't see, and where each is dealt with instead:
 
 - Time. A response the same in both can still take longer in one. Opening a
   hidden document and a missing one do the same work, which
   ``test_a_refused_lookup_never_reads_the_document`` checks.
-- Document IDs. They are numbered in the order documents were stored, so the
-  added documents are stored last: one stored before a document the person
-  may read would change that document's ID. What the numbering gives away is
-  pinned by ``test_the_gaps_between_ids_count_the_documents_stored_between``.
 - The knowledge admin and the security reviewer are shown things about every
   document on purpose: its file details and chunk count, and the audit
   trail. Their own pages aren't compared; what they get as readers is.
 """
 
 import hashlib
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from itertools import pairwise
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event, select, update
+from sqlalchemy import Engine, event, select, text, update
 from sqlalchemy.orm import Session
 
 from acmecorp import DEPARTMENTS
-from apiclient import PASSWORD, email, headers
+from apiclient import MISSING, PASSWORD, email, headers
 from app.api.components import Components
 from app.authorization.document_access import GrantRequest
 from app.core.config import Settings
@@ -62,6 +68,8 @@ EVERY_QUESTION = " ".join(QUESTIONS)
 ADDED = 3
 # Seeding takes the clock's time; both companies are given this one instead.
 STORED_AT = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+# Where the public IDs both companies are given come from.
+NAMESPACE = uuid.UUID("6f1d3c2a-5b4e-4f7a-9c8d-0e1f2a3b4c5d")
 
 
 def repeat_everything(prompt: Prompt) -> str:
@@ -72,8 +80,8 @@ def repeat_everything(prompt: Prompt) -> str:
 class Company:
     client: TestClient
     db: Session
-    # The ID of every document stored, active or not.
-    ids: list[int] = field(default_factory=list)
+    # The public ID of every document stored, active or not.
+    ids: list[uuid.UUID] = field(default_factory=list)
 
 
 def person(db: Session, name: str) -> User:
@@ -114,6 +122,34 @@ def change_what_is_hidden(db: Session, settings: Settings, name: str) -> None:
         )
 
 
+def renumber_documents(db: Session) -> None:
+    """Give every document another ID of its own, with gaps, as if others were stored between."""
+    db.commit()
+    # SQLite can't update a key that others refer to while it checks them.
+    db.execute(text("PRAGMA foreign_keys=OFF"))
+    for table, name in [
+        ("documents", "id"),
+        ("documents", "supersedes_id"),
+        ("chunks", "document_id"),
+        ("document_grants", "document_id"),
+        ("document_public_ids", "document_id"),
+    ]:
+        column = Base.metadata.tables[table].c[name]
+        db.execute(
+            update(column.table).where(column.is_not(None)).values({column: 1000 + 7 * column})
+        )
+    db.commit()
+    db.execute(text("PRAGMA foreign_keys=ON"))
+    db.expire_all()
+
+
+def same_public_ids(db: Session) -> None:
+    """The same public ID in both companies for a document with the same title and version."""
+    for document in db.scalars(select(Document)):
+        document.public.public_id = uuid.uuid5(NAMESPACE, f"{document.title} {document.version}")
+    db.commit()
+
+
 @contextmanager
 def open_company(settings: Settings, hidden_from: str | None = None) -> Iterator[Company]:
     engine = create_db_engine("sqlite://")
@@ -123,6 +159,8 @@ def open_company(settings: Settings, hidden_from: str | None = None) -> Iterator
             seed(db, settings, PASSWORD)
             if hidden_from is not None:
                 change_what_is_hidden(db, settings, hidden_from)
+                renumber_documents(db)
+            same_public_ids(db)
             db.execute(update(Document).values(created_at=STORED_AT, updated_at=STORED_AT))
             db.commit()
             embedder = FakeEmbedder()
@@ -133,7 +171,8 @@ def open_company(settings: Settings, hidden_from: str | None = None) -> Iterator
             )
             app = create_app(settings, engine=engine, components=components)
             with TestClient(app, raise_server_exceptions=False) as client:
-                yield Company(client, db, sorted(db.scalars(select(Document.id))))
+                ids = db.scalars(select(Document)).all()
+                yield Company(client, db, sorted(d.public_id for d in ids))
     finally:
         engine.dispose()
 
@@ -156,9 +195,9 @@ class Request:
 ASKING = [("POST", "/search"), ("POST", "/ask")]
 
 
-def requests_for(ids: list[int]) -> list[Request]:
+def requests_for(ids: list[uuid.UUID]) -> list[Request]:
     """Everything a reader can ask the service, with every ID either company has and more."""
-    every_id = range(1, max(ids) + 3)
+    every_id = [*ids, MISSING]
     found = [
         Request("GET", "/health"),
         Request("GET", "/auth/me"),
@@ -173,7 +212,7 @@ def requests_for(ids: list[int]) -> list[Request]:
     filters: list[dict[str, list[Any]]] = [
         *({"departments": [code]} for code in (*DEPARTMENTS, "nowhere")),
         *({"classifications": [c.value]} for c in Classification),
-        *({"document_ids": [n]} for n in every_id),
+        *({"document_ids": [str(n)]} for n in every_id),
     ]
     for question in QUESTIONS[:2]:
         for narrowed in filters:
@@ -199,7 +238,7 @@ def everything_seen(company: Company, auth: dict[str, str], walk: list[Request])
 
 def walk_both(settings: Settings, viewer: str, hidden_from: str) -> tuple[list[Any], list[Any]]:
     with open_company(settings) as plain, open_company(settings, hidden_from) as changed:
-        walk = requests_for(changed.ids)
+        walk = requests_for(sorted({*plain.ids, *changed.ids}))
         auth = headers(plain.client, viewer)
         return everything_seen(plain, auth, walk), everything_seen(changed, auth, walk)
 
@@ -251,12 +290,12 @@ def test_a_refused_lookup_never_reads_the_document(settings: Settings) -> None:
     with open_company(settings) as company:
         auth = headers(company.client, "david")
         case_file = company.db.scalars(
-            select(Document.id).where(Document.title == "HR Case File 2026-014")
+            select(Document).where(Document.title == "HR Case File 2026-014")
         ).one()
         engine = company.db.get_bind()
         assert isinstance(engine, Engine)
 
-        def work(document_id: int, status: int) -> tuple[list[str], list[int]]:
+        def work(document_id: uuid.UUID, status: int) -> tuple[list[str], list[int]]:
             statements: list[str] = []
             loaded: list[int] = []
 
@@ -276,32 +315,32 @@ def test_a_refused_lookup_never_reads_the_document(settings: Settings) -> None:
                 event.remove(Document, "load", load)
             return statements, loaded
 
-        hidden, hidden_loaded = work(case_file, 404)
-        missing, missing_loaded = work(max(company.ids) + 1, 404)
-        leave = company.db.scalars(
-            select(Document.id).where(Document.title == "Leave Policy")
-        ).one()
-        _, opened = work(leave, 200)
+        hidden, hidden_loaded = work(case_file.public_id, 404)
+        missing, missing_loaded = work(MISSING, 404)
+        leave = company.db.scalars(select(Document).where(Document.title == "Leave Policy")).one()
+        _, opened = work(leave.public_id, 200)
 
     assert hidden == missing
     assert hidden_loaded == missing_loaded == []
     # The listener does see a document that is loaded.
-    assert opened == [leave]
+    assert opened == [leave.id]
 
 
-def test_the_gaps_between_ids_count_the_documents_stored_between(settings: Settings) -> None:
-    """The one count that does show, and all it shows.
+def test_in_the_second_company_every_document_has_another_id_of_its_own(
+    settings: Settings,
+) -> None:
+    """What makes the walk see the IDs: the documents a person reads are numbered otherwise."""
+    with open_company(settings) as plain, open_company(settings, "david") as changed:
+        first, second = (
+            {d.title: (d.id, d.public_id) for d in company.db.scalars(select(Document))}
+            for company in (plain, changed)
+        )
 
-    Document IDs are numbered as documents are stored. A reader who sees IDs
-    3 and 7 knows three documents were stored between them: not their
-    titles, departments or text, nor whether they were removed since. Kept
-    as it is, a known gap (threat model T36).
-    """
-    with open_company(settings) as company:
-        response = company.client.get("/documents", headers=headers(company.client, "david"))
-        seen = sorted(d["id"] for d in response.json()["documents"])
-        others = [n for n in company.ids if seen[0] < n < seen[-1] and n not in seen]
-
-    assert len(seen) == len(MAY_READ["david"])
-    assert len(others) == seen[-1] - seen[0] + 1 - len(seen)
-    assert others
+    readable = MAY_READ["david"]
+    assert readable
+    for title in readable:
+        (number, public_id), (other_number, other_public_id) = first[title], second[title]
+        assert number != other_number
+        assert public_id == other_public_id
+    numbers = sorted(number for number, _ in second.values())
+    assert all(b - a > 1 for a, b in pairwise(numbers))

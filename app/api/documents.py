@@ -8,7 +8,9 @@ Both go through the authorization service and nothing else. The list is the
 and search can't disagree about what someone may read. The lookup goes
 through ``get_readable_document``: a document the caller may not read gets
 exactly the 404 of one that doesn't exist, so trying IDs one by one says
-nothing about which documents there are.
+nothing about which documents there are. The IDs are the documents' public
+ones, which are random, so nor do the IDs a reader sees say anything about
+the documents stored between them.
 
 Filters (department, classification) are added to that query, so they can
 only remove documents from it. A filter for something the caller can't read
@@ -29,8 +31,9 @@ doesn't exist, which the response never does. Lists are not audited.
 
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Path, Query, Response
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import defer, joinedload
@@ -39,7 +42,6 @@ from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.authorization.checks import get_readable_document
 from app.authorization.service import readable_documents
-from app.core.database import MAX_ID
 from app.core.exceptions import NotFoundError
 from app.models import AuditAction, Classification, Department, Document
 
@@ -55,7 +57,7 @@ class DepartmentOut(BaseModel):
 
 
 class DocumentSummary(BaseModel):
-    id: int
+    id: UUID
     title: str
     department: DepartmentOut
     classification: str
@@ -79,7 +81,7 @@ class DocumentDetail(DocumentSummary):
 
 def _summary_fields(document: Document) -> dict[str, object]:
     return {
-        "id": document.id,
+        "id": document.public_id,
         "title": document.title,
         "department": DepartmentOut(code=document.department.code, name=document.department.name),
         "classification": document.classification,
@@ -126,7 +128,7 @@ def list_documents(
 
 @router.get("/{document_id}")
 def read_document(
-    document_id: Annotated[int, Path(ge=1, le=MAX_ID)],
+    document_id: UUID,
     user: CurrentUser,
     db: DbSession,
     response: Response,
@@ -141,8 +143,8 @@ def read_document(
             "denied" if exists else "not_found",
             actor_id=user.id,
             # A missing ID can't be stored as a reference to a document.
-            document_id=document_id if exists else None,
-            details={} if exists else {"requested_id": document_id},
+            document_id=error.context.get("document_id"),
+            details={} if exists else {"requested_id": str(document_id)},
         )
         raise
     write(db, AuditAction.DOCUMENT_READ, "allowed", actor_id=user.id, document_id=document.id)
