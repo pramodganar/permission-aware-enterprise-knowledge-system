@@ -136,6 +136,7 @@ RECORDED: dict[tuple[str, str], Recorded] = {
     ("GET", "/audit"): Recorded(
         "irene", Call("GET", "/audit"), ("audit.read",), permission="audit:read"
     ),
+    ("POST", "/auth/logout"): Recorded("david", Call("POST", "/auth/logout"), ("signed.out",)),
 }
 PROTECTED = [route for route, r in RECORDED.items() if r.who is not None]
 NEED_PERMISSION = [route for route, r in RECORDED.items() if r.permission is not None]

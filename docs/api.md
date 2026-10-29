@@ -81,15 +81,19 @@ POST /auth/login   {"email": "david@acmecorp.example", "password": "..."}
                 -> {"access_token": "...", "token_type": "bearer", "expires_in": 1800}
 GET  /auth/me      Authorization: Bearer <token>
                 -> id, email, full_name, department, roles, permissions
+POST /auth/logout  Authorization: Bearer <token>
+                -> 204
 ```
 
-**The token holds only the user's ID** and when it expires ([decision record 0004](adr/0004-identity-only-token.md)). Every request loads the user from the database, so a role change, a move to another department or a deactivated account takes effect on the next request with the same token. `/auth/me` shows exactly what the next request will be decided on: the department and roles as they are now, and the permissions the authorization service gives them.
+**The token holds only the user's ID**, when it expires, and the user's token version when it was issued ([decision records 0004](adr/0004-identity-only-token.md) and [0015](adr/0015-withdraw-tokens-with-a-version.md)). Every request loads the user from the database, so a role change, a move to another department or a deactivated account takes effect on the next request with the same token. `/auth/me` shows exactly what the next request will be decided on: the department and roles as they are now, and the permissions the authorization service gives them.
 
 **Every failed login is the same 401**, with the same body: an unknown email, a wrong password and a deactivated account can't be told apart by the response. Nor, as far as measured, by its timing: an unknown email is checked against a dummy password hash, so it costs the same work. Over 30 attempts each on the development laptop, the median time was 72.9 ms for the right password, 72.0 ms for a wrong one and 73.3 ms for an unknown email. That is a check on one machine, not a proof against a patient attacker measuring thousands of attempts. The reason a login failed is logged, never the email or password typed. Every login is in the audit trail, the ones that succeed included, and so is every attempt refused for too many failures.
 
 **The body is checked strictly.** Unknown fields are refused, so a client can't send `"role": "executive"` alongside its password and hope something reads it. A password over 1,024 characters is refused before hashing, so a huge one can't keep the server busy. As everywhere, a refused body names the fields and never echoes what was in them.
 
 The token response carries `Cache-Control: no-store`.
+
+**Signing out withdraws the token at once**, and every other token the person holds, on every device: `/auth/logout` moves their token version on, and a token from before is refused on its next request with the same 401 as any other. Signing in again gives a token that works. Without this, a token would keep working until it expired, up to 30 minutes, whoever had it. Signing out is recorded in the audit trail, in the same transaction; if the record can't be stored, nothing is withdrawn and the response is 503. The version is loaded with the user, in the query every request already makes, so checking it costs no query of its own.
 
 ### Too many failed logins
 

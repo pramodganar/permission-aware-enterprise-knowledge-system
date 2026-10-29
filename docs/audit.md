@@ -14,6 +14,7 @@ The application log leaves the question and the document text out (NFR-9). The a
 | `document.read` | Every attempt to open a document | `allowed`, `denied` or `not_found`. The response for the last two is identical; the record tells them apart |
 | `login.succeeded` | Every login that gets a token | The account. Where looking into a stolen password starts |
 | `login.failed` | Every failed login, and every attempt refused for too many failures before its password is looked at | Why it failed, and the account if the email belongs to one. Not what was typed: people type passwords into the email field |
+| `signed.out` | Every sign-out | The account. Every token it held stopped working at this moment |
 | `action.denied` | Every request refused with 403: an action the person's roles don't allow, or an admin giving themselves access | The route's pattern, the permission it needed, why it was refused, and the document if it was one |
 | `document.ingested`, `document.replaced`, `document.deleted`, `document.relabelled`, `documents.rechunked` | Every change to a document | The document, its labels before and after, the file's checksum |
 | `grant.given`, `grant.revoked` | Every change to who may read a document | The document, who was granted, until when |

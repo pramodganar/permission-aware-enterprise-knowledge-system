@@ -71,6 +71,7 @@ ACCESS: dict[tuple[str, str], str | Permission] = {
     ("PUT", "/admin/documents/{document_id}/grants"): Permission.MANAGE_DOCUMENTS,
     ("DELETE", "/admin/documents/{document_id}/grants/{email}"): Permission.MANAGE_DOCUMENTS,
     ("GET", "/audit"): Permission.READ_AUDIT_LOG,
+    ("POST", "/auth/logout"): LOGGED_IN,
 }
 PROTECTED = [route for route, access in ACCESS.items() if access != PUBLIC]
 
@@ -132,6 +133,8 @@ CALLS: dict[tuple[str, str], Call] = {
         f"/admin/documents/<9>/grants/{email('david')}"
     ),
     ("GET", "/audit"): Call("/audit"),
+    # Last: it withdraws the token the calls before it were made with.
+    ("POST", "/auth/logout"): Call("/auth/logout"),
 }
 
 
@@ -317,7 +320,8 @@ def test_every_logged_in_route_serves_every_person(client: TestClient, name: str
         if access == LOGGED_IN:
             response = CALLS[route].send(client, route[0], auth)
             # A document someone may not read is a 404, like one that doesn't exist.
-            assert response.status_code in (200, 404), (route, response.text)
+            # Signing out, last, has nothing to say: 204.
+            assert response.status_code in (200, 204, 404), (route, response.text)
 
 
 # --- nothing from a document the person may not read, from any route --------------------

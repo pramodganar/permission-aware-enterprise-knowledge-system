@@ -10,6 +10,9 @@ role taken away or an account deactivated takes effect on the person's next
 click, as it does in the API. An expired token, or any call that comes back
 "not signed in", signs them out with a message saying why.
 
+Signing out with the button withdraws the token at the service first, so it
+stops working there too, on every device the person is signed in on.
+
 What the person is told when signing in fails is as vague as the service
 is: the same words for a wrong password, an unknown email and a deactivated
 account. Only waiting and a service that can't be reached say more, because
@@ -29,6 +32,10 @@ SIGN_IN_FAILED = "Sign-in failed. Check your email and password."
 SESSION_ENDED = "Your session has ended. Sign in again."
 UNREACHABLE = "The service can't be reached right now. Try again in a moment."
 SIGNED_OUT = "You are signed out."
+SIGNED_OUT_HERE_ONLY = (
+    "You are signed out here. The service couldn't be reached, so your session there "
+    "ends when it expires, or when you next sign out."
+)
 
 HOME = "Home"
 ASK = "Ask and search"
@@ -92,11 +99,31 @@ def token(state: State) -> str:
     return login.token if login is not None else ""
 
 
-def sign_out(state: State, notice: str | None = SIGNED_OUT) -> None:
-    """Forget the token and who the person was.
+def leave(api: Api, state: State) -> None:
+    """Sign out at the service, then here.
 
-    The token itself stays valid at the service until it expires; tokens
-    here can't be withdrawn early (decision record 0004).
+    The service withdraws every token the person holds (decision record
+    0015). If it can't be reached, the person is still signed out here and
+    told that the service's session lasts until it expires. A token the
+    service already refuses has nothing left to withdraw.
+    """
+    login: Login | None = state.get(LOGIN)
+    notice = SIGNED_OUT
+    if login is not None:
+        try:
+            api.logout(login.token)
+        except Unavailable:
+            notice = SIGNED_OUT_HERE_ONLY
+        except ApiError:
+            pass
+    sign_out(state, notice)
+
+
+def sign_out(state: State, notice: str | None = SIGNED_OUT) -> None:
+    """Forget the token and who the person was, here only.
+
+    Used when the service already refuses the token. To withdraw it at the
+    service as well, use ``leave``.
     """
     state.pop(LOGIN, None)
     state.pop(ME, None)

@@ -15,7 +15,9 @@ class User(Base):
     """An employee who can log in.
 
     ``is_active`` is checked on every request, so setting it to False cuts off
-    access immediately, even for a token that hasn't expired.
+    access immediately, even for a token that hasn't expired. So is the token
+    version: signing out moves it on, and every token issued before stops
+    working.
 
     A user starts with no roles, and a user with no roles can read nothing.
     """
@@ -33,6 +35,15 @@ class User(Base):
 
     department: Mapped["Department"] = relationship(back_populates="users")
     roles: Mapped[list[Role]] = relationship(secondary=user_roles)
+    # Loaded with the user, since every request that checks a token needs it.
+    signed_out: Mapped["TokenVersion | None"] = relationship(
+        lazy="joined", cascade="all, delete-orphan"
+    )
+
+    @property
+    def token_version(self) -> int:
+        """Which tokens are still good: those issued at this version. 0 until the first sign-out."""
+        return 0 if self.signed_out is None else self.signed_out.version
 
     def has_role(self, code: RoleCode) -> bool:
         return any(role.code == code for role in self.roles)
@@ -44,3 +55,23 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"User(id={self.id!r}, email={self.email!r}, is_active={self.is_active!r})"
+
+
+class TokenVersion(Base):
+    """How many times a user has signed out (decision record 0015).
+
+    Every token carries the version that was current when it was issued, and
+    is refused once that is no longer the user's. Signing out adds one, so
+    every token the user holds stops working at once, on every device.
+
+    A table of its own, so that a database made before it existed gains it
+    without a table being changed, like the public document IDs.
+    """
+
+    __tablename__ = "token_versions"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    version: Mapped[int] = mapped_column()
+
+    def __repr__(self) -> str:
+        return f"TokenVersion(user_id={self.user_id!r}, version={self.version!r})"

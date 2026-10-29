@@ -471,3 +471,24 @@ def test_startup_adds_the_audit_trail_to_a_database_seeded_before_it_existed(
             "audit_seals_no_update",
             "audit_seals_no_delete",
         }
+
+
+def test_signing_out_is_recorded_with_who_did_it(client: TestClient, db: Session) -> None:
+    signed_out = client.post("/auth/logout", headers=headers(client, "david"))
+
+    entry = latest(client, "signed.out")
+    assert (entry["actor"]["email"], entry["outcome"]) == (email("david"), "done")
+    assert entry["request_id"] == signed_out.headers["X-Request-ID"]
+
+
+def test_without_an_audit_store_signing_out_withdraws_nothing(
+    client: TestClient, engine: Engine
+) -> None:
+    david = headers(client, "david")
+    break_the_audit_store(engine)
+
+    refused = client.post("/auth/logout", headers=david)
+
+    assert refused.status_code == 503
+    # Not withdrawn, so not unrecorded: the token still works.
+    assert client.get("/auth/me", headers=david).status_code == 200

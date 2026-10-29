@@ -11,7 +11,7 @@ from app.auth.passwords import hash_password, verify_password
 from app.auth.tokens import decode_access_token
 from app.core.config import Settings
 from app.core.exceptions import AuthenticationError
-from app.models import AuditAction, User
+from app.models import AuditAction, TokenVersion, User
 
 logger = logging.getLogger(__name__)
 
@@ -62,17 +62,36 @@ def user_from_token(db: Session, token: str, settings: Settings) -> User:
     """Return the active user a token belongs to, or raise AuthenticationError.
 
     The user is loaded from the database every time. A token that is still
-    valid stops working as soon as its user is deactivated, and the roles and
-    department on the returned user are the current ones.
+    valid stops working as soon as its user is deactivated or signs out, and
+    the roles and department on the returned user are the current ones. The
+    token version comes with the user, in the same query.
     """
-    user_id = decode_access_token(token, settings)
+    claims = decode_access_token(token, settings)
+    user_id = claims.user_id
     user = db.get(User, user_id)
 
     if user is None:
         raise AuthenticationError("token for a user that does not exist", user_id=user_id)
     if not user.is_active:
         raise AuthenticationError("token for an inactive account", user_id=user_id)
+    if claims.version != user.token_version:
+        raise AuthenticationError("token from before the user signed out", user_id=user_id)
     return user
+
+
+def sign_out(db: Session, user: User) -> None:
+    """Withdraw every token the user holds, on every device, before it expires.
+
+    The user's token version moves on, so a token issued before no longer
+    matches it. Stored with its audit record or not at all: if the record
+    can't be written, nothing is withdrawn and this raises AuditWriteError.
+    """
+    if user.signed_out is None:
+        user.signed_out = TokenVersion(version=1)
+    else:
+        user.signed_out.version += 1
+    write(db, AuditAction.SIGNED_OUT, "done", actor_id=user.id)
+    logger.info("signed out", extra={"user_id": user.id})
 
 
 def _failed(db: Session, reason: str, user_id: int | None = None) -> AuthenticationError:

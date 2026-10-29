@@ -46,6 +46,7 @@ from ui.session import (
     NOTICE,
     SESSION_ENDED,
     current_user,
+    leave,
     pages_for,
     sign_in,
     sign_out,
@@ -97,7 +98,7 @@ def show_sign_in(client: Api) -> None:
     st.caption("AcmeCorp is a fictional company. Every person and document here is made up.")
 
 
-def show_sidebar(me: Me) -> str:
+def show_sidebar(client: Api, me: Me) -> str:
     """Draw the sidebar and return the page chosen."""
     with st.sidebar:
         # What the service sends is drawn escaped wherever Streamlit reads
@@ -108,7 +109,7 @@ def show_sidebar(me: Me) -> str:
         # page whose permission was taken away disappears on the next click.
         page = str(st.radio("Page", pages_for(me), key="page"))
         if st.button("Sign out"):
-            sign_out(st.session_state)
+            leave(client, st.session_state)
             st.rerun()
     return page
 
@@ -558,7 +559,7 @@ def main() -> None:
     if me is None:
         show_sign_in(client)
         return
-    page = show_sidebar(me)
+    page = show_sidebar(client, me)
     if page == ASK:
         show_ask(client)
     elif page == DOCUMENTS:

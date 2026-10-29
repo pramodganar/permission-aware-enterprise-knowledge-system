@@ -29,6 +29,7 @@ ACTIONS = (
     "grant.revoked",
     "login.succeeded",
     "login.failed",
+    "signed.out",
     "action.denied",
     "audit.read",
 )

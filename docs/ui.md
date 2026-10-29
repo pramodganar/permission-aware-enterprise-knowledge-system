@@ -68,7 +68,7 @@ The page starts at a sign-in form. Once signed in, the sidebar shows who the per
 
 **A failed sign-in says the same whatever was wrong**: "Sign-in failed. Check your email and password." for a wrong password, an unknown email or a deactivated account, as the service does. Only two failures say more, because they tell the person what to do and nothing about anyone's account: too many attempts, with how many minutes to wait, and a service that can't be reached.
 
-**Signing out** forgets the token and who the person was. The token itself still works at the service until it expires, because tokens here can't be withdrawn early ([decision record 0004](adr/0004-identity-only-token.md)); with 30-minute tokens that is the window. A shared computer should be signed out of, and the browser closed.
+**Signing out** withdraws the token at the service, then forgets it and who the person was. The service refuses that token from then on, and every other the person holds, on every device ([decision record 0015](adr/0015-withdraw-tokens-with-a-version.md)). If the service can't be reached, the person is still signed out here and told that their session at the service ends when it expires, up to 30 minutes, or when they next sign out. A test signs out through the page and checks the service refuses the token.
 
 ## Asking and searching
 

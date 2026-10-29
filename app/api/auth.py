@@ -2,8 +2,12 @@
 
     POST /auth/login   {"email": ..., "password": ...}  ->  a bearer token
     GET  /auth/me      who the token belongs to, read from the database now
+    POST /auth/logout  withdraw every token the caller holds  ->  204
 
-A token holds only the user's ID and when it expires (decision record 0004).
+A token holds only the user's ID, when it expires, and the user's token
+version when it was issued (decision records 0004 and 0015). Signing out
+moves the version on, so the token, and every other the person holds,
+stops working on the next request instead of when it expires.
 "Who am I" reads the department, roles and permissions from the database on
 every call, so it shows what every other request will be decided on.
 
@@ -18,11 +22,11 @@ reason but never the email or password that was typed.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth.dependencies import CurrentUser, DbSession
-from app.auth.service import MAX_PASSWORD_LENGTH, authenticate, record_throttled
+from app.auth.service import MAX_PASSWORD_LENGTH, authenticate, record_throttled, sign_out
 from app.auth.throttle import LoginThrottle
 from app.auth.tokens import create_access_token
 from app.authorization.permissions import permissions_for
@@ -88,7 +92,7 @@ def login(
 
     response.headers["Cache-Control"] = "no-store"
     return TokenResponse(
-        access_token=create_access_token(user.id, settings),
+        access_token=create_access_token(user.id, settings, version=user.token_version),
         expires_in=settings.access_token_expire_minutes * 60,
     )
 
@@ -103,3 +107,10 @@ def me(user: CurrentUser) -> Me:
         roles=sorted(role.code for role in user.roles),
         permissions=sorted(permission.value for permission in permissions_for(user)),
     )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(user: CurrentUser, db: DbSession) -> Response:
+    # Every device: a token can't be told apart from the others issued with it.
+    sign_out(db, user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

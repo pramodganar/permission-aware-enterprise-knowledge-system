@@ -129,6 +129,7 @@ The service's own, by area. A field that is `null` wasn't known or doesn't apply
 | Event | Level | Logger | Fields |
 |---|---|---|---|
 | `login succeeded` | INFO | `app.auth.service` | `user_id` |
+| `signed out` | INFO | `app.auth.service` | `user_id` |
 | `login failed` | WARNING | `app.auth.service` | `reason`, `user_id` |
 | `action denied` | WARNING | `app.authorization.checks` | `user_id`, `permission` |
 | `document not returned` | WARNING | `app.authorization.checks` | `user_id`, `document_id`, `exists` |

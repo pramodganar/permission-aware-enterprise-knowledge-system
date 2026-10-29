@@ -23,7 +23,7 @@ The promise is about what the service hands out. It assumes the host, the databa
 
 The path of a question, and what each step holds to:
 
-1. **Who is asking comes from the token, and nothing else.** A token holds the user ID and an expiry, signed with HS256, and the algorithm is fixed in code, never read from the token (`app/auth/tokens.py`). The department, roles and whether the account is active are read from the database on every request, so a change applies on the next request with the same token (decision record 0004). Nothing in a body, header or question can say who is asking.
+1. **Who is asking comes from the token, and nothing else.** A token holds the user ID, an expiry and the user's token version, signed with HS256, and the algorithm is fixed in code, never read from the token (`app/auth/tokens.py`). The department, roles and whether the account is active are read from the database on every request, so a change applies on the next request with the same token (decision record 0004). Signing out moves the version on, and every token from before is refused (decision record 0015). Nothing in a body, header or question can say who is asking.
 2. **Each route checks the one permission its audience needs.** A test walks every route the service serves and fails on a route nobody decided an audience for (`tests/security/test_api_routes.py`).
 3. **One module decides read access** (`app/authorization/service.py`). It gives the same rule in two forms: `readable_documents`, a database query, and `can_read`, the same rule in Python. Both start from "no".
 4. **The search only looks inside the person's scope.** The scope is the list of chunks the person may read, worked out from the query for this question at this moment, and handed to the vector index as the only IDs it may return (`app/retrieval/scope.py`, `app/retrieval/search.py`, decision record 0003). Chunks have no permissions of their own: they are their document's.
@@ -89,7 +89,7 @@ The service's defaults, as `app/core/config.py` has them. A test compares this t
 |---|---|---|
 | `APP_ENVIRONMENT` | `local` | `production` hides the interactive docs and route list, refuses a signing key that looks typed, and stops the seed script |
 | `APP_JWT_SECRET_KEY` | none, required | Signs tokens and, through a derived key, the audit seals. At least 32 characters |
-| `APP_ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | How long a stolen token works, at most |
+| `APP_ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | How long a stolen token works, at most, unless its owner signs out first |
 | `APP_LOGIN_MAX_FAILURES` | `5` | Failed logins for one email in the window before the password isn't checked at all |
 | `APP_LOGIN_FAILURE_WINDOW_SECONDS` | `900` | That window |
 | `APP_ASK_LIMIT_PER_MINUTE` | `10` | Questions per person in any minute |

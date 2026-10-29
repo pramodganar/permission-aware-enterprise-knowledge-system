@@ -42,6 +42,7 @@ class AuditAction(StrEnum):
     GRANT_REVOKED = "grant.revoked"
     LOGIN_SUCCEEDED = "login.succeeded"
     LOGIN_FAILED = "login.failed"
+    SIGNED_OUT = "signed.out"
     # Refused with 403: an action the person's roles don't allow, or giving
     # themselves access.
     ACTION_DENIED = "action.denied"

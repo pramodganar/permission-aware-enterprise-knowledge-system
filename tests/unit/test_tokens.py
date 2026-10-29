@@ -7,7 +7,7 @@ import jwt
 import pytest
 from pydantic import SecretStr
 
-from app.auth.tokens import ALGORITHM, create_access_token, decode_access_token
+from app.auth.tokens import ALGORITHM, TokenClaims, create_access_token, decode_access_token
 from app.core.config import Settings
 from app.core.exceptions import AuthenticationError, error_response
 
@@ -35,17 +35,37 @@ def b64(data: dict[str, Any]) -> str:
     return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
 
 
-def test_token_round_trip_returns_the_user_id(settings: Settings) -> None:
-    assert decode_access_token(create_access_token(7, settings), settings) == 7
+def test_token_round_trip_returns_the_user_id_and_version(settings: Settings) -> None:
+    assert decode_access_token(create_access_token(7, settings), settings) == TokenClaims(7, 0)
+    token = create_access_token(7, settings, version=3)
+    assert decode_access_token(token, settings) == TokenClaims(7, 3)
 
 
-def test_token_carries_identity_and_expiry_only(settings: Settings) -> None:
-    token = create_access_token(7, settings)
+def test_token_carries_identity_its_version_and_expiry_only(settings: Settings) -> None:
+    token = create_access_token(7, settings, version=2)
 
     claims = jwt.decode(token, options={"verify_signature": False})
 
-    assert set(claims) == {"sub", "iat", "exp"}
-    assert claims["sub"] == "7"
+    assert set(claims) == {"sub", "ver", "iat", "exp"}
+    assert (claims["sub"], claims["ver"]) == ("7", 2)
+
+
+def test_a_token_from_before_versions_counts_as_version_0(settings: Settings) -> None:
+    secret = settings.jwt_secret_key.get_secret_value()
+    token = jwt.encode(valid_claims(), secret, algorithm=ALGORITHM)
+
+    assert decode_access_token(token, settings) == TokenClaims(7, 0)
+
+
+@pytest.mark.parametrize("version", [-1, "1", 1.0, True, None, [1]])
+def test_a_version_that_is_not_a_whole_number_is_refused(
+    settings: Settings, version: object
+) -> None:
+    secret = settings.jwt_secret_key.get_secret_value()
+    token = jwt.encode(valid_claims(ver=version), secret, algorithm=ALGORITHM)
+
+    with pytest.raises(AuthenticationError):
+        decode_access_token(token, settings)
 
 
 def test_token_expires_after_the_configured_time(settings: Settings) -> None:

@@ -2,16 +2,24 @@
 
 import logging
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, event, inspect, select, text
 from sqlalchemy.orm import Session
 
 from apiclient import PASSWORD, company_client, email, headers, token
+from app.api.components import Components
+from app.auth.tokens import ALGORITHM
 from app.core.config import Settings
+from app.main import create_app
 from app.models import Department, Role, RoleCode, User
+from app.retrieval.index import build_index
+from fakes import FakeEmbedder
+from scripts.seed import seed
 
 
 @pytest.fixture
@@ -307,3 +315,111 @@ def test_a_token_from_another_service_s_key_is_refused(
 
 def test_tokens_for_two_people_are_different(client: TestClient) -> None:
     assert token(client, "david") != token(client, "grace")
+
+
+# --- signing out ------------------------------------------------------------------------
+
+
+def bearer(value: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {value}"}
+
+
+def test_signing_out_withdraws_the_token_at_once(client: TestClient) -> None:
+    david = token(client, "david")
+    assert client.get("/auth/me", headers=bearer(david)).status_code == 200
+
+    signed_out = client.post("/auth/logout", headers=bearer(david))
+
+    assert signed_out.status_code == 204
+    assert signed_out.content == b""
+    for method, path, body in [
+        ("GET", "/auth/me", None),
+        ("GET", "/documents", None),
+        ("POST", "/search", {"question": "How many days of annual leave do I get?"}),
+        ("POST", "/auth/logout", None),
+    ]:
+        response = client.request(method, path, headers=bearer(david), json=body)
+        assert response.status_code == 401, path
+        assert without_request_id(response) == {
+            "error": {"code": "authentication_failed", "message": "Authentication failed."}
+        }
+
+
+def test_signing_out_withdraws_every_token_the_person_holds_and_nobody_elses(
+    client: TestClient,
+) -> None:
+    laptop, phone = token(client, "david"), token(client, "david")
+    emma = token(client, "emma")
+
+    assert client.post("/auth/logout", headers=bearer(laptop)).status_code == 204
+
+    assert client.get("/auth/me", headers=bearer(phone)).status_code == 401
+    assert client.get("/auth/me", headers=bearer(emma)).status_code == 200
+
+
+def test_signing_in_again_after_signing_out_gives_a_token_that_works(client: TestClient) -> None:
+    for _ in range(3):
+        current = token(client, "david")
+        assert client.get("/auth/me", headers=bearer(current)).status_code == 200
+        assert client.post("/auth/logout", headers=bearer(current)).status_code == 204
+        assert client.get("/auth/me", headers=bearer(current)).status_code == 401
+
+
+def test_signing_out_needs_a_token_that_still_works(client: TestClient, db: Session) -> None:
+    assert client.post("/auth/logout").status_code == 401
+    assert client.post("/auth/logout", headers=bearer("not-a-token")).status_code == 401
+
+    david = token(client, "david")
+    client.post("/auth/logout", headers=bearer(david))
+    client.post("/auth/logout", headers=bearer(david))
+
+    db.expire_all()
+    user = db.scalars(select(User).where(User.email == email("david"))).one()
+    # The second, with a token already withdrawn, changed nothing.
+    assert user.token_version == 1
+
+
+def test_the_version_comes_with_the_user_and_needs_no_query_of_its_own(
+    client: TestClient, engine: Engine
+) -> None:
+    david = bearer(token(client, "david"))
+    statements: list[str] = []
+
+    def ran(*args: object) -> None:
+        statements.append(str(args[2]))
+
+    event.listen(engine, "before_cursor_execute", ran)
+    try:
+        assert client.get("/auth/me", headers=david).status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", ran)
+
+    versions = [s for s in statements if "token_versions" in s]
+    assert len(versions) == 1
+    assert "FROM users" in versions[0]
+
+
+def test_a_database_from_before_token_versions_keeps_everyone_signed_in(
+    db: Session, engine: Engine, settings: Settings
+) -> None:
+    seed(db, settings, PASSWORD)
+    embedder = FakeEmbedder()
+    components = Components(embedder=embedder, index=build_index(db, embedder), provider=None)
+    # A token issued before versions existed: it has none.
+    david = db.scalars(select(User).where(User.email == email("david"))).one()
+    secret = settings.jwt_secret_key.get_secret_value()
+    now = datetime.now(UTC)
+    old = jwt.encode(
+        {"sub": str(david.id), "iat": now, "exp": now + timedelta(minutes=5)},
+        secret,
+        algorithm=ALGORITHM,
+    )
+    db.execute(text("DROP TABLE token_versions"))
+    db.commit()
+    db.expire_all()
+
+    with TestClient(create_app(settings, engine=engine, components=components)) as client:
+        assert "token_versions" in inspect(engine).get_table_names()
+        assert client.get("/auth/me", headers=bearer(old)).status_code == 200
+        assert client.post("/auth/logout", headers=bearer(old)).status_code == 204
+        assert client.get("/auth/me", headers=bearer(old)).status_code == 401

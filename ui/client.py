@@ -290,6 +290,10 @@ class Api:
     def me(self, token: str) -> Me:
         return self._get(Me, token, "/auth/me")
 
+    def logout(self, token: str) -> None:
+        """Withdraw this token, and every other the person holds, at the service."""
+        self._send("POST", "/auth/logout", token=token)
+
     # Reading
 
     def documents(

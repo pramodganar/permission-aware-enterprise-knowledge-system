@@ -13,7 +13,7 @@ from app.core.config import Settings
 from app.models import User
 from liveserver import live_server
 from shown import everything_shown, open_ui, unescape
-from ui.client import Login
+from ui.client import Api, Login, NotSignedIn
 from ui.session import LOGIN, SESSION_ENDED, SIGN_IN_FAILED, SIGNED_OUT, UNREACHABLE
 
 
@@ -164,3 +164,13 @@ def test_a_name_with_markdown_in_it_is_shown_as_typed(page: AppTest, db: Session
     heading = page.sidebar.subheader[0].value
     assert unescape(heading) == planted
     assert "![" not in heading
+
+
+def test_signing_out_withdraws_the_token_at_the_service_too(page: AppTest, service: str) -> None:
+    sign_in(page, email("david"))
+    held = page.session_state[LOGIN].token
+
+    page.sidebar.button[0].click().run()
+
+    with Api(service) as api, pytest.raises(NotSignedIn):
+        api.me(held)

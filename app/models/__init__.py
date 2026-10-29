@@ -20,7 +20,7 @@ from app.models.document import (
     public_ids,
 )
 from app.models.role import Role, RoleCode
-from app.models.user import User
+from app.models.user import TokenVersion, User
 
 __all__ = [
     "AuditAction",
@@ -36,6 +36,7 @@ __all__ = [
     "DocumentStatus",
     "Role",
     "RoleCode",
+    "TokenVersion",
     "User",
     "document_number",
     "give_public_ids",

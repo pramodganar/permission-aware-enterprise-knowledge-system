@@ -20,8 +20,10 @@ from ui.session import (
     SESSION_ENDED,
     SIGN_IN_FAILED,
     SIGNED_OUT,
+    SIGNED_OUT_HERE_ONLY,
     UNREACHABLE,
     current_user,
+    leave,
     pages_for,
     sign_in,
     sign_out,
@@ -52,11 +54,16 @@ class Service:
             200, json={"access_token": "tok-1", "token_type": "bearer", "expires_in": 1800}
         )
         self.me: Callable[[], httpx.Response] = lambda: httpx.Response(200, json=DAVID)
+        self.logout: Callable[[], httpx.Response] = lambda: httpx.Response(204)
         self.requests: list[httpx.Request] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        return self.login() if request.url.path == "/auth/login" else self.me()
+        if request.url.path == "/auth/login":
+            return self.login()
+        if request.url.path == "/auth/logout":
+            return self.logout()
+        return self.me()
 
 
 @pytest.fixture
@@ -258,3 +265,55 @@ def test_asking_is_offered_only_to_someone_who_may_read(
     me = Me.model_validate({**DAVID, "permissions": permissions})
 
     assert pages_for(me) == pages
+
+
+# --- signing out at the service ---------------------------------------------------------
+
+
+def test_leaving_withdraws_the_token_at_the_service_then_forgets_it(
+    api: Api, service: Service
+) -> None:
+    state = signed_in({})
+
+    leave(api, state)
+
+    (sent,) = service.requests
+    assert (sent.method, sent.url.path) == ("POST", "/auth/logout")
+    assert sent.headers["Authorization"] == "Bearer tok-1"
+    assert state == {NOTICE: SIGNED_OUT}
+
+
+def test_leaving_when_the_service_cant_be_reached_signs_out_here_and_says_so(
+    api: Api, service: Service
+) -> None:
+    def refused() -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    service.logout = refused
+    state = signed_in({})
+
+    leave(api, state)
+
+    assert state == {NOTICE: SIGNED_OUT_HERE_ONLY}
+
+
+def test_leaving_with_a_token_the_service_already_refuses_just_signs_out(
+    api: Api, service: Service
+) -> None:
+    service.logout = lambda: refusal(401, "authentication_failed")
+    state = signed_in({})
+
+    leave(api, state)
+
+    assert state == {NOTICE: SIGNED_OUT}
+
+
+def test_leaving_when_nobody_is_signed_in_asks_the_service_nothing(
+    api: Api, service: Service
+) -> None:
+    state: dict[str, Any] = {}
+
+    leave(api, state)
+
+    assert service.requests == []
+    assert state == {NOTICE: SIGNED_OUT}
