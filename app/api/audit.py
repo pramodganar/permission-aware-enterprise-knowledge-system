@@ -22,6 +22,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import AwareDatetime, BaseModel
 
+from app.api.responses import errors
 from app.audit.trail import AuditQuery, read_trail
 from app.auth.dependencies import DbSession
 from app.authorization.dependencies import require_permission
@@ -59,7 +60,13 @@ class AuditList(BaseModel):
     records: list[AuditEntry]
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="Read the audit trail",
+    description="Records newest first, filtered by who, what, which document and when. Reading "
+    "it is recorded too.",
+    responses=errors(401, 403, 422, 503),
+)
 def read_audit_trail(
     reviewer: CanReadAudit,
     db: DbSession,

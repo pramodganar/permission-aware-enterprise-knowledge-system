@@ -25,6 +25,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.responses import errors
 from app.auth.dependencies import CurrentUser, DbSession
 from app.auth.service import MAX_PASSWORD_LENGTH, authenticate, record_throttled, sign_out
 from app.auth.throttle import LoginThrottle
@@ -70,7 +71,23 @@ def get_login_throttle(request: Request) -> LoginThrottle:
     return throttle
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    summary="Sign in",
+    description="An email and password for a bearer token, which holds only the user's ID, its "
+    "expiry and the user's token version. Every failed login gets the same 401. Recorded in "
+    "the audit trail, whether it succeeds or not.",
+    responses=errors(
+        401,
+        422,
+        429,
+        503,
+        e401="Wrong email or password, or an account that is no longer active: the same body "
+        "for each.",
+        e429="Too many failed logins for this email. `Retry-After` says how many seconds to wait; "
+        "until then even the right password is refused.",
+    ),
+)
 def login(
     body: LoginRequest,
     db: DbSession,
@@ -97,7 +114,13 @@ def login(
     )
 
 
-@router.get("/me")
+@router.get(
+    "/me",
+    summary="Who you are",
+    description="The caller's department, roles and permissions as they are now: what the next "
+    "request will be decided on.",
+    responses=errors(401),
+)
 def me(user: CurrentUser) -> Me:
     return Me(
         id=user.id,
@@ -109,7 +132,14 @@ def me(user: CurrentUser) -> Me:
     )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Sign out everywhere",
+    description="Withdraws this token and every other the caller holds, on every device. "
+    "Recorded in the audit trail.",
+    responses=errors(401, 503),
+)
 def logout(user: CurrentUser, db: DbSession) -> Response:
     # Every device: a token can't be told apart from the others issued with it.
     sign_out(db, user)

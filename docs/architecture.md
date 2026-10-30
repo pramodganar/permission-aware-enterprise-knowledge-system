@@ -313,7 +313,7 @@ app/
   models/         database tables
   core/           settings, database, logging, rate limits, errors
 ui/               Streamlit pages, through the HTTP API; demo.py and streamlit_app.py for the demo
-scripts/          seed, index, audit check, monitor, secrets, run
+scripts/          seed, index, audit check, monitor, secrets, run, openapi
 evaluation/       the labelled questions, the measurements and the report
 tests/
   unit/  integration/  security/  docker/

@@ -45,6 +45,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.components import Loaded
+from app.api.responses import errors
 from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.core.config import Settings, get_settings
@@ -132,7 +133,14 @@ def _take(limiter: RateLimiter, user_id: int, route: str) -> None:
         raise
 
 
-@router.post("/search", dependencies=[Depends(limit_searching)])
+@router.post(
+    "/search",
+    dependencies=[Depends(limit_searching)],
+    summary="Search what you may read",
+    description="The passages the caller may read that best match the question, or none if "
+    "nothing they may read is relevant. Filters only narrow. Recorded in the audit trail.",
+    responses=errors(401, 422, 429, 503),
+)
 def search(
     body: QuestionRequest,
     user: CurrentUser,
@@ -190,7 +198,22 @@ def search(
     )
 
 
-@router.post("/ask", dependencies=[Depends(limit_asking)])
+@router.post(
+    "/ask",
+    dependencies=[Depends(limit_asking)],
+    summary="Ask a question",
+    description="An answer built only from passages the caller may read, citing them, or "
+    '"No information available to answer this question." whatever the reason. Recorded in '
+    "the audit trail before the model is called.",
+    responses=errors(
+        401,
+        422,
+        429,
+        503,
+        e503="The question couldn't be recorded in the audit trail, or the model can't answer: "
+        "switched off, down, too slow, or its reply unusable. Search still works.",
+    ),
+)
 def ask(
     body: QuestionRequest,
     user: CurrentUser,

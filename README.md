@@ -120,7 +120,7 @@ python -m scripts.run
 - [Chunking](docs/chunking.md): how documents are split, with the measurements behind it
 - [Retrieval](docs/retrieval.md): from question to chunks, and how the relevance threshold was measured
 - [Generation](docs/generation.md): from chunks to an answer with sources
-- [API](docs/api.md): the HTTP service, its errors, request IDs and logs
+- [API](docs/api.md): every route, who it is for and the errors it gives, with the OpenAPI description in [openapi.json](docs/openapi.json)
 - [Audit trail](docs/audit.md): what is recorded, who can read it, and why a request fails without it
 - [UI](docs/ui.md): the web UI, which only talks to the API
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
@@ -219,7 +219,7 @@ Every record is sealed with a keyed hash when it is written, so a record changed
 uvicorn app.main:serve --factory --no-access-log
 ```
 
-It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`. Each person may ask 10 questions a minute and 200 a day, and search 30 times a minute ([how it counts](docs/api.md#how-often)). See [docs/api.md](docs/api.md).
+It needs the company data and an index (above), and refuses to start without a usable index. `GET /health` answers `{"status": "ok"}`; the interactive documentation is at `/docs`, and the same description is in [docs/openapi.json](docs/openapi.json) for when the service isn't running. Each person may ask 10 questions a minute and 200 a day, and search 30 times a minute ([how it counts](docs/api.md#how-often)). See [docs/api.md](docs/api.md).
 
 ## Running the API and the UI
 

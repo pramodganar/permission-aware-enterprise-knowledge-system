@@ -1,6 +1,6 @@
 # API
 
-The HTTP service (FR-15). Being built in phase 9; this page grows with it.
+The HTTP service (FR-15): 17 routes, for signing in, reading and searching documents, asking, managing documents and reading the audit trail. This page is what each does and why. The exact shapes are in the service's OpenAPI description.
 
 ```
 python -m scripts.seed           # once: the company data
@@ -8,7 +8,7 @@ python -m scripts.index build    # once, and after documents change
 uvicorn app.main:serve --factory --no-access-log
 ```
 
-Interactive documentation is at `/docs` except when `APP_ENVIRONMENT=production`, where it is switched off along with `/openapi.json`: a list of every route is not something to publish.
+**The OpenAPI description** is at `/docs`, to try routes in the browser, and `/openapi.json`, except when `APP_ENVIRONMENT=production`, where both are switched off: a list of every route is not something to publish. It is always in this repository as [openapi.json](openapi.json), written by `python -m scripts.openapi`. Every route in it has a summary, a description and the errors it can give, each described with the error body the service really sends rather than FastAPI's default. Two tests keep it true ([test_api_responses.py](../tests/integration/test_api_responses.py)): the file must be what the service says, so a change to a route comes with the file, and every route is made to give every error it declares, so the description can't promise a status that never comes or leave out one that does.
 
 ## Startup and shutdown
 
@@ -57,14 +57,47 @@ Every event the service logs, its level and its fields, how to follow one reques
 
 There are no CORS headers: a page on another site can't call the service from a browser.
 
-## Every route, and who it is for
+## Every route
 
-| Route | For |
-|---|---|
-| `GET /health`, `POST /auth/login` | anyone |
-| `GET /auth/me`, `GET /documents`, `GET /documents/{id}`, `POST /search`, `POST /ask` | anyone logged in; what they get depends on what they may read |
-| `/admin/documents...` (seven routes) | `documents:manage` |
-| `GET /audit` | `audit:read` |
+| Route | For | Success | Errors |
+|---|---|---|---|
+| `GET /health` | anyone | 200 | 503 |
+| `POST /auth/login` | anyone | 200 | 401, 422, 429, 503 |
+| `GET /auth/me` | signed in | 200 | 401 |
+| `POST /auth/logout` | signed in | 204 | 401, 503 |
+| `GET /documents` | signed in, and gets what they may read | 200 | 401, 422 |
+| `GET /documents/{document_id}` | signed in, and gets what they may read | 200 | 401, 404, 422, 503 |
+| `POST /search` | signed in, and gets what they may read | 200 | 401, 422, 429, 503 |
+| `POST /ask` | signed in, and gets what they may read | 200 | 401, 422, 429, 503 |
+| `POST /admin/documents` | `documents:manage` | 201 | 401, 403, 422, 503 |
+| `GET /admin/documents` | `documents:manage` | 200 | 401, 403, 422, 503 |
+| `GET /admin/documents/{document_id}` | `documents:manage` | 200 | 401, 403, 404, 422, 503 |
+| `POST /admin/documents/{document_id}/versions` | `documents:manage` | 201 | 401, 403, 404, 422, 503 |
+| `PATCH /admin/documents/{document_id}` | `documents:manage` | 200 | 401, 403, 404, 422, 503 |
+| `DELETE /admin/documents/{document_id}` | `documents:manage` | 204 | 401, 403, 404, 422, 503 |
+| `PUT /admin/documents/{document_id}/grants` | `documents:manage` | 200 | 401, 403, 404, 422, 503 |
+| `DELETE /admin/documents/{document_id}/grants/{email}` | `documents:manage` | 204 | 401, 403, 404, 422, 503 |
+| `GET /audit` | `audit:read` | 200 | 401, 403, 422, 503 |
+
+A session, from signing in to signing out, with the shapes shortened:
+
+```
+curl -s -X POST http://127.0.0.1:8000/auth/login -H 'Content-Type: application/json' \
+     -d '{"email": "david@acmecorp.example", "password": "..."}'
+  -> {"access_token": "eyJ...", "token_type": "bearer", "expires_in": 1800}
+
+curl -s -X POST http://127.0.0.1:8000/ask -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' -d '{"question": "How many days of annual leave do I get?"}'
+  -> {"answered": true, "answer": "... [S1]",
+      "citations": [{"label": "S1", "document": {"id": "3f0c9a52-...", "title": "...", "version": 1},
+                     "text": "..."}],
+      "cut_off": false, "uncited": false}
+
+curl -s -X POST http://127.0.0.1:8000/auth/logout -H "Authorization: Bearer $TOKEN"
+  -> 204, and the token is refused from then on
+```
+
+Any route can also answer 405 for the wrong method, 411 or 413 for a body without a declared length or over the limit ([the size of a request](#the-size-of-a-request)), and 500 for anything unexpected. A 503 on a route that records nothing when it succeeds comes from recording a refusal: someone without the permission is refused, and if that can't be recorded either, the refusal is a 503 too.
 
 The security tests read the routes off the app and fail for one that isn't in this table, so a new route can't be added without deciding who it is for. They also check each route depends on the check its row says, and call every route with no token, five kinds of bad token, a deactivated account and each of the nine people ([tests/security/test_api_routes.py](../tests/security/test_api_routes.py)).
 

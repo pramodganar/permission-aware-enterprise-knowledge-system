@@ -38,6 +38,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import defer, joinedload
 
+from app.api.responses import errors
 from app.audit.trail import write
 from app.auth.dependencies import CurrentUser, DbSession
 from app.authorization.checks import get_readable_document
@@ -91,7 +92,13 @@ def _summary_fields(document: Document) -> dict[str, object]:
     }
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="The documents you may read",
+    description="Only documents the caller may read, in title order. Filters only narrow: one "
+    "for something the caller can't read gives an empty list, like one that matches nothing.",
+    responses=errors(401, 422),
+)
 def list_documents(
     user: CurrentUser,
     db: DbSession,
@@ -126,7 +133,13 @@ def list_documents(
     )
 
 
-@router.get("/{document_id}")
+@router.get(
+    "/{document_id}",
+    summary="Open a document",
+    description="Its text and details. One the caller may not read is the same 404 as one that "
+    "doesn't exist. Recorded in the audit trail.",
+    responses=errors(401, 404, 422, 503),
+)
 def read_document(
     document_id: UUID,
     user: CurrentUser,

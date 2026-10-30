@@ -38,6 +38,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.components import Loaded
+from app.api.responses import errors
 from app.auth.dependencies import DbSession
 from app.authorization.dependencies import require_permission
 from app.authorization.document_access import (
@@ -58,6 +59,13 @@ CanManage = Annotated[User, Depends(require_permission(Permission.MANAGE_DOCUMEN
 AppSettings = Annotated[Settings, Depends(get_settings)]
 MAX_READERS = 50
 MAX_PAGE = 100
+
+# For the description of the routes (app/api/responses.py).
+SELF = (
+    "The caller's roles don't give documents:manage, or this would give the caller access to "
+    "the document. Recorded in the audit trail."
+)
+NO_DOC = "No document with this ID."
 MAX_OFFSET = 1_000_000
 
 
@@ -146,7 +154,14 @@ def _file_bytes(file: UploadFile, settings: Settings) -> bytes:
     return file.file.read(settings.max_upload_bytes + 1)
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a document",
+    description="A file with its department, classification and readers. Stored with its "
+    "chunks and recorded in one transaction. Search finds it after the next index build.",
+    responses=errors(401, 403, 422, 503, e403=SELF),
+)
 def upload(
     admin: CanManage,
     db: DbSession,
@@ -174,7 +189,13 @@ def upload(
     return _managed(db, document, components)
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="Every document, as it is managed",
+    description="Newest first, replaced and deleted versions included. Labels, version and "
+    "grants, never a title, file name or text.",
+    responses=errors(401, 403, 422, 503),
+)
 def managed_documents(
     _: CanManage,
     db: DbSession,
@@ -193,7 +214,13 @@ def managed_documents(
     )
 
 
-@router.get("/{document_id}")
+@router.get(
+    "/{document_id}",
+    summary="How one document is managed",
+    description="Its labels, version, status, grants and whether search can find it yet. "
+    "Never its title, file name or text.",
+    responses=errors(401, 403, 404, 422, 503, e404=NO_DOC),
+)
 def managed_document(
     document_id: UUID, _: CanManage, db: DbSession, components: Loaded
 ) -> ManagedDocument:
@@ -201,7 +228,14 @@ def managed_document(
     return _managed(db, document, components)
 
 
-@router.post("/{document_id}/versions", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{document_id}/versions",
+    status_code=status.HTTP_201_CREATED,
+    summary="Replace a document with a new version",
+    description="The new version keeps the labels and grants and gets a public ID of its own. "
+    "The old one stops being readable at once. Recorded in the audit trail.",
+    responses=errors(401, 403, 404, 422, 503, e404=NO_DOC),
+)
 def new_version(
     document_id: UUID,
     admin: CanManage,
@@ -223,7 +257,13 @@ def new_version(
     return _managed(db, document, components)
 
 
-@router.patch("/{document_id}")
+@router.patch(
+    "/{document_id}",
+    summary="Change its classification or department",
+    description="Applies to the next request, with no re-indexing. A change that would let the "
+    "caller read the document is refused. Recorded in the audit trail.",
+    responses=errors(401, 403, 404, 422, 503, e403=SELF, e404=NO_DOC),
+)
 def relabel(
     document_id: UUID,
     body: LabelChange,
@@ -241,13 +281,26 @@ def relabel(
     return _managed(db, document, components)
 
 
-@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Withdraw a document",
+    description="Nobody can read it from the next request. It is kept, marked deleted. "
+    "Recorded in the audit trail.",
+    responses=errors(401, 403, 404, 422, 503, e404=NO_DOC),
+)
 def withdraw(document_id: UUID, admin: CanManage, db: DbSession) -> Response:
     delete_document(db, admin, _number(db, document_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.put("/{document_id}/grants")
+@router.put(
+    "/{document_id}/grants",
+    summary="Let one person read it",
+    description="A grant to an active person with a reading role, until an optional expiry. "
+    "Nobody can grant to themselves. Recorded in the audit trail.",
+    responses=errors(401, 403, 404, 422, 503, e403=SELF, e404=NO_DOC),
+)
 def grant(
     document_id: UUID,
     body: GrantIn,
@@ -264,7 +317,15 @@ def grant(
     return _managed(db, given.document, components)
 
 
-@router.delete("/{document_id}/grants/{email}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{document_id}/grants/{email}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Take a person's access away",
+    description="Applies to the next request. Recorded in the audit trail.",
+    responses=errors(
+        401, 403, 404, 422, 503, e404="No document with this ID, or no grant on it for that email."
+    ),
+)
 def revoke(
     document_id: UUID,
     email: Annotated[str, Path(max_length=255)],

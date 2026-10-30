@@ -31,6 +31,17 @@ from app.models import give_public_ids
 FORM_OVERHEAD_BYTES = 64 * 1024
 
 
+# What /docs says first. Everything else it says comes from the routes themselves.
+DESCRIPTION = (
+    "Answers questions from company documents, using only the documents the person asking "
+    "may read. Sign in at `/auth/login` and send the token as `Authorization: Bearer <token>`. "
+    'Every error has the same body, `{"error": {"code", "message", "request_id"}}`. '
+    "Any route may also answer 405 for the wrong method, 411 or 413 for a body without a "
+    "length or over the limit, and 500 with the request ID. The whole description, with the "
+    "reasons behind it, is docs/api.md."
+)
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -63,6 +74,7 @@ def create_app(
     production = current.environment == "production"
     app = FastAPI(
         title="Permission-Aware Enterprise Knowledge System",
+        description=DESCRIPTION,
         lifespan=lifespan,
         # The interactive docs list every route; not something to publish.
         docs_url=None if production else "/docs",
