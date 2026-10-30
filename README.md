@@ -1,53 +1,121 @@
 # Permission-Aware Enterprise Knowledge System
 
-A question-answering system over internal company documents where a user can only get answers built from documents they are allowed to read.
+A question-answering system over internal company documents where a person can only get answers built from documents they are allowed to read.
 
-Most RAG examples put every document into one vector index, which means anyone can retrieve anything by asking the right question. This project is about not doing that. Permissions are applied during retrieval, before anything is sent to the LLM, so the model never sees content the user shouldn't.
+Most RAG examples put every document into one vector index, so the only thing between a sales employee and the executive pay policy is a line in the prompt asking the model not to tell. That isn't a security control: the model can be talked round, and it can't unsee what's in its context. Here, permissions are decided by ordinary code, from the database, before anything reaches the model. The model never sees what the person may not read, so there is nothing for it to leak.
 
-```
-User -> Auth -> Identity -> Authorization -> Filtered retrieval -> Context -> LLM -> Answer + citations
-```
+The setting is AcmeCorp, a fictional company I wrote for this project: seven departments, nine people, seventeen documents in PDF, Word and text. None of it is real.
 
-The setting is AcmeCorp, a fictional company with seven departments. All documents and users are synthetic.
+**Live demo:** [https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/](https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/). It sleeps when nobody has used it for a while and takes about a minute to wake. Pick a person and ask a question, or ask the same question as two people side by side ([how it works](docs/demo.md)).
 
-**Live demo:** [https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/](https://permission-aware-enterprise-knowledge-system-ij67laxbihrkmrqfw.streamlit.app/). Pick who you are, ask a question, or ask the same question as two people side by side ([how it works](docs/demo.md)).
+## Try this
+
+Ask **"How are executive bonuses calculated?"** as two people:
+
+- **David**, in Sales, gets "No information available to answer this question." That's the same reply as for a question no document covers, so it doesn't reveal that the document exists. The model isn't called at all, because nothing David may read is relevant.
+- **Grace**, an executive, gets the formula, citing the document it came from.
+
+Same question, same code, same model. The difference is decided before the model runs. The question is recorded in the audit trail either way.
 
 ## Status
 
-Work in progress. Identity, authorization, document ingestion, permission-aware retrieval and answer generation are built and tested, and the AcmeCorp company data can be loaded with one command. The HTTP API is complete: logging in, listing and opening documents, searching, asking, managing documents and the audit trail, with a security test that walks every route. The web UI covers all of it, talks only to the API, and starts with the API in one command. Both run as hardened containers, and GitHub checks every push on Linux and builds and runs the images when they change.
+Built, tested, measured and packaged to run on a server. Every part below is in the code and covered by tests:
 
-- [x] Requirements, personas, architecture, threat model, decision records
-- [x] Project structure, settings, logging, error types, lint and type checks
-- [x] Users, departments, roles and authentication
-- [x] Authorization: roles, document classification, grants, and tests for the full access matrix
-- [x] Document ingestion: text, PDF and Word files, cleaning, file details, versions and deletion
-- [x] Company data: 17 documents in PDF, Word and text, 9 users, and a script that loads them
-- [x] Chunking, embeddings and the vector index, with versions and rollback
-- [x] Permission-aware retrieval: access scope, filters, relevance threshold, optional reranking, and end-to-end boundary tests
-- [x] Answer generation with citations, measured on two real models, and end-to-end answer boundary tests
-- [x] API: login, documents, search and ask, admin routes, audit trail, and a walk of every route for its authorization
-- [x] UI: signing in, asking and searching, documents, managing documents and the audit trail, each offered by permission (and a public demo page: [docs/demo.md](docs/demo.md))
-- [x] Evaluation: a labelled set of 73 questions, retrieval, leakage through the API, answer quality checked by hand, latency, and one command that checks every target
-- [x] Docker and CI: two images, Compose with secrets as files, health checks, JSON logs, monitoring from the log, CI on Linux for every push, and a deployment guide with HTTPS, backups and restore
+- **Sign-in.** Argon2 passwords. Tokens carry only who you are. Signing out withdraws every token you hold.
+- **Authorization.** Four roles and three document classifications. Restricted documents need a named grant.
+- **Ingestion.** PDF, Word and text files, treated as untrusted. Documents have versions and can be deleted.
+- **Permission-aware retrieval.** Each person's access scope is worked out fresh from the database for every question, and the search runs only inside it. Results are checked again on the way out, and a measured relevance threshold applies.
+- **Answers with citations.** Tested with Ollama and Groq. Links the sources don't contain are removed from answers.
+- **HTTP API.** 17 routes. Each one is declared with who may call it, or the build fails.
+- **Web UI.** It only talks to the API.
+- **Audit trail.** Append-only and sealed with an HMAC. Every question, search, refusal and change is recorded.
+- **Evaluation.** 73 labelled questions, a leakage test through the real API, answers checked by hand, latency, and one command that checks every target.
+- **Deployment.** Docker images, Compose with secrets as files, health checks, JSON logs, monitoring, CI on Linux, and a deployment guide with HTTPS, backups and upgrades.
 
-Measured on the AcmeCorp data ([evaluation report](docs/evaluation-report.md)): no leak in 18 forbidden and injection probes, in any configuration, including a model that repeats everything it was given; 1 wrongful refusal in 34 answerable questions with Groq; the answer chunk in the top five for 33 of 34; 33 answers of which, by hand, all are correct and 32 faithful; retrieval 7.4 ms and an answered question 1.6 s at p95, and the permission filter 2.6 ms at the median. How each is measured, and what it doesn't cover, is in [evaluation](docs/evaluation.md).
+## How it works
 
-## The idea in one example
+```mermaid
+flowchart LR
+    q(["Question and token"]) --> who["Who is asking<br/>user, roles and token version<br/>from the database"]
+    who --> scope["Access scope<br/>the chunks this person may read,<br/>worked out for this question"]
+    scope --> search["Search inside the scope only<br/>then check every result again"]
+    search --> gate{"Anything<br/>relevant?"}
+    gate -->|no| none["No information available<br/>model not called"]
+    gate -->|yes| model["Model, given only<br/>this person's sources"]
+    model --> answer["Answer: links not in the sources removed,<br/>citations resolved from this context only"]
+```
 
-Alice works in Engineering and asks "What is the executive compensation strategy?"
+- **The model is untrusted, and so is the UI.** Access is decided in code before the model is called. The UI holds no service code: hiding a page is a convenience, and the API is the check.
+- **Filter before the search, not after.** If you search everything and then drop forbidden results, the hidden documents still take places in the top results. A person then gets fewer or worse answers exactly when something hidden matches, and that is a signal ([decision record 0003](docs/adr/0003-pre-filter-vector-search.md)).
+- **Permissions live in the database, not in the index.** Changing a label or a grant applies to the next question, with no re-embedding.
+- **Hidden and missing look the same.** A document you may not read is a 404, exactly like one that doesn't exist. Every way of getting no answer gives the same response, byte for byte. Document IDs are random, so they don't reveal how many documents exist.
+- **No audit record, no answer.** A record of what is about to be sent is stored before the model is called. If it can't be stored, the model isn't called.
 
-- The retriever returns no chunks from Executive documents.
-- The LLM is not given that content. With nothing to answer from, it isn't called at all.
-- Alice gets the same response she would get for a question no document covers.
-- The query is recorded in the audit log.
+The full picture covers the deployment, the packages inside the service, one question step by step, ingestion and the trust boundaries. It's in [Architecture](docs/architecture.md), and a test checks those diagrams against the code.
 
-Grace, an executive, asks the same question and gets an answer with sources.
+## Results
+
+Measured on the AcmeCorp data ([evaluation report](docs/evaluation-report.md), [how each number is measured](docs/evaluation.md)):
+
+| What | Result |
+|---|---|
+| Leaks in 18 forbidden and injection probes, through the API | **0**, in every configuration: no model, Groq, and a model that repeats everything it was given with the relevance threshold switched off |
+| Leaks across 4,437 retrievals (9 people × 17 questions × 29 filters) | **0** |
+| Wrongful refusals of answerable questions, with Groq | **1 of 34** |
+| Answer chunk in the top five | **33 of 34** |
+| Answers checked by hand | **33 of 33 correct, 32 faithful** to their sources |
+| Prompt injection planted in documents, Groq | Obeyed 5 of 12, harm **0**. It followed the planted exfiltration link both times; the code removed both |
+| Latency at p95 | Retrieval **7.4 ms**, an answered question **1.6 s** |
+| Cost of the permission filter, median | **2.6 ms** |
+
+A low leak count is easy if the system refuses everything. That's why the wrongful-refusal rate is reported next to it, and each forbidden question has a control person who is allowed to read the document. A detail the report doesn't hide: the LLM judge passed an answer I had marked unfaithful by hand. That's why faithfulness comes from hand-written labels, with the judge checked against them.
+
+## How I tried to break it
+
+Once the checks worked, I asked whether there was a way round them ([security](docs/security.md), [threat model](docs/threat-model.md)):
+
+- **Non-interference.** I build the company twice, differing only in documents one person may not read, and make every request as that person in both. Every response must be byte-identical. That covers counts, order, scores, errors and IDs without listing each leak channel. A control person who *can* read the change must see a difference, so the test can't pass blindly.
+- **Every route, every person.** Each route is called by every person and with five kinds of bad token. Each response is searched for text the caller may not read.
+- **What it found, and what was fixed:**
+  - An admin who was also an employee could relabel a restricted file as "general" and then read it. The rule is now "nobody can give themselves access", tested over every label change on every document.
+  - A hidden document's 404 took longer the bigger the document was: 12.5 ms against 9.2 ms for a missing ID. Refused lookups now read the ID alone.
+  - The PDF library's warnings were writing document text into the log. Fuzzing found it.
+  - Questions were reaching Groq with no audit record when the audit store failed. A record is now stored before the model is called.
+- **Deliberate breaks.** After each step I broke the code on purpose and checked that a test failed for the right reason. Where none did, I strengthened the test.
+
+## What it doesn't do
+
+- An admin can still widen access for someone else. The audit trail shows it, but nothing stops it.
+- Inference isn't prevented: someone can combine facts they're allowed to see into one they aren't.
+- Rate limits and the sign-in throttle live in memory, per process. Signing out ends every device at once.
+- The audit trail is tamper-evident, not tamper-proof. Deleting the newest records shows only in the application log.
+- It runs on SQLite and has been measured at about 100,000 chunks with random vectors, not run at scale. At that size, an executive's scope takes 296 ms to work out. PostgreSQL, and filtering inside the vector store, are the next steps ([scale](docs/architecture.md#scale)).
+- Answer quality was measured on my own questions over documents I wrote, with one model per run.
+
+## Quick start
+
+With Docker:
+
+```
+python -m scripts.make_secrets
+docker compose up --build
+```
+
+The first start seeds the fictional company and builds the index. The UI is then at http://127.0.0.1:8501. Sign in as any AcmeCorp person, for example `david@acmecorp.example`, with the password in `secrets/seed_password`. No model is set by default, so search works and answers need one ([choosing a model](#choosing-a-model)).
+
+Without Docker, see [Setup](#setup) below, then:
+
+```
+python -m scripts.seed
+python -m scripts.index build
+python -m scripts.run
+```
 
 ## Documentation
 
 - [Requirements](docs/requirements.md): the problem, and the functional, non-functional and security requirements
 - [Personas](docs/personas.md): who uses the system and what each person can and cannot see
-- [Architecture](docs/architecture.md): components, request flow and repository layout
+- [Architecture](docs/architecture.md): the deployment, the packages, one question step by step, ingestion, trust boundaries, and where each check lives
 - [Authorization](docs/authorization.md): roles, permissions and the rules that combine them
 - [Chunking](docs/chunking.md): how documents are split, with the measurements behind it
 - [Retrieval](docs/retrieval.md): from question to chunks, and how the relevance threshold was measured
@@ -59,7 +127,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [Evaluation](docs/evaluation.md): the labelled question set and how the system is measured
 - [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
 - [Security](docs/security.md): the promise, where it is kept, what shows it, and how to run it safely; start here for a review
-- [Threat model](docs/threat-model.md): what could go wrong and what is left uncovered
+- [Threat model](docs/threat-model.md): 41 threats, what handles each, the tests that show it, and what is left uncovered
 - [Configuration](docs/configuration.md): every setting, where settings come from, what production changes, and secrets as files
 - [Docker](docs/docker.md): the API and UI images, what is in them, and how to run them
 - [Deployment](docs/deployment.md): running it on a server behind HTTPS, backing it up, upgrading it, and what a real company would add first
@@ -67,7 +135,7 @@ Grace, an executive, asks the same question and gets an answer with sources.
 - [CI](docs/ci.md): what runs on every push, what it may do, and what it does and doesn't hold back
 - [Monitoring](docs/monitoring.md): the signals, the targets, the rules that call for someone, and what to do when each fires
 - [Secrets](docs/secrets.md): what is secret, where it lives, how it is checked and how to replace it
-- [Decision records](docs/adr/README.md): why the main design choices were made
+- [Decision records](docs/adr/README.md): the 15 main design choices, the alternatives, and when I'd revisit them
 
 ## Setup
 
@@ -101,8 +169,6 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 `data/acmecorp` holds the company: 7 departments, 9 users and 17 documents. The documents are kept the way a company would have them: published policies and procedures as PDF, working papers as Word files, and engineering notes and a case system export as plain text. `manifest.json` lists them with each document's department, classification and named readers.
 
-AcmeCorp is fictional. I wrote every document for this project, and none of the people or figures are real.
-
 ```
 python -m scripts.seed
 ```
@@ -123,7 +189,7 @@ All seeded users share one password. Pass it with `--password`, or set `SEED_PAS
 | henry@acmecorp.example | Engineering | knowledge admin |
 | irene@acmecorp.example | Legal | security reviewer |
 
-Three documents are company-wide, twelve belong to a department, and two are restricted: an HR case file that only Carol can read, and an acquisition paper readable by Grace and, for 60 days, by Emma.
+Three documents are company-wide, twelve belong to a department, and two are restricted: an HR case file that only Carol can read, and an acquisition paper readable by Grace and, for 60 days, by Emma. Henry manages documents without being able to read them, and Irene reads the audit trail but not documents.
 
 ## Vector index
 
@@ -133,9 +199,9 @@ python -m scripts.index status             # list versions; exit code 2 if out o
 python -m scripts.index rollback [VERSION] # go back to an earlier version
 ```
 
-`build` embeds the chunks of every active document and writes a new version under `data/index/versions/`. The new version is loaded back and checked before the `current` pointer is moved to it, so a failed build leaves the previous one in use. The last three versions are kept (`APP_INDEX_KEEP_VERSIONS`). For the company data a version is 57 chunks and an 88 KB file. The first run downloads the embedding model.
+`build` embeds the chunks of every active document and writes a new version under `data/index/versions/`. The new version is loaded back and checked before the `current` pointer is moved to it, so a failed build leaves the previous one in use. The last three versions are kept (`APP_INDEX_KEEP_VERSIONS`). The first run downloads the embedding model.
 
-Each version has a manifest with the embedding model, the chunk settings, a checksum of the index file and a fingerprint of the text that was embedded. Loading refuses a version built with a different model or chunk settings, or whose files don't match. `status` compares the fingerprint with the database and reports the index as out of date when documents have been added, replaced or deleted since it was built. A label or grant change doesn't make it out of date, because permissions are not in the index.
+Each version has a manifest with the embedding model, the chunk settings, a checksum of the index file and a fingerprint of the text that was embedded. Loading refuses a version built with a different model or chunk settings, or whose files don't match. `status` reports the index as out of date when documents have been added, replaced or deleted since it was built. A label or grant change doesn't make it out of date, because permissions are not in the index.
 
 The index holds vectors of every document, restricted ones included. It is not committed, and it needs the same protection as the database.
 
@@ -157,17 +223,13 @@ It needs the company data and an index (above), and refuses to start without a u
 
 ## Running the API and the UI
 
-One command starts both:
-
 ```
 python -m scripts.run
 ```
 
 It starts the API, waits until it answers its health check, then starts the UI pointed at it, and prints where to go: http://127.0.0.1:8501 by default. Ctrl+C stops both, and if either stops the other is stopped too. `--api-port`, `--ui-port` and `--host` change where they listen; both listen on this machine only unless told otherwise.
 
-Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. Each person sees the pages their role allows: David asks and reads, Henry manages documents, picked from a list by ID, without reading them, Irene reviews the audit trail. The UI only talks to the API; see [docs/ui.md](docs/ui.md).
-
-To run them separately, start the API as above and, in a second terminal, `streamlit run ui/app.py`; the UI finds the API at `UI_API_URL`, `http://127.0.0.1:8000` by default.
+Sign in as any of the AcmeCorp people with the password given to `python -m scripts.seed`. Each person sees the pages their role allows. To run them separately, start the API as above and, in a second terminal, `streamlit run ui/app.py`; the UI finds the API at `UI_API_URL`, `http://127.0.0.1:8000` by default. See [docs/ui.md](docs/ui.md).
 
 ## Docker
 
@@ -178,14 +240,14 @@ docker build --target ui  -t knowledge-ui  .
 
 Two images: the API, with the embedding model built in so a container fetches nothing, and the UI, which holds none of the service because it only talks to the API. Both run as an unprivileged user and hold no secret; the database and index live on a volume.
 
-To run both, with the company seeded and indexed on the first start:
+`python -m scripts.make_secrets` makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. `docker compose up --build` then seeds, indexes and starts both, the UI once the API answers its health check. `docker compose logs --no-log-prefix --since 15m api | python -m scripts.monitor` reports how it is doing and whether anyone is needed ([monitoring](docs/monitoring.md)). On a server, `compose.tls.yaml` puts HTTPS in front; [deployment](docs/deployment.md) has every step, backups included. How the containers are hardened is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
 
-```
-python -m scripts.make_secrets
-docker compose up --build
-```
+## Choosing a model
 
-The first line makes the signing key, the fictional company's password and an empty model key as files in `secrets/`, which the containers read instead of their environment. The UI is then at http://127.0.0.1:8501, and the password is in `secrets/seed_password`. Each image has a health check: the UI is started once the API has loaded and answers, and `docker compose ps` shows whether both still do. `docker compose logs --no-log-prefix --since 15m api | python -m scripts.monitor` reports how it is doing and whether anyone is needed ([monitoring](docs/monitoring.md)). On a server, `compose.tls.yaml` puts HTTPS in front; [deployment](docs/deployment.md) has every step, backups included. What each container is given, and how they are hardened, is in [docs/docker.md](docs/docker.md); every setting is in [docs/configuration.md](docs/configuration.md).
+Answers come from a language model chosen with `APP_LLM_PROVIDER` (see `.env.example`). The default, `none`, sends nothing anywhere: search works, and asking is refused with 503.
+
+- **Ollama**, free and on your own machine: install [Ollama](https://ollama.com), run `ollama pull llama3.1`, and set `APP_LLM_PROVIDER=ollama` and `APP_LLM_TIMEOUT_SECONDS=300`. An answer takes about a minute on a laptop CPU.
+- **Groq**, fast, with a free tier: create a key at [console.groq.com](https://console.groq.com), put it in `.env` as `APP_LLM_API_KEY`, and set `APP_LLM_PROVIDER=groq` and `APP_LLM_MAX_OUTPUT_TOKENS=1000`. The prompt, which is document text, then goes to Groq.
 
 ## Checks
 
@@ -196,7 +258,7 @@ mypy
 pytest --cov
 ```
 
-GitHub runs the same on Linux for every push, and builds and runs the images when anything in them changes ([CI](docs/ci.md)).
+That runs more than 3,700 tests, at about 99% coverage. GitHub runs the same on Linux for every push, and builds and runs the images when anything in them changes ([CI](docs/ci.md)).
 
 To look for secrets in every tracked file and every commit, the local `.env`'s own values included (it prints where, never what):
 
@@ -206,30 +268,16 @@ python -m scripts.scan_secrets
 
 Some tests generate their inputs with [Hypothesis](https://hypothesis.readthedocs.io): files damaged at random, questions, answers, titles, filters and requests to every route. The examples are the same on every run, so a failure can be run again.
 
-To run only the security tests:
+The security tests are part of every run, and can be run alone with `pytest tests/security`. These are left out of a normal run, and run on their own:
 
 ```
-pytest tests/security
+pytest -m docker          # the tests that build and run the images; need Docker
+pytest -m model           # the real embedding model and reranker; the first run downloads about 90 MB each
+pytest -m llm             # the real local model through Ollama; about a minute an answer
 ```
-
-The tests that build and run the Docker images need Docker, and are left out of a normal run too: `pytest -m docker`.
-
-The tests that load the real models are left out of a normal run, because loading them takes about half a minute. The first run downloads the embedding model and the reranker, about 90 MB each.
-
-```
-pytest -m model
-```
-
-Answers come from a language model chosen with `APP_LLM_PROVIDER` (see `.env.example`). The default, `none`, sends nothing anywhere. For a free model that runs on your own machine, install [Ollama](https://ollama.com), run `ollama pull llama3.1`, and set `APP_LLM_PROVIDER=ollama` and `APP_LLM_TIMEOUT_SECONDS=300`. The tests that ask the real local model are left out of a normal run too, because each answer takes about a minute on a laptop CPU:
-
-```
-pytest -m llm
-```
-
-For fast answers, Groq has a free tier: create a key at [console.groq.com](https://console.groq.com), put it in your `.env` as `APP_LLM_API_KEY`, and set `APP_LLM_PROVIDER=groq` and `APP_LLM_MAX_OUTPUT_TOKENS=1000`. The prompt, which is document text, then goes to Groq.
 
 ## Stack
 
-In use now: Python 3.11, FastAPI (with python-multipart for uploads), SQLAlchemy (SQLite in tests), Argon2 password hashing, PyJWT, pypdf, python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking), FAISS, NumPy, pydantic-settings, Streamlit and httpx for the UI, pytest, ruff, mypy.
+Python 3.11, FastAPI, SQLAlchemy over SQLite, Argon2 password hashing, PyJWT, pypdf and python-docx, sentence-transformers with the `all-MiniLM-L6-v2` embedding model (and the `ms-marco-MiniLM-L6-v2` cross-encoder for optional reranking, off by default), FAISS, pydantic-settings, Streamlit and httpx for the UI. Ollama or Groq for answers. Docker and Compose, Caddy for HTTPS, GitHub Actions for CI. pytest, Hypothesis, ruff and mypy.
 
-Docker for the images. Planned: PostgreSQL as the target database. Libraries are added to the requirements files when the part that needs them is built.
+PostgreSQL is the target database and isn't used yet. Libraries are added to the requirements files only when the part that needs them is built.
