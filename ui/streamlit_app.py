@@ -30,13 +30,15 @@ from ui.text import ERROR_DETAILS
 # reloading starts a new visit, but not a new budget.
 QUESTIONS_PER_VISIT = 30
 
+# Pairs of people asking the same question, one refused and one answered, as the
+# evaluation measured them (docs/demo-scenario.md, part A).
 EXAMPLES = [
     ("david", "How are executive bonuses calculated?"),
     ("grace", "How are executive bonuses calculated?"),
-    ("david", "What is the approval limit for vendor payments?"),
-    ("bob", "What is the approval limit for vendor payments?"),
-    ("frank", "What is the hotel limit when travelling?"),
-    ("carol", "Which employees are on a performance improvement plan?"),
+    ("frank", "What is the vendor payment approval limit?"),
+    ("bob", "What is the vendor payment approval limit?"),
+    ("bob", "What acquisitions is the company considering?"),
+    ("emma", "What acquisitions is the company considering?"),
 ]
 
 

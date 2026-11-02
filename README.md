@@ -124,6 +124,7 @@ python -m scripts.run
 - [Audit trail](docs/audit.md): what is recorded, who can read it, and why a request fails without it
 - [UI](docs/ui.md): the web UI, which only talks to the API
 - [Demo page](docs/demo.md): pick a person, ask, compare two people; how to run and deploy it
+- [Demo scenario](docs/demo-scenario.md): a ten-minute demo, step by step, with what will appear and what to say
 - [Evaluation](docs/evaluation.md): the labelled question set and how the system is measured
 - [Evaluation report](docs/evaluation-report.md): every target, what was measured, and whether it's met
 - [Security](docs/security.md): the promise, where it is kept, what shows it, and how to run it safely; start here for a review

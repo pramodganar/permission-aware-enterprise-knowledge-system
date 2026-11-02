@@ -4,11 +4,11 @@ A small Streamlit page for showing the system to someone: pick one of the nine A
 
 AcmeCorp is fictional. Every document and person was made up for this project.
 
-The page is brought forward from the UI phase so there is something to show before the API exists. It calls the application code directly, not through an API.
+The page runs the application code in its own process rather than calling the API, so a visitor can switch person without signing in. What to show on it, step by step, with what will appear, is in the [demo scenario](demo-scenario.md); its examples are the pairs that scenario uses.
 
 ## What is real and what is demo-only
 
-**Real:** everything from the question onwards. The page calls the same `answer_question` as the service will: the same access scope, second check, relevance gate, context, prompt, model call and citations. The answer tests in [generation](generation.md#the-boundary-tested-at-the-answer) cover exactly this path.
+**Real:** everything from the question onwards. The page calls the same `answer_question` as the service does: the same access scope, second check, relevance gate, context, prompt, model call and citations. The answer tests in [generation](generation.md#the-boundary-tested-at-the-answer) cover exactly this path.
 
 **Demo-only:**
 
