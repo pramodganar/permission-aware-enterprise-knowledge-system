@@ -2,7 +2,7 @@
 
 One file per decision that would be expensive to change later. Each has the context, what I decided, what else I considered, what it costs, and when I'd revisit it.
 
-A decision is not edited after it is accepted. If it changes, a new record replaces it and the old one is marked superseded.
+A decision is not edited after it is accepted. If it changes, a new record replaces it and the old one is marked superseded. If something a record says about the system turns out to be untrue, the untrue sentence is taken out, a dated correction at its end says what it said and what is true, and the decision is left as it was.
 
 | No. | Decision | Status |
 |---|---|---|

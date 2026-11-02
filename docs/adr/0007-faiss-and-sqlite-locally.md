@@ -17,7 +17,7 @@ The FAISS index is a flat (exact) index. With this corpus size there is no reaso
 
 - pgvector in PostgreSQL from the start. Attractive because the permission join and the vector search become one SQL query. Not chosen first because it needs a running Postgres for every test run, and because doing the filter by hand with FAISS makes the mechanism explicit. It is the most likely replacement.
 - A dedicated vector database (Qdrant, Weaviate, Chroma). Native metadata filtering, but another service to run, and filtering would rely on a copy of the permissions (see 0002).
-- PostgreSQL only, no SQLite. Closer to production. Deferred so that the tests need no external service. The Docker Compose setup uses PostgreSQL.
+- PostgreSQL only, no SQLite. Closer to production. Deferred so that the tests need no external service.
 
 ## Consequences
 
@@ -29,3 +29,11 @@ The FAISS index is a flat (exact) index. With this corpus size there is no reaso
 ## Revisit when
 
 The corpus outgrows exact search, or the allowed-ID list becomes too large (see 0003).
+
+## Corrections
+
+November 2026. The decision stands, but three things this record said about the system aren't true of it as built:
+
+- Under Alternatives it said the Docker Compose setup uses PostgreSQL, and that sentence is taken out. Compose doesn't run PostgreSQL: it runs SQLite on the `data` volume, like everything else here. Nothing has run against PostgreSQL.
+- So the integration tests don't run against PostgreSQL either, and some of the database code is written for SQLite only: the triggers that keep the audit trail append-only (`app/models/audit.py`) and the connection settings (`app/core/database.py`). Moving to PostgreSQL means writing those again and running the tests there.
+- The vector index is behind an interface, `VectorIndex` in `app/retrieval/index.py`, but FAISS is its only implementation and no setting chooses it. Only the database is chosen by a setting, `APP_DATABASE_URL`.
